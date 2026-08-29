@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: dimaag
+      POSTGRES_PASSWORD: dimaag
+      POSTGRES_DB: dimaag
+    ports:
+      - "5433:5432"
+    volumes:
+      - dimaag_pg:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dimaag -d dimaag"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  dimaag:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://dimaag:dimaag@postgres:5432/dimaag
+      HOST: 0.0.0.0
+      PORT: "8080"
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  dimaag_pg:

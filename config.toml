@@ -1,0 +1,16 @@
+[runtime]
+# Cap on reasoning-lane Dwar turns (including tool follow-ups) in one run.
+max_scratchpad_iterations = 10
+# Cap on conversation-lane Dwar turns in one run.
+max_conversation_iterations = 10
+# How long a request waits for a busy lane lock before failing.
+lane_queue_timeout_ms = 30000
+
+[dwar]
+timeout_ms = 120000
+retry_attempts = 3
+backoff_ms = [500, 1000, 2000]
+
+[context]
+# Newest N transcript rows kept when assembling a Dwar request.
+max_transcript_messages = 100
