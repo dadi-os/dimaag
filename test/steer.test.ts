@@ -48,6 +48,7 @@ test("a steer arriving mid-loop is applied on the next iteration", async () => {
     logThought: async () => {},
     logToolCall: async () => {},
     logToolResult: async () => {},
+    logCapExhausted: async () => {},
   });
 
   assert.equal(calls.length, 2);

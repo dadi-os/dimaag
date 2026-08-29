@@ -7,7 +7,7 @@ max_conversation_iterations = 10
 lane_queue_timeout_ms = 30000
 
 [dwar]
-timeout_ms = 120000
+timeout_ms = 330000
 retry_attempts = 3
 backoff_ms = [500, 1000, 2000]
 

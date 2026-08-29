@@ -167,6 +167,15 @@ export function createRuntime(opts: {
     return { assemble, exec, logThought, logToolCall, logToolResult };
   }
 
+  function logCapExhausted(agentId: string, lane: Lane, maxIterations: number) {
+    return writeAgentLog(opts.db, {
+      agentId,
+      lane,
+      event: "iteration_cap_exhausted",
+      payload: { max_iterations: maxIterations },
+    });
+  }
+
   function reasoningDeps(agentId: string) {
     const helpers = laneHelpers(agentId, "reasoning");
     return {
@@ -179,6 +188,8 @@ export function createRuntime(opts: {
       logThought: helpers.logThought,
       logToolCall: helpers.logToolCall,
       logToolResult: helpers.logToolResult,
+      logCapExhausted: () =>
+        logCapExhausted(agentId, "reasoning", opts.config.runtime.max_scratchpad_iterations),
     };
   }
 
@@ -194,6 +205,8 @@ export function createRuntime(opts: {
       logThought: helpers.logThought,
       logToolCall: helpers.logToolCall,
       logToolResult: helpers.logToolResult,
+      logCapExhausted: () =>
+        logCapExhausted(agentId, "conversation", opts.config.runtime.max_conversation_iterations),
     };
   }
 

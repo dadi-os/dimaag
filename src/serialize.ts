@@ -14,7 +14,8 @@ function parseLogEvent(value: string): LogEvent {
     value === "thought" ||
     value === "tool_call" ||
     value === "tool_result" ||
-    value === "message"
+    value === "message" ||
+    value === "iteration_cap_exhausted"
   ) {
     return value;
   }

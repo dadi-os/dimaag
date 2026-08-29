@@ -14,6 +14,7 @@ import {
   resetRuntime,
   silentLog,
   testConfig,
+  toolUse,
 } from "./helpers.js";
 
 const config = testConfig();
@@ -190,4 +191,28 @@ test("conversation context has dispatch_message and not send_message", async () 
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes(DISPATCH_MESSAGE));
   assert.equal(names.includes(SEND_MESSAGE), false);
+});
+
+test("reasoning loop writes iteration_cap_exhausted when it hits the cap", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const capped = {
+    ...config,
+    runtime: { ...config.runtime, max_scratchpad_iterations: 1 },
+  };
+  const dwar = mockDwar({
+    reason: async () => toolUse(SEND_MESSAGE, { to_agent_id: null, intent: "keep going" }),
+    converse: async () => endTurn(),
+  });
+  const runtime = createRuntime({ db: handle.db, dwar, config: capped, log: silentLog });
+  await executeTool(runtime.toolContext(ROOT_DADI_ID, "conversation"), {
+    type: "tool_use",
+    id: "cap-1",
+    name: "steer_reasoning",
+    input: { instruction: "spin" },
+  });
+  await runtime.waitUntilIdle();
+  const rows = await handle.sql<{ event: string }[]>`
+    SELECT event FROM agent_logs WHERE event = 'iteration_cap_exhausted'
+  `;
+  assert.equal(rows.length, 1);
 });

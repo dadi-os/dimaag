@@ -13,6 +13,7 @@ export type ReasoningLoopDeps = {
   logThought: (response: DwarChatResponse) => Promise<void>;
   logToolCall: (call: DwarToolUseBlock, result: ToolExecResult) => Promise<void>;
   logToolResult: (toolUseId: string, result: ToolExecResult) => Promise<void>;
+  logCapExhausted: () => Promise<void>;
 };
 
 /**
@@ -61,4 +62,5 @@ export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
     }
     scratchpad.push({ role: "user", content: results });
   }
+  await deps.logCapExhausted();
 }

@@ -71,7 +71,7 @@ export const agentLogs = pgTable(
     check("agent_logs_lane_check", sql`${table.lane} IN ('reasoning', 'conversation')`),
     check(
       "agent_logs_event_check",
-      sql`${table.event} IN ('thought', 'tool_call', 'tool_result', 'message')`,
+      sql`${table.event} IN ('thought', 'tool_call', 'tool_result', 'message', 'iteration_cap_exhausted')`,
     ),
   ],
 );
