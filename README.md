@@ -61,44 +61,41 @@ Unknown request fields are a 422.
 
 `config.toml` is checked in. Iteration caps, lane queue timeout, Dwar timeout/retry, transcript window.
 
-`.env` is environment and deployment only:
+Everything else — database address, Dwar address, host/port, log level — is set directly in `docker-compose.yml`. There is no `.env` file.
 
-```
-DATABASE_URL
-DWAR_BASE_URL
-HOST
-PORT
-LOG_LEVEL
-```
+## Run
 
-Copy `.env.example` to `.env`. The process will not start if any of those are missing or if `config.toml` is malformed.
-
-## Run locally
-
-Postgres from compose, Dimaag on the host so you can curl it. Compose does not publish Dimaag's port. Postgres is on host 5433 so it does not collide with Yaad on 5432.
-
-```sh
-cp .env.example .env
-docker compose up -d postgres
-npm install
-npx drizzle-kit generate   # only when the schema changes
-npm run build
-npm test
-npm start
-```
-
-`GET http://127.0.0.1:8091/health` should return `{"status":"ok"}`. Point `DWAR_BASE_URL` at a running Dwar.
-
-```sh
-curl -s http://127.0.0.1:8091/v1/messages \
-  -H 'content-type: application/json' \
-  -d '{"to_agent_id":"00000000-0000-4000-8000-000000000001","content":"hello"}'
-```
-
-To run Dimaag inside compose as well:
+Everything runs through Compose.
 
 ```sh
 docker compose up --build
 ```
 
-Dimaag then listens on `8080` on the compose network only. Reach it from another service on that network, or with `docker compose exec dimaag`. There is no host port mapping.
+Builds the `dev` target (devDependencies, source bind-mounted, `tsx watch`), publishes on `http://localhost:8091`. `GET http://localhost:8091/health` should return `{"status":"ok"}`.
+
+Dwar needs to be reachable at `http://host.docker.internal:8080` — run it on your host per its own README, or point `DWAR_BASE_URL` in `docker-compose.yml` elsewhere.
+
+```sh
+curl -s http://localhost:8091/v1/messages \
+  -H 'content-type: application/json' \
+  -d '{"to_agent_id":"00000000-0000-4000-8000-000000000001","content":"hello"}'
+```
+
+Migrations (this also seeds root Dadi and the platform tool registry — see `src/db/seed.ts`):
+
+```sh
+docker compose run --rm api npm run db:migrate
+```
+
+Tests:
+
+```sh
+docker compose run --rm api npm test
+```
+
+Production shape (no bind mount, no published port):
+
+```sh
+docker compose -f docker-compose.yml up --build
+```
+
