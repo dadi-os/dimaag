@@ -13,6 +13,7 @@ import {
   SPAWN_AGENT,
   STEER_REASONING,
 } from "../types/domain.js";
+import { findTool } from "../tools/registry.js";
 import type { LaneLocks } from "./locks.js";
 import type { SteerQueue } from "./steer.js";
 import type { IntentQueue } from "./intents.js";
@@ -162,8 +163,14 @@ export async function executeTool(
           return await runSpawnAgent(ctx, call.input);
         case MODIFY_AGENT:
           return await runModifyAgent(ctx, call.input);
-        default:
-          return fail(`unknown reasoning tool: ${call.name}`);
+        default: {
+          const definition = findTool(call.name);
+          if (!definition) {
+            return fail(`unknown reasoning tool: ${call.name}`);
+          }
+          const parsed = definition.input.parse(call.input);
+          return await definition.handler(ctx, parsed);
+        }
       }
     }
     switch (call.name) {
