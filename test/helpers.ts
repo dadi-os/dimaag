@@ -6,6 +6,7 @@ import { seed } from "../src/db/seed.js";
 import type { DwarChatRequest, DwarChatResponse } from "../src/types/domain.js";
 import type { DwarClient } from "../src/dwar/client.js";
 import { agents } from "../src/db/schema.js";
+import { syncTools } from "../src/tools/sync.js";
 
 export function testConfig(): Config {
   return loadConfig();
@@ -78,6 +79,7 @@ export async function openTestDb(): Promise<{ db: Db; sql: Sql; close: () => Pro
 
 export async function resetRuntime(sql: Sql, db: Db, config: Config): Promise<void> {
   await sql`TRUNCATE agent_logs, agent_tools, tools, agents CASCADE`;
+  await syncTools(db);
   await seed(db, config);
 }
 

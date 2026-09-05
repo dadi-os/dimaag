@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import type { ToolContext, ToolExecResult } from "../runtime/tools.js";
+import type { ToolContext, ToolExecResult } from "./shared.js";
 
 /**
  * One tool, defined once. The zod schema is both the validation applied to model

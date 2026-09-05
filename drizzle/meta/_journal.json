@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1787668723917,
-      "tag": "0000_happy_magus",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1788043430677,
-      "tag": "0001_silly_infant_terrible",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1788585843013,
-      "tag": "0002_glorious_ezekiel_stane",
+      "when": 1788587809648,
+      "tag": "0000_overconfident_mantis",
       "breakpoints": true
     }
   ]

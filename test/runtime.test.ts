@@ -7,6 +7,8 @@ import { executeTool } from "../src/runtime/tools.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import { buildApp } from "../src/app.js";
 import { migrate } from "../src/db/migrate.js";
+import { agentTools } from "../src/db/schema.js";
+import { toolId } from "../src/tools/sync.js";
 import {
   endTurn,
   insertAgent,
@@ -191,4 +193,231 @@ test("conversation context has dispatch_message and not send_message", async () 
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes(DISPATCH_MESSAGE));
   assert.equal(names.includes(SEND_MESSAGE), false);
+});
+
+test("spawn_agent requires system_prompt and grants nothing", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    config,
+    log: silentLog,
+  });
+  const missing = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    type: "tool_use",
+    id: "sp0",
+    name: "spawn_agent",
+    input: { name: "no-prompt-child" },
+  });
+  assert.equal(missing.isError, true);
+
+  const spawned = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    type: "tool_use",
+    id: "sp1",
+    name: "spawn_agent",
+    input: { name: "fresh-child", system_prompt: "do one job" },
+  });
+  assert.equal(spawned.isError, false);
+  const childId = JSON.parse(spawned.content).agent_id as string;
+  const childCtx = await assembleContext({
+    db: handle.db,
+    agentId: childId,
+    lane: "reasoning",
+    transcript: new TranscriptStore(),
+  });
+  assert.deepEqual(
+    childCtx.tools.map((tool) => tool.name),
+    [SEND_MESSAGE],
+  );
+});
+
+test("grant_tool on a direct child succeeds and appears in assembleContext", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    config,
+    log: silentLog,
+  });
+  const childId = await insertAgent(handle.db, {
+    name: "grantee",
+    systemPrompt: "child",
+    parentAgentId: ROOT_DADI_ID,
+  });
+  const granted = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    type: "tool_use",
+    id: "g1",
+    name: "grant_tool",
+    input: {
+      agent_id: childId,
+      tool_name: "modify_agent",
+      usage: "tune your own prompt",
+    },
+  });
+  assert.equal(granted.isError, false);
+  const ctx = await assembleContext({
+    db: handle.db,
+    agentId: childId,
+    lane: "reasoning",
+    transcript: new TranscriptStore(),
+  });
+  const names = ctx.tools.map((tool) => tool.name);
+  assert.ok(names.includes("modify_agent"));
+  assert.ok(names.includes(SEND_MESSAGE));
+});
+
+test("grant_tool on a non-child fails", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const strangerId = await insertAgent(handle.db, {
+    name: "stranger-grant",
+    systemPrompt: "stranger",
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    type: "tool_use",
+    id: "g2",
+    name: "grant_tool",
+    input: {
+      agent_id: strangerId,
+      tool_name: "modify_agent",
+      usage: "nope",
+    },
+  });
+  assert.equal(result.isError, true);
+  assert.match(result.content, /direct children/);
+});
+
+test("grant_tool naming an unknown tool fails", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const childId = await insertAgent(handle.db, {
+    name: "unknown-tool-child",
+    systemPrompt: "child",
+    parentAgentId: ROOT_DADI_ID,
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    type: "tool_use",
+    id: "g3",
+    name: "grant_tool",
+    input: {
+      agent_id: childId,
+      tool_name: "not_a_real_tool",
+      usage: "nope",
+    },
+  });
+  assert.equal(result.isError, true);
+  assert.match(result.content, /no tool named not_a_real_tool/);
+});
+
+test("revoke_tool removes a grant and fails when the child does not hold it", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    config,
+    log: silentLog,
+  });
+  const childId = await insertAgent(handle.db, {
+    name: "revoke-child",
+    systemPrompt: "child",
+    parentAgentId: ROOT_DADI_ID,
+  });
+  await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    type: "tool_use",
+    id: "r0",
+    name: "grant_tool",
+    input: {
+      agent_id: childId,
+      tool_name: "modify_agent",
+      usage: "temporary",
+    },
+  });
+  const revoked = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    type: "tool_use",
+    id: "r1",
+    name: "revoke_tool",
+    input: { agent_id: childId, tool_name: "modify_agent" },
+  });
+  assert.equal(revoked.isError, false);
+  const ctx = await assembleContext({
+    db: handle.db,
+    agentId: childId,
+    lane: "reasoning",
+    transcript: new TranscriptStore(),
+  });
+  assert.equal(
+    ctx.tools.map((tool) => tool.name).includes("modify_agent"),
+    false,
+  );
+  const again = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    type: "tool_use",
+    id: "r2",
+    name: "revoke_tool",
+    input: { agent_id: childId, tool_name: "modify_agent" },
+  });
+  assert.equal(again.isError, true);
+  assert.match(again.content, /does not hold/);
+});
+
+test("an agent can grant a tool it does not itself hold", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertAgent(handle.db, {
+    name: "router",
+    systemPrompt: "router",
+  });
+  const childId = await insertAgent(handle.db, {
+    name: "worker",
+    systemPrompt: "worker",
+    parentAgentId: parentId,
+  });
+  // Parent holds only grant_tool — not modify_agent — then grants modify_agent to the child.
+  await handle.db.insert(agentTools).values({
+    agentId: parentId,
+    toolId: toolId("grant_tool"),
+    usage: "delegate tools",
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    config,
+    log: silentLog,
+  });
+  const parentCtx = await assembleContext({
+    db: handle.db,
+    agentId: parentId,
+    lane: "reasoning",
+    transcript: new TranscriptStore(),
+  });
+  assert.equal(
+    parentCtx.tools.map((tool) => tool.name).includes("modify_agent"),
+    false,
+  );
+  const granted = await executeTool(runtime.toolContext(parentId, "reasoning"), {
+    type: "tool_use",
+    id: "g4",
+    name: "grant_tool",
+    input: {
+      agent_id: childId,
+      tool_name: "modify_agent",
+      usage: "you may modify yourself",
+    },
+  });
+  assert.equal(granted.isError, false);
+  const childCtx = await assembleContext({
+    db: handle.db,
+    agentId: childId,
+    lane: "reasoning",
+    transcript: new TranscriptStore(),
+  });
+  assert.ok(childCtx.tools.map((tool) => tool.name).includes("modify_agent"));
 });

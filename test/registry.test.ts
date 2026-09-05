@@ -28,8 +28,12 @@ test("toolId produces distinct ids for distinct names", () => {
 });
 
 test("findTool returns undefined for a name not in the registry", () => {
-  assert.equal(findTool("spawn_agent"), undefined);
   assert.equal(findTool("does_not_exist"), undefined);
+});
+
+test("findTool returns registered tools", () => {
+  assert.equal(findTool("spawn_agent")?.name, "spawn_agent");
+  assert.equal(findTool("grant_tool")?.name, "grant_tool");
 });
 
 test("syncTools throws when an agent_tools grant points at a tool not in the registry", async () => {
@@ -65,7 +69,7 @@ test("syncTools throws when an agent_tools grant points at a tool not in the reg
   );
 });
 
-test("syncTools with an empty registry and no grants resolves", async () => {
+test("syncTools with no grants resolves", async () => {
   await handle.sql`TRUNCATE agent_logs, agent_tools, tools, agents CASCADE`;
   await assert.doesNotReject(() => syncTools(handle.db));
 });

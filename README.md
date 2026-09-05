@@ -34,6 +34,12 @@ Conversation starts when:
 
 `steer_reasoning` appends to an in-memory queue and, if reasoning is idle, starts a run. Instructions that arrive during a run are drained together before the next Dwar call, never mid-call.
 
+## Tools
+
+The registry in `src/tools/` is the source of truth for every grantable tool — name, description, input schema, validation, and handler. The `tools` table is a projection of that registry, upserted by `syncTools` at migrate time so `agent_tools` has something to foreign-key against.
+
+Agents see tools via `agent_tools` grants. `grant_tool` and `revoke_tool` are parent-to-direct-child only (same authority scope as `modify_agent`). Root Dadi's grants are seeded in code because Dadi has no parent. `spawn_agent` creates a child with no tools; granting is a separate call.
+
 ## Persistence
 
 `agents` and `agent_logs` survive a process restart. Everything about a live conversation does not: the transcript (`TranscriptStore`), both lanes' scratchpads, lane locks, the steer queue, and the intent queue. They die with the process, same as each other.
@@ -80,7 +86,7 @@ curl -s http://localhost:8091/messages \
   -d '{"to_agent_id":"00000000-0000-4000-8000-000000000001","content":"hello"}'
 ```
 
-Migrations (this also seeds root Dadi and the platform tool registry — see `src/db/seed.ts`):
+Migrations (schema, then sync the tool registry into `tools`, then seed root Dadi and its grants — see `src/db/migrate.ts` / `src/db/seed.ts`):
 
 ```sh
 docker compose run --rm api npm run db:migrate
