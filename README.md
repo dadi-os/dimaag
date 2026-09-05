@@ -14,7 +14,7 @@ There is no thread table. A "Dadi thread" is just a child of root Dadi.
 
 ## The user is null
 
-There is no user table. A message from the human has `from_agent_id = null`. A message to the human has `to_agent_id = null`. Any agent can write to the user. The runtime persists everything; a 24-hour "ephemeral chat" filter is a client display choice, not a Dimaag rule.
+There is no user table. A message from the human has `from_agent_id = null`. A message to the human has `to_agent_id = null`. Any agent can write to the user. The runtime keeps the live transcript in process; a 24-hour "ephemeral chat" filter is a client display choice, not a Dimaag rule.
 
 ## Dual lanes
 
@@ -24,9 +24,7 @@ Every agent has both lanes. There is no per-agent model route.
 
 **Conversation** is the control surface. It talks to the user and to other agents, and it steers reasoning. It calls Dwar `POST /v1/chat/conversation` with the embedded tools `dispatch_message` and `steer_reasoning`. Those three embedded tools are lane plumbing. They are not rows in `tools` and cannot be granted or revoked.
 
-The transcript is identical for both lanes. `assembleContext` builds it once: every message the agent received, plus that agent's outgoing messages to the counterparty of the most recent inbound, ordered by `seq`. Reasoning's scratchpad is in-memory and never written to `messages`.
-
-`dispatch_message` is the only writer to `messages` that addresses someone else. Reasoning has no copy of it. If reasoning needs to talk, it calls `send_message`, which hands an intent to its own conversation lane. Conversation then composes and dispatches.
+The transcript lives in-process (`TranscriptStore`) and is identical for both lanes. `assembleContext` builds it once: every message the agent received, plus that agent's outgoing messages to the counterparty of the most recent inbound, ordered by `seq`. `dispatch_message` is the only writer; reasoning has no copy of it. If reasoning needs to talk, it calls `send_message`, which hands an intent to its own conversation lane. Conversation then composes and dispatches.
 
 Conversation starts when:
 
@@ -36,11 +34,13 @@ Conversation starts when:
 
 `steer_reasoning` appends to an in-memory queue and, if reasoning is idle, starts a run. Instructions that arrive during a run are drained together before the next Dwar call, never mid-call.
 
-## Locks (single process)
+## Persistence
+
+`agents` and `agent_logs` survive a process restart. Everything about a live conversation does not: the transcript (`TranscriptStore`), both lanes' scratchpads, lane locks, the steer queue, and the intent queue. They die with the process, same as each other.
 
 Each agent has two independent in-memory locks, one per lane. A request for a busy lane waits in a small queue and runs when the lock is released, or fails when `runtime.lane_queue_timeout_ms` elapses.
 
-This only works with a single Dimaag process. Do not run replicas that share the database and expect lanes to serialize. The locks, the scratchpad, and the steer queue all die with the process.
+This only works with a single Dimaag process. Do not run replicas that share the database and expect lanes to serialize.
 
 There is no `current_status` column. Conversation learns what reasoning is doing by steering it.
 
@@ -49,17 +49,16 @@ There is no `current_status` column. Conversation learns what reasoning is doing
 | Method | Path | Notes |
 | --- | --- | --- |
 | `GET` | `/health` | `{ "status": "ok" }` |
-| `POST` | `/v1/messages` | `{ to_agent_id, content }` from the user (`from_agent_id` is null). Persists, starts the target's conversation lane, returns immediately. |
-| `GET` | `/v1/messages` | `?agent_id&since&limit` transcript between that agent and the user. `since` is a `seq` cursor, exclusive. |
-| `GET` | `/v1/agents` | All agents |
-| `GET` | `/v1/agents/:id` | Agent plus direct children |
-| `GET` | `/v1/agents/:id/logs` | `?event&limit` audit trail. Not used for context assembly. |
+| `POST` | `/messages` | `{ to_agent_id, content }` from the user (`from_agent_id` is null). Appends to the in-process transcript, starts the target's conversation lane, returns immediately. |
+| `GET` | `/agents` | All agents |
+| `GET` | `/agents/:id` | Agent plus direct children |
+| `GET` | `/agents/:id/logs` | `?event&limit` audit trail. Not used for context assembly. Message history is `?event=message`. |
 
 Unknown request fields are a 422.
 
 ## Config vs env
 
-`config.toml` is checked in. Iteration caps, lane queue timeout, Dwar timeout/retry, transcript window.
+`config.toml` is checked in. Lane queue timeout, Dwar timeout/retry.
 
 Everything else — database address, Dwar address, host/port, log level — is set directly in `docker-compose.yml`. There is no `.env` file.
 
@@ -76,7 +75,7 @@ Builds the `dev` target (devDependencies, source bind-mounted, `tsx watch`), pub
 Dwar needs to be reachable at `http://host.docker.internal:8080` — run it on your host per its own README, or point `DWAR_BASE_URL` in `docker-compose.yml` elsewhere.
 
 ```sh
-curl -s http://localhost:8091/v1/messages \
+curl -s http://localhost:8091/messages \
   -H 'content-type: application/json' \
   -d '{"to_agent_id":"00000000-0000-4000-8000-000000000001","content":"hello"}'
 ```
@@ -98,4 +97,3 @@ Production shape (no bind mount, no published port):
 ```sh
 docker compose -f docker-compose.yml up --build
 ```
-

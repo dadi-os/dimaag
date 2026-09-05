@@ -19,17 +19,12 @@ const envSchema = z.object({
 
 const fileSchema = z.object({
   runtime: z.object({
-    max_scratchpad_iterations: z.number().int().positive(),
-    max_conversation_iterations: z.number().int().positive(),
     lane_queue_timeout_ms: z.number().int().positive(),
   }),
   dwar: z.object({
     timeout_ms: z.number().int().positive(),
     retry_attempts: z.number().int().positive(),
     backoff_ms: z.array(z.number().min(0)).nonempty(),
-  }),
-  context: z.object({
-    max_transcript_messages: z.number().int().positive(),
   }),
 });
 
@@ -46,7 +41,6 @@ export type Config = {
   };
   runtime: FileConfig["runtime"];
   dwar: FileConfig["dwar"];
-  context: FileConfig["context"];
 };
 
 function loadEnvFile(): void {
@@ -102,7 +96,6 @@ export function loadConfig(): Config {
     },
     runtime: file.runtime,
     dwar: file.dwar,
-    context: file.context,
   };
   return cached;
 }

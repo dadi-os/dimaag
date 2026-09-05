@@ -1,5 +1,4 @@
 import {
-  bigserial,
   boolean,
   check,
   index,
@@ -33,27 +32,6 @@ export const agents = pgTable(
   ],
 );
 
-export const messages = pgTable(
-  "messages",
-  {
-    id: uuid("id").primaryKey(),
-    toAgentId: uuid("to_agent_id").references(() => agents.id),
-    fromAgentId: uuid("from_agent_id").references(() => agents.id),
-    content: text("content").notNull(),
-    seq: bigserial("seq", { mode: "number" }).notNull(),
-    createdAt: timestamptz("created_at").notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("messages_seq_idx").on(table.seq),
-    index("messages_to_agent_id_seq_idx").on(table.toAgentId, table.seq),
-    index("messages_from_to_seq_idx").on(table.fromAgentId, table.toAgentId, table.seq),
-    check(
-      "messages_party_check",
-      sql`NOT (${table.toAgentId} IS NULL AND ${table.fromAgentId} IS NULL)`,
-    ),
-  ],
-);
-
 export const agentLogs = pgTable(
   "agent_logs",
   {
@@ -71,7 +49,7 @@ export const agentLogs = pgTable(
     check("agent_logs_lane_check", sql`${table.lane} IN ('reasoning', 'conversation')`),
     check(
       "agent_logs_event_check",
-      sql`${table.event} IN ('thought', 'tool_call', 'tool_result', 'message', 'iteration_cap_exhausted')`,
+      sql`${table.event} IN ('thought', 'tool_call', 'tool_result', 'message')`,
     ),
   ],
 );
@@ -104,7 +82,6 @@ export const agentTools = pgTable(
 );
 
 export type AgentRow = typeof agents.$inferSelect;
-export type MessageRow = typeof messages.$inferSelect;
 export type AgentLogRow = typeof agentLogs.$inferSelect;
 export type ToolRow = typeof tools.$inferSelect;
 export type AgentToolRow = typeof agentTools.$inferSelect;

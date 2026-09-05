@@ -3,7 +3,7 @@ import { eq, inArray } from "drizzle-orm";
 import { z, ZodError } from "zod";
 import type { Db } from "../db/client.js";
 import { writeAgentLog } from "../db/logs.js";
-import { agentTools, agents, messages, tools } from "../db/schema.js";
+import { agentTools, agents, tools } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
 import type { DwarTool, DwarToolUseBlock, Lane } from "../types/domain.js";
 import {
@@ -13,10 +13,10 @@ import {
   SPAWN_AGENT,
   STEER_REASONING,
 } from "../types/domain.js";
-import { toMessageRecord } from "../serialize.js";
 import type { LaneLocks } from "./locks.js";
 import type { SteerQueue } from "./steer.js";
 import type { IntentQueue } from "./intents.js";
+import type { TranscriptStore } from "./transcript.js";
 
 export type ToolExecResult = {
   content: string;
@@ -31,6 +31,7 @@ export type ToolContext = {
   steer: SteerQueue;
   intents: IntentQueue;
   locks: LaneLocks;
+  transcript: TranscriptStore;
   enqueueConversation: (agentId: string) => void;
   enqueueReasoning: (agentId: string) => void;
 };
@@ -204,7 +205,10 @@ async function runSendMessage(ctx: ToolContext, raw: unknown): Promise<ToolExecR
 
 async function runDispatchMessage(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {
   const input = dispatchInput.parse(raw);
-  const row = await insertMessage(ctx.db, {
+  if (input.to_agent_id !== null) {
+    await requireAgent(ctx.db, input.to_agent_id);
+  }
+  const row = ctx.transcript.append({
     fromAgentId: ctx.callerId,
     toAgentId: input.to_agent_id,
     content: input.content,
@@ -215,8 +219,8 @@ async function runDispatchMessage(ctx: ToolContext, raw: unknown): Promise<ToolE
     event: "message",
     payload: {
       direction: "send",
-      message_id: row.id,
-      from_agent_id: row.fromAgentId,
+      message_id: null,
+      from_agent_id: ctx.callerId,
       to_agent_id: row.toAgentId,
       content: row.content,
       seq: row.seq,
@@ -229,8 +233,8 @@ async function runDispatchMessage(ctx: ToolContext, raw: unknown): Promise<ToolE
       event: "message",
       payload: {
         direction: "receive",
-        message_id: row.id,
-        from_agent_id: row.fromAgentId,
+        message_id: null,
+        from_agent_id: ctx.callerId,
         to_agent_id: row.toAgentId,
         content: row.content,
         seq: row.seq,
@@ -238,7 +242,7 @@ async function runDispatchMessage(ctx: ToolContext, raw: unknown): Promise<ToolE
     });
     ctx.enqueueConversation(row.toAgentId);
   }
-  return ok(toMessageRecord(row));
+  return ok({ to_agent_id: row.toAgentId, content: row.content, seq: row.seq });
 }
 
 async function runSteerReasoning(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {
@@ -325,39 +329,6 @@ async function runModifyAgent(ctx: ToolContext, raw: unknown): Promise<ToolExecR
     },
     { old_system_prompt: oldPrompt, new_system_prompt: newPrompt },
   );
-}
-
-export async function insertMessage(
-  db: Db,
-  args: {
-    fromAgentId: string | null;
-    toAgentId: string | null;
-    content: string;
-  },
-): Promise<typeof messages.$inferSelect> {
-  if (args.fromAgentId === null && args.toAgentId === null) {
-    throw new DimaagError(422, "invalid_request", "message needs a sender or a recipient");
-  }
-  if (args.toAgentId !== null) {
-    await requireAgent(db, args.toAgentId);
-  }
-  if (args.fromAgentId !== null) {
-    await requireAgent(db, args.fromAgentId);
-  }
-  const rows = await db
-    .insert(messages)
-    .values({
-      id: randomUUID(),
-      fromAgentId: args.fromAgentId,
-      toAgentId: args.toAgentId,
-      content: args.content,
-    })
-    .returning();
-  const row = rows[0];
-  if (!row) {
-    throw new DimaagError(500, "internal", "message insert returned no row");
-  }
-  return row;
 }
 
 export async function requireAgent(db: Db, id: string) {

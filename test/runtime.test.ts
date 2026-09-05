@@ -4,6 +4,7 @@ import { DISPATCH_MESSAGE, MODIFY_AGENT, ROOT_DADI_ID, SEND_MESSAGE } from "../s
 import { assembleContext } from "../src/runtime/context.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
+import { TranscriptStore } from "../src/runtime/transcript.js";
 import { buildApp } from "../src/app.js";
 import { migrate } from "../src/db/migrate.js";
 import {
@@ -14,7 +15,6 @@ import {
   resetRuntime,
   silentLog,
   testConfig,
-  toolUse,
 } from "./helpers.js";
 
 const config = testConfig();
@@ -56,8 +56,8 @@ test("two concurrent messages to one agent serialize on its conversation lock", 
     content: "hello",
   };
   const [a, b] = await Promise.all([
-    app.inject({ method: "POST", url: "/v1/messages", payload: { ...body, content: "one" } }),
-    app.inject({ method: "POST", url: "/v1/messages", payload: { ...body, content: "two" } }),
+    app.inject({ method: "POST", url: "/messages", payload: { ...body, content: "one" } }),
+    app.inject({ method: "POST", url: "/messages", payload: { ...body, content: "two" } }),
   ]);
   assert.equal(a.statusCode, 201);
   assert.equal(b.statusCode, 201);
@@ -127,7 +127,7 @@ test("reasoning context has send_message and no dispatch_message", async () => {
     db: handle.db,
     agentId: ROOT_DADI_ID,
     lane: "reasoning",
-    maxTranscriptMessages: 100,
+    transcript: new TranscriptStore(),
   });
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes(SEND_MESSAGE));
@@ -146,7 +146,7 @@ test("reasoning cannot write another agent's mailbox", async () => {
     config,
     log: silentLog,
   });
-  const before = await handle.sql<{ n: string }[]>`SELECT count(*)::text AS n FROM messages`;
+  const before = runtime.transcript.transcriptFor(targetId).length;
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "d1",
@@ -155,8 +155,8 @@ test("reasoning cannot write another agent's mailbox", async () => {
   });
   assert.equal(result.isError, true);
   assert.match(result.content, /unknown reasoning tool/);
-  const after = await handle.sql<{ n: string }[]>`SELECT count(*)::text AS n FROM messages`;
-  assert.equal(before[0]?.n, after[0]?.n);
+  const after = runtime.transcript.transcriptFor(targetId).length;
+  assert.equal(before, after);
 });
 
 test("a steer with reasoning idle starts a Dwar reasoning call", async () => {
@@ -186,33 +186,9 @@ test("conversation context has dispatch_message and not send_message", async () 
     db: handle.db,
     agentId: ROOT_DADI_ID,
     lane: "conversation",
-    maxTranscriptMessages: 100,
+    transcript: new TranscriptStore(),
   });
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes(DISPATCH_MESSAGE));
   assert.equal(names.includes(SEND_MESSAGE), false);
-});
-
-test("reasoning loop writes iteration_cap_exhausted when it hits the cap", async () => {
-  await resetRuntime(handle.sql, handle.db, config);
-  const capped = {
-    ...config,
-    runtime: { ...config.runtime, max_scratchpad_iterations: 1 },
-  };
-  const dwar = mockDwar({
-    reason: async () => toolUse(SEND_MESSAGE, { to_agent_id: null, intent: "keep going" }),
-    converse: async () => endTurn(),
-  });
-  const runtime = createRuntime({ db: handle.db, dwar, config: capped, log: silentLog });
-  await executeTool(runtime.toolContext(ROOT_DADI_ID, "conversation"), {
-    type: "tool_use",
-    id: "cap-1",
-    name: "steer_reasoning",
-    input: { instruction: "spin" },
-  });
-  await runtime.waitUntilIdle();
-  const rows = await handle.sql<{ event: string }[]>`
-    SELECT event FROM agent_logs WHERE event = 'iteration_cap_exhausted'
-  `;
-  assert.equal(rows.length, 1);
 });

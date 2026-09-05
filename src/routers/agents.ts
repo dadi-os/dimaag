@@ -1,8 +1,8 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { agentLogs, agents } from "../../db/schema.js";
-import { requireAgent } from "../../runtime/tools.js";
-import { toAgentRecord, toLogRecord } from "../../serialize.js";
+import { agentLogs, agents } from "../db/schema.js";
+import { requireAgent } from "../runtime/tools.js";
+import { toAgentRecord, toLogRecord } from "../serialize.js";
 import { idParam, logsQuery, parse } from "./schemas.js";
 
 export async function registerAgents(app: FastifyInstance): Promise<void> {

@@ -77,7 +77,7 @@ export async function openTestDb(): Promise<{ db: Db; sql: Sql; close: () => Pro
 }
 
 export async function resetRuntime(sql: Sql, db: Db, config: Config): Promise<void> {
-  await sql`TRUNCATE agent_logs, messages, agent_tools, tools, agents CASCADE`;
+  await sql`TRUNCATE agent_logs, agent_tools, tools, agents CASCADE`;
   await seed(db, config);
 }
 

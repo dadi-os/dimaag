@@ -1,5 +1,5 @@
 import { z, type ZodError, type ZodType } from "zod";
-import { DimaagError } from "../../errors.js";
+import { DimaagError } from "../errors.js";
 
 export function parse<T>(schema: ZodType<T>, data: unknown): T {
   const parsed = schema.safeParse(data);
@@ -25,21 +25,11 @@ export const postMessageBody = z
   })
   .strict();
 
-export const getMessagesQuery = z
-  .object({
-    agent_id: z.string().uuid(),
-    since: z.coerce.number().int().min(0).optional(),
-    limit: z.coerce.number().int().positive().max(200).optional(),
-  })
-  .strict();
-
 export const idParam = z.object({ id: z.string().uuid() }).strict();
 
 export const logsQuery = z
   .object({
-    event: z
-      .enum(["thought", "tool_call", "tool_result", "message", "iteration_cap_exhausted"])
-      .optional(),
+    event: z.enum(["thought", "tool_call", "tool_result", "message"]).optional(),
     limit: z.coerce.number().int().positive().max(200).optional(),
   })
   .strict();

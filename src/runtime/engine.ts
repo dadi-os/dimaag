@@ -4,7 +4,7 @@ import type { Db } from "../db/client.js";
 import { writeAgentLog } from "../db/logs.js";
 import { agents } from "../db/schema.js";
 import type { DwarClient } from "../dwar/client.js";
-import type { DwarChatResponse, DwarToolUseBlock, Lane } from "../types/domain.js";
+import type { DwarChatResponse, DwarMessage, DwarToolUseBlock, Lane } from "../types/domain.js";
 import { assembleContext } from "./context.js";
 import { runConversationLoop } from "./conversation.js";
 import { IntentQueue } from "./intents.js";
@@ -12,6 +12,7 @@ import { LaneLocks } from "./locks.js";
 import { runReasoningLoop } from "./reasoning.js";
 import { SteerQueue } from "./steer.js";
 import { executeTool, type ToolContext, type ToolExecResult } from "./tools.js";
+import { TranscriptStore } from "./transcript.js";
 
 export type RuntimeLog = {
   error: (obj: unknown, msg?: string) => void;
@@ -23,6 +24,7 @@ export type Runtime = {
   locks: LaneLocks;
   steer: SteerQueue;
   intents: IntentQueue;
+  transcript: TranscriptStore;
   enqueueConversation: (agentId: string) => void;
   enqueueReasoning: (agentId: string) => void;
   waitUntilIdle: () => Promise<void>;
@@ -38,6 +40,9 @@ export function createRuntime(opts: {
   const locks = new LaneLocks();
   const steer = new SteerQueue();
   const intents = new IntentQueue();
+  const transcript = new TranscriptStore();
+  const reasoningScratchpads = new Map<string, DwarMessage[]>();
+  const conversationScratchpads = new Map<string, DwarMessage[]>();
   let pending = 0;
   const idleWaiters: Array<() => void> = [];
 
@@ -63,10 +68,20 @@ export function createRuntime(opts: {
     });
   }
 
+  function scratchpadFor(map: Map<string, DwarMessage[]>, agentId: string): DwarMessage[] {
+    let pad = map.get(agentId);
+    if (!pad) {
+      pad = [];
+      map.set(agentId, pad);
+    }
+    return pad;
+  }
+
   const runtime: Runtime = {
     locks,
     steer,
     intents,
+    transcript,
     enqueueConversation,
     enqueueReasoning,
     waitUntilIdle,
@@ -81,6 +96,7 @@ export function createRuntime(opts: {
       steer,
       intents,
       locks,
+      transcript,
       enqueueConversation,
       enqueueReasoning,
     };
@@ -127,7 +143,7 @@ export function createRuntime(opts: {
         db: opts.db,
         agentId,
         lane,
-        maxTranscriptMessages: opts.config.context.max_transcript_messages,
+        transcript,
       });
     const exec = (call: DwarToolUseBlock) => executeTool(toolContext(agentId, lane), call);
     const logThought = (response: DwarChatResponse) =>
@@ -167,20 +183,11 @@ export function createRuntime(opts: {
     return { assemble, exec, logThought, logToolCall, logToolResult };
   }
 
-  function logCapExhausted(agentId: string, lane: Lane, maxIterations: number) {
-    return writeAgentLog(opts.db, {
-      agentId,
-      lane,
-      event: "iteration_cap_exhausted",
-      payload: { max_iterations: maxIterations },
-    });
-  }
-
   function reasoningDeps(agentId: string) {
     const helpers = laneHelpers(agentId, "reasoning");
     return {
       agentId,
-      maxIterations: opts.config.runtime.max_scratchpad_iterations,
+      scratchpad: scratchpadFor(reasoningScratchpads, agentId),
       assemble: helpers.assemble,
       reason: opts.dwar.reason,
       executeTool: helpers.exec,
@@ -188,8 +195,6 @@ export function createRuntime(opts: {
       logThought: helpers.logThought,
       logToolCall: helpers.logToolCall,
       logToolResult: helpers.logToolResult,
-      logCapExhausted: () =>
-        logCapExhausted(agentId, "reasoning", opts.config.runtime.max_scratchpad_iterations),
     };
   }
 
@@ -197,7 +202,7 @@ export function createRuntime(opts: {
     const helpers = laneHelpers(agentId, "conversation");
     return {
       agentId,
-      maxIterations: opts.config.runtime.max_conversation_iterations,
+      scratchpad: scratchpadFor(conversationScratchpads, agentId),
       assemble: helpers.assemble,
       converse: opts.dwar.converse,
       executeTool: helpers.exec,
@@ -205,8 +210,6 @@ export function createRuntime(opts: {
       logThought: helpers.logThought,
       logToolCall: helpers.logToolCall,
       logToolResult: helpers.logToolResult,
-      logCapExhausted: () =>
-        logCapExhausted(agentId, "conversation", opts.config.runtime.max_conversation_iterations),
     };
   }
 

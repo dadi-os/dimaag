@@ -5,7 +5,7 @@ import type { ToolExecResult } from "./tools.js";
 
 export type ReasoningLoopDeps = {
   agentId: string;
-  maxIterations: number;
+  scratchpad: DwarMessage[];
   assemble: () => Promise<DwarChatRequest>;
   reason: (request: DwarChatRequest) => Promise<DwarChatResponse>;
   executeTool: (call: DwarToolUseBlock) => Promise<ToolExecResult>;
@@ -13,17 +13,18 @@ export type ReasoningLoopDeps = {
   logThought: (response: DwarChatResponse) => Promise<void>;
   logToolCall: (call: DwarToolUseBlock, result: ToolExecResult) => Promise<void>;
   logToolResult: (toolUseId: string, result: ToolExecResult) => Promise<void>;
-  logCapExhausted: () => Promise<void>;
 };
 
 /**
- * Reasoning-lane scratchpad loop. The scratchpad is local and discarded on return.
- * Steers are drained before each Dwar call, never mid-call.
+ * Reasoning-lane scratchpad loop. The scratchpad is passed in by reference and persists
+ * across invocations for this agent — it is not reset here. It dies only when the
+ * process restarts. No iteration cap: Dwar's own per-call timeout and lane_queue_timeout_ms
+ * are the only bounds on a running loop.
  */
 export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
-  const scratchpad: DwarMessage[] = [];
+  const scratchpad = deps.scratchpad;
 
-  for (let i = 0; i < deps.maxIterations; i++) {
+  for (;;) {
     const assembled = await deps.assemble();
     const messages: DwarMessage[] = [...assembled.messages, ...scratchpad];
     const steers = deps.steer.drain(deps.agentId);
@@ -62,5 +63,4 @@ export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
     }
     scratchpad.push({ role: "user", content: results });
   }
-  await deps.logCapExhausted();
 }

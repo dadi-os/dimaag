@@ -1,11 +1,6 @@
 export type Lane = "reasoning" | "conversation";
 
-export type LogEvent =
-  | "thought"
-  | "tool_call"
-  | "tool_result"
-  | "message"
-  | "iteration_cap_exhausted";
+export type LogEvent = "thought" | "tool_call" | "tool_result" | "message";
 
 export type AgentRecord = {
   id: string;
@@ -15,15 +10,6 @@ export type AgentRecord = {
   active: boolean;
   created_at: string;
   updated_at: string;
-};
-
-export type MessageRecord = {
-  id: string;
-  to_agent_id: string | null;
-  from_agent_id: string | null;
-  content: string;
-  seq: number;
-  created_at: string;
 };
 
 export type LogRecord = {

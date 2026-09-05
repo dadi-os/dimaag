@@ -1,5 +1,5 @@
-import type { AgentLogRow, AgentRow, MessageRow } from "./db/schema.js";
-import type { AgentRecord, LogEvent, LogRecord, Lane, MessageRecord } from "./types/domain.js";
+import type { AgentLogRow, AgentRow } from "./db/schema.js";
+import type { AgentRecord, LogEvent, LogRecord, Lane } from "./types/domain.js";
 import { DimaagError } from "./errors.js";
 
 function parseLane(value: string): Lane {
@@ -14,8 +14,7 @@ function parseLogEvent(value: string): LogEvent {
     value === "thought" ||
     value === "tool_call" ||
     value === "tool_result" ||
-    value === "message" ||
-    value === "iteration_cap_exhausted"
+    value === "message"
   ) {
     return value;
   }
@@ -31,17 +30,6 @@ export function toAgentRecord(row: AgentRow): AgentRecord {
     active: row.active,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
-  };
-}
-
-export function toMessageRecord(row: MessageRow): MessageRecord {
-  return {
-    id: row.id,
-    to_agent_id: row.toAgentId,
-    from_agent_id: row.fromAgentId,
-    content: row.content,
-    seq: row.seq,
-    created_at: row.createdAt.toISOString(),
   };
 }
 

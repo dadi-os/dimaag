@@ -4,7 +4,7 @@ import type { Db, Sql } from "./db/client.js";
 import type { DwarClient } from "./dwar/client.js";
 import { DimaagError } from "./errors.js";
 import { createRuntime, type Runtime } from "./runtime/engine.js";
-import { registerV1 } from "./routers/v1/index.js";
+import { registerV1 } from "./routers/index.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -59,6 +59,6 @@ export async function buildApp(
   });
 
   app.get("/health", async () => ({ status: "ok" }));
-  await app.register(registerV1, { prefix: "/v1" });
+  await app.register(registerV1);
   return app;
 }

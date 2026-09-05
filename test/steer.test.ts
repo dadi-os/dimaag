@@ -6,6 +6,7 @@ import { SteerQueue, STEER_TURN_PREFIX } from "../src/runtime/steer.js";
 import { LaneLocks } from "../src/runtime/locks.js";
 import { IntentQueue } from "../src/runtime/intents.js";
 import { executeTool } from "../src/runtime/tools.js";
+import { TranscriptStore } from "../src/runtime/transcript.js";
 import { STEER_REASONING } from "../src/types/domain.js";
 
 function endTurn(text = "done"): DwarChatResponse {
@@ -29,10 +30,11 @@ test("a steer arriving mid-loop is applied on the next iteration", async () => {
   const agentId = "agent-1";
   const calls: DwarChatRequest[] = [];
   let turn = 0;
+  const scratchpad: DwarChatRequest["messages"] = [];
 
   await runReasoningLoop({
     agentId,
-    maxIterations: 10,
+    scratchpad,
     assemble: async () => ({ system: "sys", messages: [], tools: [] }),
     reason: async (request) => {
       calls.push(request);
@@ -48,7 +50,6 @@ test("a steer arriving mid-loop is applied on the next iteration", async () => {
     logThought: async () => {},
     logToolCall: async () => {},
     logToolResult: async () => {},
-    logCapExhausted: async () => {},
   });
 
   assert.equal(calls.length, 2);
@@ -73,6 +74,7 @@ test("steer_reasoning starts a run when reasoning is idle", async () => {
       steer,
       intents: new IntentQueue(),
       locks,
+      transcript: new TranscriptStore(),
       enqueueConversation: () => {},
       enqueueReasoning: (id) => {
         started.push(id);
@@ -104,6 +106,7 @@ test("steer_reasoning does not start a second run while reasoning is busy", asyn
       steer,
       intents: new IntentQueue(),
       locks,
+      transcript: new TranscriptStore(),
       enqueueConversation: () => {},
       enqueueReasoning: (id) => {
         started.push(id);
