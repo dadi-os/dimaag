@@ -7,6 +7,7 @@ import type { LaneLocks } from "../runtime/locks.js";
 import type { SteerQueue } from "../runtime/steer.js";
 import type { IntentQueue } from "../runtime/intents.js";
 import type { TranscriptStore } from "../runtime/transcript.js";
+import type { YaadClient } from "../yaad/client.js";
 
 export type ToolExecResult = {
   content: string;
@@ -18,6 +19,7 @@ export type ToolContext = {
   db: Db;
   callerId: string;
   lane: Lane;
+  yaad: YaadClient;
   steer: SteerQueue;
   intents: IntentQueue;
   locks: LaneLocks;

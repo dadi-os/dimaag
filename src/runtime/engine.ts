@@ -4,6 +4,7 @@ import type { Db } from "../db/client.js";
 import { writeAgentLog } from "../db/logs.js";
 import { agents } from "../db/schema.js";
 import type { DwarClient } from "../dwar/client.js";
+import type { YaadClient } from "../yaad/client.js";
 import type { DwarChatResponse, DwarMessage, DwarToolUseBlock, Lane } from "../types/domain.js";
 import { assembleContext } from "./context.js";
 import { runConversationLoop } from "./conversation.js";
@@ -34,6 +35,7 @@ export type Runtime = {
 export function createRuntime(opts: {
   db: Db;
   dwar: DwarClient;
+  yaad: YaadClient;
   config: Config;
   log: RuntimeLog;
 }): Runtime {
@@ -93,6 +95,7 @@ export function createRuntime(opts: {
       db: opts.db,
       callerId,
       lane,
+      yaad: opts.yaad,
       steer,
       intents,
       locks,

@@ -12,6 +12,7 @@ const tomlPath = join(serviceRoot, "config.toml");
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "must not be empty"),
   DWAR_BASE_URL: z.string().url(),
+  YAAD_BASE_URL: z.string().url(),
   HOST: z.string().min(1, "must not be empty"),
   PORT: z.coerce.number().int().min(1).max(65535),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]),
@@ -26,6 +27,11 @@ const fileSchema = z.object({
     retry_attempts: z.number().int().positive(),
     backoff_ms: z.array(z.number().min(0)).nonempty(),
   }),
+  yaad: z.object({
+    timeout_ms: z.number().int().positive(),
+    retry_attempts: z.number().int().positive(),
+    backoff_ms: z.array(z.number().min(0)).nonempty(),
+  }),
 });
 
 export type FileConfig = z.infer<typeof fileSchema>;
@@ -35,12 +41,14 @@ export type Config = {
   env: {
     databaseUrl: string;
     dwarBaseUrl: string;
+    yaadBaseUrl: string;
     host: string;
     port: number;
     logLevel: z.infer<typeof envSchema>["LOG_LEVEL"];
   };
   runtime: FileConfig["runtime"];
   dwar: FileConfig["dwar"];
+  yaad: FileConfig["yaad"];
 };
 
 function loadEnvFile(): void {
@@ -90,12 +98,14 @@ export function loadConfig(): Config {
     env: {
       databaseUrl: env.DATABASE_URL,
       dwarBaseUrl: env.DWAR_BASE_URL.replace(/\/$/, ""),
+      yaadBaseUrl: env.YAAD_BASE_URL.replace(/\/$/, ""),
       host: env.HOST,
       port: env.PORT,
       logLevel: env.LOG_LEVEL,
     },
     runtime: file.runtime,
     dwar: file.dwar,
+    yaad: file.yaad,
   };
   return cached;
 }

@@ -3,6 +3,10 @@ import { spawnAgent } from "./dimaag/spawn-agent.js";
 import { modifyAgent } from "./dimaag/modify-agent.js";
 import { grantTool } from "./dimaag/grant-tool.js";
 import { revokeTool } from "./dimaag/revoke-tool.js";
+import { recall } from "./yaad/recall.js";
+import { query } from "./yaad/query.js";
+import { getNode } from "./yaad/get-node.js";
+import { ingest } from "./yaad/ingest.js";
 
 /**
  * Every non-embedded tool. Embedded lane plumbing (send_message, dispatch_message,
@@ -14,6 +18,10 @@ const definitions = [
   modifyAgent,
   grantTool,
   revokeTool,
+  recall,
+  query,
+  getNode,
+  ingest,
 ] as unknown as ToolDefinition[];
 
 const byName = new Map<string, ToolDefinition>();

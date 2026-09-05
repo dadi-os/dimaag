@@ -42,6 +42,25 @@ const DADI_GRANTS: Array<{ tool: string; usage: string }> = [
     tool: "revoke_tool",
     usage: "Take a tool back from a child when it no longer needs it.",
   },
+  {
+    tool: "recall",
+    usage:
+      "Before answering anything about Ankur, people he knows, or things that have happened, check memory. If sufficient comes back false, say what you don't know rather than guessing.",
+  },
+  {
+    tool: "query",
+    usage: "For dates, schedules, and exact names. 'What do I have Thursday' is a query, not a recall.",
+  },
+  {
+    tool: "get_node",
+    usage:
+      "When recall or query gives you a node that matters and you need its edges — who was there, where it was.",
+  },
+  {
+    tool: "ingest",
+    usage:
+      "When Ankur tells you something worth keeping, store it. Prefer storing too much over too little; Yaad decides what is worth a node and expires what is momentary.",
+  },
 ];
 
 export async function seed(db: Db, config: Config): Promise<void> {

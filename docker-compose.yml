@@ -22,6 +22,7 @@ services:
     environment:
       DATABASE_URL: postgres://dimaag:dimaag@postgres:5432/dimaag
       DWAR_BASE_URL: http://host.docker.internal:8080
+      YAAD_BASE_URL: http://host.docker.internal:8090
       HOST: 0.0.0.0
       PORT: "8080"
       LOG_LEVEL: info

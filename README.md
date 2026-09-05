@@ -40,6 +40,19 @@ The registry in `src/tools/` is the source of truth for every grantable tool —
 
 Agents see tools via `agent_tools` grants. `grant_tool` and `revoke_tool` are parent-to-direct-child only (same authority scope as `modify_agent`). Root Dadi's grants are seeded in code because Dadi has no parent. `spawn_agent` creates a child with no tools; granting is a separate call.
 
+### Yaad (memory)
+
+Dimaag reaches Yaad over HTTP as one more external service — the same relationship it has with Dwar. It holds `YAAD_BASE_URL` and knows nothing about Yaad's schema. Four tools:
+
+| tool | Yaad route | when to use |
+| --- | --- | --- |
+| `recall` | `POST /recall` | semantic "what do I know about X" |
+| `query` | `POST /query` | exact dates, names, kind/status filters |
+| `get_node` | `GET /nodes/:id` | full node + edges after a lookup |
+| `ingest` | `POST /ingest` | store a fact; Yaad extracts and reconciles |
+
+Root Dadi is seeded with all four. `occurred_at` on ingest is stamped by Dimaag from the clock — agents do not supply it.
+
 ## Persistence
 
 `agents` and `agent_logs` survive a process restart. Everything about a live conversation does not: the transcript (`TranscriptStore`), both lanes' scratchpads, lane locks, the steer queue, and the intent queue. They die with the process, same as each other.
@@ -64,9 +77,18 @@ Unknown request fields are a 422.
 
 ## Config vs env
 
-`config.toml` is checked in. Lane queue timeout, Dwar timeout/retry.
+`config.toml` is checked in. Lane queue timeout, Dwar timeout/retry, Yaad timeout/retry.
 
-Everything else — database address, Dwar address, host/port, log level — is set directly in `docker-compose.yml`. There is no `.env` file.
+Everything else — database address, Dwar address, Yaad address, host/port, log level — is set directly in `docker-compose.yml`. There is no `.env` file.
+
+```
+DATABASE_URL
+DWAR_BASE_URL
+YAAD_BASE_URL
+HOST
+PORT
+LOG_LEVEL
+```
 
 ## Run
 
@@ -78,7 +100,7 @@ docker compose up --build
 
 Builds the `dev` target (devDependencies, source bind-mounted, `tsx watch`), publishes on `http://localhost:8091`. `GET http://localhost:8091/health` should return `{"status":"ok"}`.
 
-Dwar needs to be reachable at `http://host.docker.internal:8080` — run it on your host per its own README, or point `DWAR_BASE_URL` in `docker-compose.yml` elsewhere.
+Dwar needs to be reachable at `http://host.docker.internal:8080`, and Yaad at `http://host.docker.internal:8090` — run them on your host per their own READMEs, or point `DWAR_BASE_URL` / `YAAD_BASE_URL` in `docker-compose.yml` elsewhere.
 
 ```sh
 curl -s http://localhost:8091/messages \
