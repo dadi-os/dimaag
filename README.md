@@ -34,15 +34,36 @@ Conversation starts when:
 
 `steer_reasoning` appends to an in-memory queue and, if reasoning is idle, starts a run. Instructions that arrive during a run are drained together before the next Dwar call, never mid-call.
 
+## Tools
+
+The registry in `src/tools/` is the source of truth for every grantable tool — name, description, input schema, validation, and handler. The `tools` table is a projection of that registry, upserted by `syncTools` at migrate time so `agent_tools` has something to foreign-key against.
+
+Agents see tools via `agent_tools` grants. `grant_tool` and `revoke_tool` are parent-to-direct-child only (same authority scope as `modify_agent`). Root Dadi's grants are seeded in code because Dadi has no parent. `spawn_agent` creates a child with no tools; granting is a separate call.
+
+### Yaad (memory)
+
+Dimaag reaches Yaad over HTTP as one more external service — the same relationship it has with Dwar. It calls `http://yaad.dadi` and knows nothing about Yaad's schema. Four tools:
+
+| tool | Yaad route | when to use |
+| --- | --- | --- |
+| `recall` | `POST /recall` | semantic "what do I know about X" |
+| `query` | `POST /query` | exact dates, names, kind/status filters |
+| `get_node` | `GET /nodes/:id` | full node + edges after a lookup |
+| `ingest` | `POST /ingest` | store a fact; Yaad extracts and reconciles |
+
+Root Dadi is seeded with all four. `occurred_at` on ingest is stamped by Dimaag from the clock — agents do not supply it.
+
 ## Persistence
 
-`agents` and `agent_logs` survive a process restart. Everything about a live conversation does not: the transcript (`TranscriptStore`), both lanes' scratchpads, lane locks, the steer queue, and the intent queue. They die with the process, same as each other.
+`agents` and `agent_logs` survive a process restart. Everything about a live conversation does not: the transcript (`TranscriptStore`), both lanes' scratchpads, lane locks, the steer queue, the intent queue, and the event stream. Event subscribers are dropped on restart and no events are replayed. They die with the process, same as each other.
 
-Each agent has two independent in-memory locks, one per lane. A request for a busy lane waits in a small queue and runs when the lock is released, or fails when `runtime.lane_queue_timeout_ms` elapses.
+Each agent has two independent in-memory locks, one per lane. A request for a busy lane waits in a small queue and runs when the lock is released, or fails when `runtime.lane_queue_timeout_ms` elapses. `GET /agents` exposes that lock ownership as `running` — it is always false immediately after a restart, regardless of what was happening before.
 
-This only works with a single Dimaag process. Do not run replicas that share the database and expect lanes to serialize.
+This only works with a single Dimaag process. Do not run replicas that share the database and expect lanes to serialize. The in-memory event bus makes the same assumption: no pub/sub, no cross-instance fanout.
 
 There is no `current_status` column. Conversation learns what reasoning is doing by steering it.
+
+`agent_logs` has no severity concept — only `thought` / `tool_call` / `tool_result` / `message`. A failed tool call is a `tool_result` whose payload has `is_error: true`. Clients that want an error count must filter on that field.
 
 ## Routes
 
@@ -50,50 +71,46 @@ There is no `current_status` column. Conversation learns what reasoning is doing
 | --- | --- | --- |
 | `GET` | `/health` | `{ "status": "ok" }` |
 | `POST` | `/messages` | `{ to_agent_id, content }` from the user (`from_agent_id` is null). Appends to the in-process transcript, starts the target's conversation lane, returns immediately. |
-| `GET` | `/agents` | All agents |
-| `GET` | `/agents/:id` | Agent plus direct children |
-| `GET` | `/agents/:id/logs` | `?event&limit` audit trail. Not used for context assembly. Message history is `?event=message`. |
+| `GET` | `/events` | Server-sent events for live `message`, `lane_started` / `lane_finished`, `agent_spawned`, and `agent_modified`. No replay; reconnect and re-fetch `GET /agents`. |
+| `GET` | `/agents` | All agents, including `running` (in-memory lane lock ownership). |
+| `GET` | `/agents/:id` | Agent plus direct children (each with `running`) and granted tools (`name`, `description`, `usage`). Embedded lane tools are not listed. |
+| `GET` | `/agents/:id/logs` | `?event&limit` audit trail for one agent. Not used for context assembly. Message history is `?event=message`. |
+| `GET` | `/logs` | Cross-agent audit trail. Same `?event&limit` as the per-agent route; `limit` capped at 200. |
 
 Unknown request fields are a 422.
 
+Dimaag sends no CORS headers. Clients should make requests outside the browser sandbox (Tauri's HTTP plugin does this). Dimaag is unauthenticated; opening it to browser origins is not appropriate.
+
 ## Config vs env
 
-`config.toml` is checked in. Lane queue timeout, Dwar timeout/retry.
+`config.toml` is checked in — lane queue timeout, Dwar timeout/retry, Yaad timeout/retry.
 
-Everything else — database address, Dwar address, host/port, log level — is set directly in `docker-compose.yml`. There is no `.env` file.
+Topology is hardcoded in `src/constants.ts` (including log level). Dwar is at `http://dwar.dadi` and Yaad at `http://yaad.dadi`, resolved by Nas's reverse proxy in both dev and prod.
 
-## Run
+`DATABASE_URL` (and `POSTGRES_PASSWORD` for the database container) live in `.env`. Copy `.env.example` to `.env`. Nas reads that file for both Dimaag and `dimaag-postgres`.
 
-Everything runs through Compose.
+## Development
+
+Dimaag runs as part of the dadiOS stack. Bring it up through Nas:
 
 ```sh
-docker compose up --build
+cd ../nas
+docker compose up dimaag dimaag-postgres
+docker compose run --rm dimaag npm run db:migrate
 ```
 
-Builds the `dev` target (devDependencies, source bind-mounted, `tsx watch`), publishes on `http://localhost:8091`. `GET http://localhost:8091/health` should return `{"status":"ok"}`.
+Source is bind-mounted, so edits here restart the service in place. Start the rest of the stack (`docker compose up`) when Dimaag needs Dwar or Yaad.
 
-Dwar needs to be reachable at `http://host.docker.internal:8080` — run it on your host per its own README, or point `DWAR_BASE_URL` in `docker-compose.yml` elsewhere.
+Migrations also seed root Dadi and sync the tool registry (`src/db/migrate.ts` / `src/db/seed.ts`).
+
+Tests run the same way:
+
+```sh
+docker compose run --rm dimaag npm test
+```
 
 ```sh
 curl -s http://localhost:8091/messages \
   -H 'content-type: application/json' \
   -d '{"to_agent_id":"00000000-0000-4000-8000-000000000001","content":"hello"}'
-```
-
-Migrations (this also seeds root Dadi and the platform tool registry — see `src/db/seed.ts`):
-
-```sh
-docker compose run --rm api npm run db:migrate
-```
-
-Tests:
-
-```sh
-docker compose run --rm api npm test
-```
-
-Production shape (no bind mount, no published port):
-
-```sh
-docker compose -f docker-compose.yml up --build
 ```

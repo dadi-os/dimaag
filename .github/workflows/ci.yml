@@ -3,8 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
 
 concurrency:
   group: dimaag-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -12,41 +11,39 @@ concurrency:
 
 jobs:
   ci:
-    name: CI
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: dimaag
+          POSTGRES_PASSWORD: dimaag
+          POSTGRES_DB: dimaag
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dimaag -d dimaag"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
       - name: Build dev image
-        run: docker compose -f docker-compose.yml -f docker-compose.override.yml build api
+        run: docker build --target dev -t dimaag-dev .
 
-      - name: Start postgres
-        run: docker compose -f docker-compose.yml up -d postgres
-
-      - name: Wait for postgres
+      - name: Migrate
         run: |
-          for i in $(seq 1 30); do
-            status=$(docker compose -f docker-compose.yml ps postgres --format json | jq -r '.Health // empty')
-            if [ "$status" = "healthy" ]; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "postgres did not become healthy in time"
-          docker compose -f docker-compose.yml logs postgres
-          exit 1
+          docker run --rm --network host \
+            -e DATABASE_URL=postgres://dimaag:dimaag@localhost:5432/dimaag \
+            -v "$PWD:/app" -v /app/node_modules \
+            dimaag-dev npm run db:migrate
 
-      - name: Run migrations
-        run: docker compose -f docker-compose.yml -f docker-compose.override.yml run --rm api npm run db:migrate
-
-      - name: Run tests
-        run: docker compose -f docker-compose.yml -f docker-compose.override.yml run --rm api npm test
+      - name: Test
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL=postgres://dimaag:dimaag@localhost:5432/dimaag \
+            -v "$PWD:/app" -v /app/node_modules \
+            dimaag-dev npm test
 
       - name: Build production image
-        run: docker compose -f docker-compose.yml build api
-
-      - name: Tear down
-        if: always()
-        run: docker compose -f docker-compose.yml down -v
+        run: docker build --target production -t dimaag-prod .

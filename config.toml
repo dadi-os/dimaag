@@ -6,3 +6,10 @@ lane_queue_timeout_ms = 30000
 timeout_ms = 330000
 retry_attempts = 3
 backoff_ms = [500, 1000, 2000]
+
+[yaad]
+# ingest triggers a reasoning call inside Yaad, which has its own 330s Dwar timeout.
+# This must exceed that or a slow-but-successful extraction gets killed by the caller.
+timeout_ms = 360000
+retry_attempts = 3
+backoff_ms = [500, 1000, 2000]

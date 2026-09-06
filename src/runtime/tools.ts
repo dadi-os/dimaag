@@ -1,40 +1,19 @@
-import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
 import { z, ZodError } from "zod";
-import type { Db } from "../db/client.js";
 import { writeAgentLog } from "../db/logs.js";
-import { agentTools, agents, tools } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
-import type { DwarTool, DwarToolUseBlock, Lane } from "../types/domain.js";
+import type { DwarTool, DwarToolUseBlock } from "../types/domain.js";
+import { DISPATCH_MESSAGE, SEND_MESSAGE, STEER_REASONING } from "../types/domain.js";
+import { findTool } from "../tools/registry.js";
 import {
-  DISPATCH_MESSAGE,
-  MODIFY_AGENT,
-  SEND_MESSAGE,
-  SPAWN_AGENT,
-  STEER_REASONING,
-} from "../types/domain.js";
-import type { LaneLocks } from "./locks.js";
-import type { SteerQueue } from "./steer.js";
-import type { IntentQueue } from "./intents.js";
-import type { TranscriptStore } from "./transcript.js";
+  fail,
+  ok,
+  requireAgent,
+  type ToolContext,
+  type ToolExecResult,
+} from "../tools/shared.js";
 
-export type ToolExecResult = {
-  content: string;
-  isError: boolean;
-  audit: Record<string, unknown>;
-};
-
-export type ToolContext = {
-  db: Db;
-  callerId: string;
-  lane: Lane;
-  steer: SteerQueue;
-  intents: IntentQueue;
-  locks: LaneLocks;
-  transcript: TranscriptStore;
-  enqueueConversation: (agentId: string) => void;
-  enqueueReasoning: (agentId: string) => void;
-};
+export type { ToolContext, ToolExecResult } from "../tools/shared.js";
+export { requireAgent } from "../tools/shared.js";
 
 export const sendMessageInputSchema: Record<string, unknown> = {
   type: "object",
@@ -69,33 +48,6 @@ export const steerReasoningInputSchema: Record<string, unknown> = {
     instruction: { type: "string", description: "What reasoning should do next" },
   },
   required: ["instruction"],
-};
-
-export const spawnAgentInputSchema: Record<string, unknown> = {
-  type: "object",
-  properties: {
-    name: { type: "string", description: "Unique agent name" },
-    system_prompt: {
-      type: "string",
-      description: "Prompt for both lanes. Omit to copy the caller's current prompt.",
-    },
-    tool_names: {
-      type: "array",
-      items: { type: "string" },
-      description: "Registry tool names to grant the child",
-    },
-  },
-  required: ["name", "tool_names"],
-};
-
-export const modifyAgentInputSchema: Record<string, unknown> = {
-  type: "object",
-  properties: {
-    agent_id: { type: "string", description: "Self or a direct child" },
-    system_prompt: { type: "string" },
-    active: { type: "boolean" },
-  },
-  required: ["agent_id"],
 };
 
 export const sendMessageTool: DwarTool = {
@@ -133,38 +85,21 @@ const steerInput = z.object({
   instruction: z.string().min(1),
 });
 
-const spawnInput = z.object({
-  name: z.string().min(1),
-  system_prompt: z.string().min(1).optional(),
-  tool_names: z.array(z.string().min(1)),
-});
-
-const modifyInput = z
-  .object({
-    agent_id: z.string().uuid(),
-    system_prompt: z.string().min(1).optional(),
-    active: z.boolean().optional(),
-  })
-  .refine((value) => value.system_prompt !== undefined || value.active !== undefined, {
-    message: "system_prompt or active is required",
-  });
-
 export async function executeTool(
   ctx: ToolContext,
   call: DwarToolUseBlock,
 ): Promise<ToolExecResult> {
   try {
     if (ctx.lane === "reasoning") {
-      switch (call.name) {
-        case SEND_MESSAGE:
-          return await runSendMessage(ctx, call.input);
-        case SPAWN_AGENT:
-          return await runSpawnAgent(ctx, call.input);
-        case MODIFY_AGENT:
-          return await runModifyAgent(ctx, call.input);
-        default:
-          return fail(`unknown reasoning tool: ${call.name}`);
+      if (call.name === SEND_MESSAGE) {
+        return await runSendMessage(ctx, call.input);
       }
+      const definition = findTool(call.name);
+      if (!definition) {
+        return fail(`unknown reasoning tool: ${call.name}`);
+      }
+      const parsed = definition.input.parse(call.input);
+      return await definition.handler(ctx, parsed);
     }
     switch (call.name) {
       case DISPATCH_MESSAGE:
@@ -183,14 +118,6 @@ export async function executeTool(
     }
     throw err;
   }
-}
-
-function fail(message: string): ToolExecResult {
-  return { content: message, isError: true, audit: {} };
-}
-
-function ok(value: unknown, audit: Record<string, unknown> = {}): ToolExecResult {
-  return { content: JSON.stringify(value), isError: false, audit };
 }
 
 async function runSendMessage(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {
@@ -242,6 +169,15 @@ async function runDispatchMessage(ctx: ToolContext, raw: unknown): Promise<ToolE
     });
     ctx.enqueueConversation(row.toAgentId);
   }
+  ctx.events.emit({
+    type: "message",
+    agent_id: row.toAgentId ?? ctx.callerId,
+    from_agent_id: ctx.callerId,
+    to_agent_id: row.toAgentId,
+    content: row.content,
+    seq: row.seq,
+    at: row.createdAt.toISOString(),
+  });
   return ok({ to_agent_id: row.toAgentId, content: row.content, seq: row.seq });
 }
 
@@ -252,110 +188,4 @@ async function runSteerReasoning(ctx: ToolContext, raw: unknown): Promise<ToolEx
     ctx.enqueueReasoning(ctx.callerId);
   }
   return ok({ queued: true });
-}
-
-async function runSpawnAgent(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {
-  const input = spawnInput.parse(raw);
-  const caller = await requireAgent(ctx.db, ctx.callerId);
-  const systemPrompt = input.system_prompt ?? caller.systemPrompt;
-  const toolRows =
-    input.tool_names.length === 0
-      ? []
-      : await ctx.db.select().from(tools).where(inArray(tools.name, input.tool_names));
-  if (toolRows.length !== input.tool_names.length) {
-    const found = new Set(toolRows.map((row) => row.name));
-    const missing = input.tool_names.filter((name) => !found.has(name));
-    return fail(`unknown tools: ${missing.join(", ")}`);
-  }
-
-  const id = randomUUID();
-  const now = new Date();
-  try {
-    await ctx.db.insert(agents).values({
-      id,
-      name: input.name,
-      systemPrompt,
-      parentAgentId: ctx.callerId,
-      active: true,
-      createdAt: now,
-      updatedAt: now,
-    });
-  } catch (err) {
-    if (isUniqueViolation(err)) {
-      return fail(`agent name already exists: ${input.name}`);
-    }
-    throw err;
-  }
-
-  if (toolRows.length > 0) {
-    await ctx.db.insert(agentTools).values(
-      toolRows.map((tool) => ({
-        agentId: id,
-        toolId: tool.id,
-        usage: "Granted at spawn.",
-      })),
-    );
-  }
-
-  return ok({ agent_id: id, name: input.name });
-}
-
-async function runModifyAgent(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {
-  const input = modifyInput.parse(raw);
-  const target = await requireAgent(ctx.db, input.agent_id);
-  if (target.id !== ctx.callerId && target.parentAgentId !== ctx.callerId) {
-    return fail("modify_agent is limited to self or direct children");
-  }
-
-  const oldPrompt = target.systemPrompt;
-  const newPrompt = input.system_prompt ?? oldPrompt;
-  const active = input.active ?? target.active;
-  const now = new Date();
-  await ctx.db
-    .update(agents)
-    .set({
-      systemPrompt: newPrompt,
-      active,
-      updatedAt: now,
-    })
-    .where(eq(agents.id, target.id));
-
-  return ok(
-    {
-      agent_id: target.id,
-      old_system_prompt: oldPrompt,
-      new_system_prompt: newPrompt,
-      active,
-    },
-    { old_system_prompt: oldPrompt, new_system_prompt: newPrompt },
-  );
-}
-
-export async function requireAgent(db: Db, id: string) {
-  const rows = await db.select().from(agents).where(eq(agents.id, id));
-  const row = rows[0];
-  if (!row) {
-    throw new DimaagError(404, "not_found", `agent ${id} not found`);
-  }
-  return row;
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  let current: unknown = err;
-  for (let i = 0; i < 4; i++) {
-    if (
-      typeof current === "object" &&
-      current !== null &&
-      "code" in current &&
-      (current as { code: unknown }).code === "23505"
-    ) {
-      return true;
-    }
-    if (typeof current === "object" && current !== null && "cause" in current) {
-      current = (current as { cause: unknown }).cause;
-      continue;
-    }
-    break;
-  }
-  return false;
 }

@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { Config } from "./config.js";
 import type { Db, Sql } from "./db/client.js";
 import type { DwarClient } from "./dwar/client.js";
+import type { YaadClient } from "./yaad/client.js";
 import { DimaagError } from "./errors.js";
 import { createRuntime, type Runtime } from "./runtime/engine.js";
 import { registerV1 } from "./routers/index.js";
@@ -12,25 +13,30 @@ declare module "fastify" {
     db: Db;
     sql: Sql;
     dwar: DwarClient;
+    yaad: YaadClient;
     runtime: Runtime;
   }
 }
 
 export async function buildApp(
   config: Config,
-  deps: { db: Db; sql: Sql; dwar: DwarClient; runtime?: Runtime },
+  deps: { db: Db; sql: Sql; dwar: DwarClient; yaad: YaadClient; runtime?: Runtime },
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: { level: config.env.logLevel } });
-  const runtime = deps.runtime ?? createRuntime({
-    db: deps.db,
-    dwar: deps.dwar,
-    config,
-    log: app.log,
-  });
+  const runtime =
+    deps.runtime ??
+    createRuntime({
+      db: deps.db,
+      dwar: deps.dwar,
+      yaad: deps.yaad,
+      config,
+      log: app.log,
+    });
   app.decorate("config", config);
   app.decorate("db", deps.db);
   app.decorate("sql", deps.sql);
   app.decorate("dwar", deps.dwar);
+  app.decorate("yaad", deps.yaad);
   app.decorate("runtime", runtime);
 
   app.setErrorHandler((err, request, reply) => {

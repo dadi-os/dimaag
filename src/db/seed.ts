@@ -1,13 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Config } from "../config.js";
-import { ROOT_DADI_ID, SPAWN_AGENT, MODIFY_AGENT } from "../types/domain.js";
+import { ROOT_DADI_ID } from "../types/domain.js";
+import { toolId } from "../tools/sync.js";
 import type { Db } from "./client.js";
-import { agentTools, agents, tools } from "./schema.js";
-import { spawnAgentInputSchema, modifyAgentInputSchema } from "../runtime/tools.js";
-
-const SPAWN_AGENT_ID = "00000000-0000-4000-8000-000000000010";
-const MODIFY_AGENT_ID = "00000000-0000-4000-8000-000000000011";
+import { agentTools, agents } from "./schema.js";
 
 /**
  * Idempotent root-Dadi insert. After this runs, Dadi is an ordinary row.
@@ -26,50 +23,56 @@ export async function seedRootDadi(db: Db, serviceRoot: string): Promise<void> {
     .onConflictDoNothing({ target: agents.id });
 }
 
-/**
- * Platform registry tools for this pass. Prompt 2 replaces this whole function.
- */
-export async function seedPlatformTools(db: Db): Promise<void> {
-  await db
-    .insert(tools)
-    .values([
-      {
-        id: SPAWN_AGENT_ID,
-        name: SPAWN_AGENT,
-        description:
-          "Create a child agent. The new agent has the caller as its parent. Omit system_prompt to copy the caller's current prompt.",
-        inputSchema: spawnAgentInputSchema,
-      },
-      {
-        id: MODIFY_AGENT_ID,
-        name: MODIFY_AGENT,
-        description:
-          "Change an agent's system prompt or active flag. Only the caller or its direct children are allowed. Enforced in code.",
-        inputSchema: modifyAgentInputSchema,
-      },
-    ])
-    .onConflictDoNothing({ target: tools.id });
-
-  await db
-    .insert(agentTools)
-    .values([
-      {
-        agentId: ROOT_DADI_ID,
-        toolId: SPAWN_AGENT_ID,
-        usage:
-          "Spawn a domain agent or a worker when a job needs its own prompt and tools. Name it plainly. Give it a narrower prompt than yours.",
-      },
-      {
-        agentId: ROOT_DADI_ID,
-        toolId: MODIFY_AGENT_ID,
-        usage:
-          "Update your own prompt or a direct child's. Set active to false to stop a child you spawned. You cannot reach their children.",
-      },
-    ])
-    .onConflictDoNothing({ target: [agentTools.agentId, agentTools.toolId] });
-}
+const DADI_GRANTS: Array<{ tool: string; usage: string }> = [
+  {
+    tool: "spawn_agent",
+    usage:
+      "Spawn a child when a request needs its own prompt and its own tools. Give it a narrower prompt than yours and grant it only what the job needs.",
+  },
+  {
+    tool: "modify_agent",
+    usage:
+      "Update your own prompt or a direct child's. Set active to false to stop a child you spawned.",
+  },
+  {
+    tool: "grant_tool",
+    usage: "Give a child you spawned the tools its job requires, right after spawning it.",
+  },
+  {
+    tool: "revoke_tool",
+    usage: "Take a tool back from a child when it no longer needs it.",
+  },
+  {
+    tool: "recall",
+    usage:
+      "Before answering anything about Ankur, people he knows, or things that have happened, check memory. If sufficient comes back false, say what you don't know rather than guessing.",
+  },
+  {
+    tool: "query",
+    usage: "For dates, schedules, and exact names. 'What do I have Thursday' is a query, not a recall.",
+  },
+  {
+    tool: "get_node",
+    usage:
+      "When recall or query gives you a node that matters and you need its edges — who was there, where it was.",
+  },
+  {
+    tool: "ingest",
+    usage:
+      "When Ankur tells you something worth keeping, store it. Prefer storing too much over too little; Yaad decides what is worth a node and expires what is momentary.",
+  },
+];
 
 export async function seed(db: Db, config: Config): Promise<void> {
   await seedRootDadi(db, config.serviceRoot);
-  await seedPlatformTools(db);
+  await db
+    .insert(agentTools)
+    .values(
+      DADI_GRANTS.map((grant) => ({
+        agentId: ROOT_DADI_ID,
+        toolId: toolId(grant.tool),
+        usage: grant.usage,
+      })),
+    )
+    .onConflictDoNothing({ target: [agentTools.agentId, agentTools.toolId] });
 }
