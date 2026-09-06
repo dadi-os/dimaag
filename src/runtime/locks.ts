@@ -29,6 +29,12 @@ export class LaneLocks {
     return Boolean(state && (state.held || state.waiters.length > 0));
   }
 
+  /** Currently held by a run. A waiter with no holder is not running. */
+  isHeld(agentId: string, lane: Lane): boolean {
+    const state = this.states.get(this.key(agentId, lane));
+    return Boolean(state?.held);
+  }
+
   acquire(agentId: string, lane: Lane, timeoutMs: number): Promise<() => void> {
     const key = this.key(agentId, lane);
     let state = this.states.get(key);

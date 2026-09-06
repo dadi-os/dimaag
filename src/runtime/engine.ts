@@ -8,6 +8,7 @@ import type { YaadClient } from "../yaad/client.js";
 import type { DwarChatResponse, DwarMessage, DwarToolUseBlock, Lane } from "../types/domain.js";
 import { assembleContext } from "./context.js";
 import { runConversationLoop } from "./conversation.js";
+import { EventBus } from "./events.js";
 import { IntentQueue } from "./intents.js";
 import { LaneLocks } from "./locks.js";
 import { runReasoningLoop } from "./reasoning.js";
@@ -26,6 +27,7 @@ export type Runtime = {
   steer: SteerQueue;
   intents: IntentQueue;
   transcript: TranscriptStore;
+  events: EventBus;
   enqueueConversation: (agentId: string) => void;
   enqueueReasoning: (agentId: string) => void;
   waitUntilIdle: () => Promise<void>;
@@ -43,6 +45,7 @@ export function createRuntime(opts: {
   const steer = new SteerQueue();
   const intents = new IntentQueue();
   const transcript = new TranscriptStore();
+  const events = new EventBus();
   const reasoningScratchpads = new Map<string, DwarMessage[]>();
   const conversationScratchpads = new Map<string, DwarMessage[]>();
   let pending = 0;
@@ -84,6 +87,7 @@ export function createRuntime(opts: {
     steer,
     intents,
     transcript,
+    events,
     enqueueConversation,
     enqueueReasoning,
     waitUntilIdle,
@@ -100,6 +104,7 @@ export function createRuntime(opts: {
       intents,
       locks,
       transcript,
+      events,
       enqueueConversation,
       enqueueReasoning,
     };
@@ -117,15 +122,30 @@ export function createRuntime(opts: {
     let release: (() => void) | undefined;
     try {
       release = await locks.acquire(agentId, lane, opts.config.runtime.lane_queue_timeout_ms);
-      const rows = await opts.db.select().from(agents).where(eq(agents.id, agentId));
-      const agent = rows[0];
-      if (!agent || !agent.active) {
-        return;
-      }
-      if (lane === "reasoning") {
-        await runReasoningLoop(reasoningDeps(agentId));
-      } else {
-        await runConversationLoop(conversationDeps(agentId));
+      events.emit({
+        type: "lane_started",
+        agent_id: agentId,
+        lane,
+        at: new Date().toISOString(),
+      });
+      try {
+        const rows = await opts.db.select().from(agents).where(eq(agents.id, agentId));
+        const agent = rows[0];
+        if (!agent || !agent.active) {
+          return;
+        }
+        if (lane === "reasoning") {
+          await runReasoningLoop(reasoningDeps(agentId));
+        } else {
+          await runConversationLoop(conversationDeps(agentId));
+        }
+      } finally {
+        events.emit({
+          type: "lane_finished",
+          agent_id: agentId,
+          lane,
+          at: new Date().toISOString(),
+        });
       }
     } catch (err) {
       opts.log.error({ err, agentId, lane }, `${lane} lane failed`);

@@ -3,6 +3,7 @@ import type { Db } from "../db/client.js";
 import { agents } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
 import type { Lane } from "../types/domain.js";
+import type { EventBus } from "../runtime/events.js";
 import type { LaneLocks } from "../runtime/locks.js";
 import type { SteerQueue } from "../runtime/steer.js";
 import type { IntentQueue } from "../runtime/intents.js";
@@ -24,6 +25,7 @@ export type ToolContext = {
   intents: IntentQueue;
   locks: LaneLocks;
   transcript: TranscriptStore;
+  events: EventBus;
   enqueueConversation: (agentId: string) => void;
   enqueueReasoning: (agentId: string) => void;
 };

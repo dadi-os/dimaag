@@ -21,7 +21,7 @@ function parseLogEvent(value: string): LogEvent {
   throw new DimaagError(500, "internal", `invalid log event in database: ${value}`);
 }
 
-export function toAgentRecord(row: AgentRow): AgentRecord {
+export function toAgentRecord(row: AgentRow): Omit<AgentRecord, "running"> {
   return {
     id: row.id,
     name: row.name,

@@ -8,6 +8,8 @@ export type AgentRecord = {
   system_prompt: string;
   parent_agent_id: string | null;
   active: boolean;
+  /** In-memory lane lock ownership. Always false right after a process restart. */
+  running: { reasoning: boolean; conversation: boolean };
   created_at: string;
   updated_at: string;
 };

@@ -47,6 +47,13 @@ export const modifyAgent = defineTool({
       })
       .where(eq(agents.id, target.id));
 
+    ctx.events.emit({
+      type: "agent_modified",
+      agent_id: target.id,
+      active,
+      at: now.toISOString(),
+    });
+
     return ok(
       {
         agent_id: target.id,

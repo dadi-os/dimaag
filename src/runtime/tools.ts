@@ -169,6 +169,15 @@ async function runDispatchMessage(ctx: ToolContext, raw: unknown): Promise<ToolE
     });
     ctx.enqueueConversation(row.toAgentId);
   }
+  ctx.events.emit({
+    type: "message",
+    agent_id: row.toAgentId ?? ctx.callerId,
+    from_agent_id: ctx.callerId,
+    to_agent_id: row.toAgentId,
+    content: row.content,
+    seq: row.seq,
+    at: row.createdAt.toISOString(),
+  });
   return ok({ to_agent_id: row.toAgentId, content: row.content, seq: row.seq });
 }
 

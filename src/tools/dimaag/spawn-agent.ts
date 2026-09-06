@@ -43,6 +43,13 @@ export const spawnAgent = defineTool({
       }
       throw err;
     }
+    ctx.events.emit({
+      type: "agent_spawned",
+      agent_id: id,
+      parent_agent_id: ctx.callerId,
+      name: parsed.name,
+      at: new Date().toISOString(),
+    });
     return ok({ agent_id: id, name: parsed.name });
   },
 });

@@ -25,6 +25,15 @@ export async function registerMessages(app: FastifyInstance): Promise<void> {
         seq: row.seq,
       },
     });
+    app.runtime.events.emit({
+      type: "message",
+      agent_id: body.to_agent_id,
+      from_agent_id: null,
+      to_agent_id: row.toAgentId,
+      content: row.content,
+      seq: row.seq,
+      at: row.createdAt.toISOString(),
+    });
     app.runtime.enqueueConversation(body.to_agent_id);
     return reply.status(201).send({
       to_agent_id: row.toAgentId,

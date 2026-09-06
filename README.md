@@ -55,13 +55,15 @@ Root Dadi is seeded with all four. `occurred_at` on ingest is stamped by Dimaag 
 
 ## Persistence
 
-`agents` and `agent_logs` survive a process restart. Everything about a live conversation does not: the transcript (`TranscriptStore`), both lanes' scratchpads, lane locks, the steer queue, and the intent queue. They die with the process, same as each other.
+`agents` and `agent_logs` survive a process restart. Everything about a live conversation does not: the transcript (`TranscriptStore`), both lanes' scratchpads, lane locks, the steer queue, the intent queue, and the event stream. Event subscribers are dropped on restart and no events are replayed. They die with the process, same as each other.
 
-Each agent has two independent in-memory locks, one per lane. A request for a busy lane waits in a small queue and runs when the lock is released, or fails when `runtime.lane_queue_timeout_ms` elapses.
+Each agent has two independent in-memory locks, one per lane. A request for a busy lane waits in a small queue and runs when the lock is released, or fails when `runtime.lane_queue_timeout_ms` elapses. `GET /agents` exposes that lock ownership as `running` — it is always false immediately after a restart, regardless of what was happening before.
 
-This only works with a single Dimaag process. Do not run replicas that share the database and expect lanes to serialize.
+This only works with a single Dimaag process. Do not run replicas that share the database and expect lanes to serialize. The in-memory event bus makes the same assumption: no pub/sub, no cross-instance fanout.
 
 There is no `current_status` column. Conversation learns what reasoning is doing by steering it.
+
+`agent_logs` has no severity concept — only `thought` / `tool_call` / `tool_result` / `message`. A failed tool call is a `tool_result` whose payload has `is_error: true`. Clients that want an error count must filter on that field.
 
 ## Routes
 
@@ -69,11 +71,15 @@ There is no `current_status` column. Conversation learns what reasoning is doing
 | --- | --- | --- |
 | `GET` | `/health` | `{ "status": "ok" }` |
 | `POST` | `/messages` | `{ to_agent_id, content }` from the user (`from_agent_id` is null). Appends to the in-process transcript, starts the target's conversation lane, returns immediately. |
-| `GET` | `/agents` | All agents |
-| `GET` | `/agents/:id` | Agent plus direct children |
-| `GET` | `/agents/:id/logs` | `?event&limit` audit trail. Not used for context assembly. Message history is `?event=message`. |
+| `GET` | `/events` | Server-sent events for live `message`, `lane_started` / `lane_finished`, `agent_spawned`, and `agent_modified`. No replay; reconnect and re-fetch `GET /agents`. |
+| `GET` | `/agents` | All agents, including `running` (in-memory lane lock ownership). |
+| `GET` | `/agents/:id` | Agent plus direct children (each with `running`) and granted tools (`name`, `description`, `usage`). Embedded lane tools are not listed. |
+| `GET` | `/agents/:id/logs` | `?event&limit` audit trail for one agent. Not used for context assembly. Message history is `?event=message`. |
+| `GET` | `/logs` | Cross-agent audit trail. Same `?event&limit` as the per-agent route; `limit` capped at 200. |
 
 Unknown request fields are a 422.
+
+Dimaag sends no CORS headers. Clients should make requests outside the browser sandbox (Tauri's HTTP plugin does this). Dimaag is unauthenticated; opening it to browser origins is not appropriate.
 
 ## Config vs env
 
