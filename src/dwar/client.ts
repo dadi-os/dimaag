@@ -62,8 +62,8 @@ export function createDwarClient(config: Config): DwarClient {
   }
 
   return {
-    reason: (request) => postChat("/v1/chat/reasoning", request),
-    converse: (request) => postChat("/v1/chat/conversation", request),
+    reason: (request) => postChat("/chat/reasoning", request),
+    converse: (request) => postChat("/chat/conversation", request),
   };
 }
 

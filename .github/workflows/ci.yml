@@ -3,8 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
 
 concurrency:
   group: dimaag-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -12,7 +11,6 @@ concurrency:
 
 jobs:
   ci:
-    name: CI
     runs-on: ubuntu-latest
 
     services:
@@ -22,34 +20,28 @@ jobs:
           POSTGRES_USER: dimaag
           POSTGRES_PASSWORD: dimaag
           POSTGRES_DB: dimaag
-        ports:
-          - 5432:5432
+        ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U dimaag -d dimaag"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+          --health-interval 5s --health-timeout 5s --health-retries 10
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
       - name: Build dev image
         run: docker build --target dev -t dimaag-dev .
 
-      - name: Run migrations
+      - name: Migrate
         run: |
           docker run --rm --network host \
             -e DATABASE_URL=postgres://dimaag:dimaag@localhost:5432/dimaag \
-            -e LOG_LEVEL=silent \
             -v "$PWD:/app" -v /app/node_modules \
             dimaag-dev npm run db:migrate
 
-      - name: Run tests
+      - name: Test
         run: |
           docker run --rm --network host \
             -e DATABASE_URL=postgres://dimaag:dimaag@localhost:5432/dimaag \
-            -e LOG_LEVEL=silent \
             -v "$PWD:/app" -v /app/node_modules \
             dimaag-dev npm test
 

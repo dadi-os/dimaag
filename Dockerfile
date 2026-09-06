@@ -15,7 +15,7 @@ FROM deps AS dev
 COPY tsconfig.json drizzle.config.ts config.toml ./
 COPY prompts ./prompts
 COPY drizzle ./drizzle
-# src/ and test/ arrive via the bind mount in docker-compose.override.yml.
+# src/ and test/ arrive via Nas's bind mount, not COPY.
 EXPOSE 8080
 CMD ["npm", "run", "dev"]
 
