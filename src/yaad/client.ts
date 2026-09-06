@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance } from "axios";
 import { z } from "zod";
 import type { Config } from "../config.js";
+import { YAAD_BASE_URL } from "../constants.js";
 import { DimaagError } from "../errors.js";
 
 const nodeKind = z.enum(["person", "memory", "plan", "place"]);
@@ -94,7 +95,7 @@ export type YaadClient = {
 
 export function createYaadClient(config: Config): YaadClient {
   const http: AxiosInstance = axios.create({
-    baseURL: config.env.yaadBaseUrl,
+    baseURL: YAAD_BASE_URL,
     timeout: config.yaad.timeout_ms,
     headers: { "content-type": "application/json" },
   });

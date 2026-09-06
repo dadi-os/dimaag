@@ -1,4 +1,5 @@
 import { loadConfig } from "./config.js";
+import { HOST, PORT } from "./constants.js";
 import { buildApp } from "./app.js";
 import { createDb } from "./db/client.js";
 import { migrate } from "./db/migrate.js";
@@ -27,4 +28,4 @@ process.on("SIGTERM", () => {
   void shutdown().then(() => process.exit(0));
 });
 
-await app.listen({ host: config.env.host, port: config.env.port });
+await app.listen({ host: HOST, port: PORT });

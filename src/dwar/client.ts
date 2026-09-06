@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance } from "axios";
 import { z } from "zod";
 import type { Config } from "../config.js";
+import { DWAR_BASE_URL } from "../constants.js";
 import { DimaagError } from "../errors.js";
 import type { DwarChatRequest, DwarChatResponse } from "../types/domain.js";
 
@@ -30,7 +31,7 @@ export type DwarClient = {
 
 export function createDwarClient(config: Config): DwarClient {
   const http: AxiosInstance = axios.create({
-    baseURL: config.env.dwarBaseUrl,
+    baseURL: DWAR_BASE_URL,
     timeout: config.dwar.timeout_ms,
     headers: { "content-type": "application/json" },
   });

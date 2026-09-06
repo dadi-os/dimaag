@@ -42,7 +42,7 @@ Agents see tools via `agent_tools` grants. `grant_tool` and `revoke_tool` are pa
 
 ### Yaad (memory)
 
-Dimaag reaches Yaad over HTTP as one more external service — the same relationship it has with Dwar. It holds `YAAD_BASE_URL` and knows nothing about Yaad's schema. Four tools:
+Dimaag reaches Yaad over HTTP as one more external service — the same relationship it has with Dwar. It calls `http://yaad.dadi` and knows nothing about Yaad's schema. Four tools:
 
 | tool | Yaad route | when to use |
 | --- | --- | --- |
@@ -83,51 +83,34 @@ Dimaag sends no CORS headers. Clients should make requests outside the browser s
 
 ## Config vs env
 
-`config.toml` is checked in. Lane queue timeout, Dwar timeout/retry, Yaad timeout/retry.
+`config.toml` is checked in — lane queue timeout, Dwar timeout/retry, Yaad timeout/retry.
 
-Everything else — database address, Dwar address, Yaad address, host/port, log level — is set directly in `docker-compose.yml`. There is no `.env` file.
+Topology is hardcoded in `src/constants.ts`. Dwar is at `http://dwar.dadi` and Yaad at `http://yaad.dadi`, resolved by Nas's reverse proxy in both dev and prod. There is no `.env` file.
 
-```
-DATABASE_URL
-DWAR_BASE_URL
-YAAD_BASE_URL
-HOST
-PORT
-LOG_LEVEL
-```
+`DATABASE_URL` and `LOG_LEVEL` come from the orchestrator — the compose file in dev, the quadlet in prod.
 
-## Run
+## Development
 
-Everything runs through Compose.
+Dimaag runs as part of the dadiOS stack. Bring it up through Nas:
 
 ```sh
-docker compose up --build
+cd ../nas
+docker compose up dimaag dimaag-postgres
+docker compose run --rm dimaag npm run db:migrate
 ```
 
-Builds the `dev` target (devDependencies, source bind-mounted, `tsx watch`), publishes on `http://localhost:8091`. `GET http://localhost:8091/health` should return `{"status":"ok"}`.
+Source is bind-mounted, so edits here restart the service in place. Start the rest of the stack (`docker compose up`) when Dimaag needs Dwar or Yaad.
 
-Dwar needs to be reachable at `http://host.docker.internal:8080`, and Yaad at `http://host.docker.internal:8090` — run them on your host per their own READMEs, or point `DWAR_BASE_URL` / `YAAD_BASE_URL` in `docker-compose.yml` elsewhere.
+Migrations also seed root Dadi and sync the tool registry (`src/db/migrate.ts` / `src/db/seed.ts`).
+
+Tests run the same way:
+
+```sh
+docker compose run --rm dimaag npm test
+```
 
 ```sh
 curl -s http://localhost:8091/messages \
   -H 'content-type: application/json' \
   -d '{"to_agent_id":"00000000-0000-4000-8000-000000000001","content":"hello"}'
-```
-
-Migrations (schema, then sync the tool registry into `tools`, then seed root Dadi and its grants — see `src/db/migrate.ts` / `src/db/seed.ts`):
-
-```sh
-docker compose run --rm api npm run db:migrate
-```
-
-Tests:
-
-```sh
-docker compose run --rm api npm test
-```
-
-Production shape (no bind mount, no published port):
-
-```sh
-docker compose -f docker-compose.yml up --build
 ```
