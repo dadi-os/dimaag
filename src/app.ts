@@ -22,7 +22,18 @@ export async function buildApp(
   config: Config,
   deps: { db: Db; sql: Sql; dwar: DwarClient; yaad: YaadClient; runtime?: Runtime },
 ): Promise<FastifyInstance> {
-  const app = Fastify({ logger: { level: config.env.logLevel } });
+  const app = Fastify({
+    logger: {
+      level: config.env.logLevel,
+      base: { service: "dimaag" },
+      timestamp: () => `,"time":"${new Date().toISOString()}"`,
+      formatters: {
+        level(label) {
+          return { level: label };
+        },
+      },
+    },
+  });
   const runtime =
     deps.runtime ??
     createRuntime({

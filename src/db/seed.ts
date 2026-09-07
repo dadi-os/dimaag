@@ -8,7 +8,8 @@ import { agentTools, agents } from "./schema.js";
 
 /**
  * Idempotent root-Dadi upsert. Prompt tracks prompts/dadi.md on every migrate
- * so routing instructions (route_message) stay current; other columns are left alone.
+ * and every process boot (index calls migrate), so editing the file + tsx restart
+ * keeps routing instructions current; other columns are left alone.
  */
 export async function seedRootDadi(db: Db, serviceRoot: string): Promise<void> {
   const systemPrompt = readFileSync(join(serviceRoot, "prompts/dadi.md"), "utf8");
