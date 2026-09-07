@@ -81,7 +81,7 @@ export class TranscriptStore {
     const candidates = this.unroutedUserMessages(routerAgentId);
     for (let i = candidates.length - 1; i >= 0; i -= 1) {
       const row = candidates[i];
-      if (row.content !== content) continue;
+      if (!row || row.content !== content) continue;
       let map = this.routedUserSeqs.get(routerAgentId);
       if (!map) {
         map = new Map();
