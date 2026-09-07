@@ -32,7 +32,7 @@ const DADI_GRANTS: Array<{ tool: string; usage: string }> = [
   {
     tool: "spawn_agent",
     usage:
-      "Spawn a child when a request needs its own prompt and its own tools. Give it a narrower prompt than yours and grant it only what the job needs.",
+      "When no existing child owns this exact user problem, spawn a thread with a narrow job prompt. Do not do the user's work yourself — spawn, grant, and hand the UUID back.",
   },
   {
     tool: "modify_agent",
@@ -41,7 +41,8 @@ const DADI_GRANTS: Array<{ tool: string; usage: string }> = [
   },
   {
     tool: "grant_tool",
-    usage: "Give a child you spawned the tools its job requires, right after spawning it.",
+    usage:
+      "Right after spawning (or when reusing a child that lacks them), grant only the tools that thread needs for the job — e.g. ingest/recall for memory facts.",
   },
   {
     tool: "revoke_tool",
@@ -50,34 +51,38 @@ const DADI_GRANTS: Array<{ tool: string; usage: string }> = [
   {
     tool: "recall",
     usage:
-      "Before answering anything about Ankur, people he knows, or things that have happened, check memory. If sufficient comes back false, say what you don't know rather than guessing.",
+      "For thread agents that need memory. Root reasoning should not use this to answer the user — grant it to the thread instead.",
   },
   {
     tool: "query",
-    usage: "For dates, schedules, and exact names. 'What do I have Thursday' is a query, not a recall.",
+    usage:
+      "For thread agents that need exact lookups. Root reasoning should not use this to answer the user — grant it to the thread instead.",
   },
   {
     tool: "get_node",
     usage:
-      "When recall or query gives you a node that matters and you need its edges — who was there, where it was.",
+      "For thread agents that need node edges. Root reasoning should not use this to answer the user — grant it to the thread instead.",
   },
   {
     tool: "ingest",
     usage:
-      "When Ankur tells you something worth keeping, store it. Prefer storing too much over too little; Yaad decides what is worth a node and expires what is momentary.",
+      "For thread agents that store facts. Root reasoning must not ingest on the user's behalf — spawn/grant a memory-capable thread and route the message there.",
   },
 ];
 
 export async function seed(db: Db, config: Config): Promise<void> {
   await seedRootDadi(db, config.serviceRoot);
-  await db
-    .insert(agentTools)
-    .values(
-      DADI_GRANTS.map((grant) => ({
+  for (const grant of DADI_GRANTS) {
+    await db
+      .insert(agentTools)
+      .values({
         agentId: ROOT_DADI_ID,
         toolId: toolId(grant.tool),
         usage: grant.usage,
-      })),
-    )
-    .onConflictDoNothing({ target: [agentTools.agentId, agentTools.toolId] });
+      })
+      .onConflictDoUpdate({
+        target: [agentTools.agentId, agentTools.toolId],
+        set: { usage: grant.usage },
+      });
+  }
 }

@@ -253,7 +253,17 @@ async function runRouteMessage(ctx: ToolContext, raw: unknown): Promise<ToolExec
     input.to_agent_id,
     input.content,
   );
-  return ok({ to_agent_id: row.toAgentId, content: row.content, seq: row.seq });
+  const routedSeq = ctx.transcript.markUserMessageRouted(
+    ctx.callerId,
+    input.content,
+    input.to_agent_id,
+  );
+  return ok({
+    to_agent_id: row.toAgentId,
+    content: row.content,
+    seq: row.seq,
+    routed_source_seq: routedSeq,
+  });
 }
 
 async function runSteerReasoning(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {

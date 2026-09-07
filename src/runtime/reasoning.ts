@@ -20,7 +20,8 @@ export type ReasoningLoopDeps = {
  * Reasoning-lane scratchpad loop. Dwar forces tool use; text may accompany tools as
  * internal working output. The only clean exit is the embedded yield tool. A bare
  * response with no tools is a degraded exit; pending steers still continue the loop.
- * The scratchpad persists across invocations for this agent until process restart.
+ * Scratchpad holds mid-turn tool results only — cleared when the turn ends so
+ * prior yields cannot few-shot the next wake.
  */
 export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
   const scratchpad = deps.scratchpad;
@@ -48,6 +49,7 @@ export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
       if (deps.steer.hasItems(deps.agentId)) {
         continue;
       }
+      scratchpad.length = 0;
       return;
     }
 
@@ -70,6 +72,7 @@ export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
     }
     scratchpad.push({ role: "user", content: results });
     if (yielded) {
+      scratchpad.length = 0;
       return;
     }
   }

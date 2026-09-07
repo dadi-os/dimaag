@@ -19,6 +19,10 @@ export class IntentQueue {
     this.items.delete(agentId);
     return list;
   }
+
+  hasItems(agentId: string): boolean {
+    return (this.items.get(agentId) ?? []).length > 0;
+  }
 }
 
 export function formatIntentTurn(intents: DispatchIntent[]): string {

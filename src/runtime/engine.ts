@@ -111,6 +111,10 @@ export function createRuntime(opts: {
   }
 
   function enqueueConversation(agentId: string): void {
+    // Coalesce: send_message + reasoning-finally both wake conversation; one run is enough.
+    if (locks.isBusy(agentId, "conversation")) {
+      return;
+    }
     track(runLane(agentId, "conversation"));
   }
 
@@ -137,6 +141,14 @@ export function createRuntime(opts: {
         if (lane === "reasoning") {
           await runReasoningLoop(reasoningDeps(agentId));
         } else {
+          // Root router: extra wakes after route_message must not re-LLM the same user text.
+          if (
+            agent.parentAgentId === null &&
+            !intents.hasItems(agentId) &&
+            transcript.unroutedUserMessages(agentId).length === 0
+          ) {
+            return;
+          }
           await runConversationLoop(conversationDeps(agentId));
         }
       } finally {

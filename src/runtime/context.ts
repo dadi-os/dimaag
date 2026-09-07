@@ -21,7 +21,7 @@ import type { TranscriptStore } from "./transcript.js";
 
 /**
  * One assembler for both lanes. The transcript is identical; only the tool set differs.
- * Backed entirely by in-process state now — no DB round-trip per call.
+ * Active direct children are appended to the system prompt so a router can reuse threads.
  */
 export async function assembleContext(opts: {
   db: Db;
@@ -35,6 +35,44 @@ export async function assembleContext(opts: {
     throw new DimaagError(404, "not_found", `agent ${opts.agentId} not found`);
   }
 
+  const childRows = await opts.db
+    .select({
+      id: agents.id,
+      name: agents.name,
+      active: agents.active,
+      systemPrompt: agents.systemPrompt,
+    })
+    .from(agents)
+    .where(eq(agents.parentAgentId, opts.agentId));
+  const activeChildren = childRows.filter((c) => c.active);
+
+  let system = agent.systemPrompt;
+  if (activeChildren.length > 0) {
+    const lines = activeChildren.map((c) => {
+      const purpose = c.systemPrompt.trim().split(/\n/)[0] ?? "";
+      const brief =
+        purpose.length > 120 ? `${purpose.slice(0, 117)}…` : purpose;
+      return brief
+        ? `- ${c.name} (${c.id}): ${brief}`
+        : `- ${c.name} (${c.id})`;
+    });
+    system = `${system}\n\nYour active direct child threads:\n${lines.join("\n")}`;
+  } else if (agent.parentAgentId === null) {
+    system = `${system}\n\nYou have no active child threads yet. Spawn one when a user message needs work.`;
+  }
+
+  if (agent.parentAgentId === null) {
+    const routed = opts.transcript.routedUserMessages(opts.agentId);
+    if (routed.length > 0) {
+      const lines = routed.map((r) => {
+        const preview =
+          r.content.length > 80 ? `${r.content.slice(0, 77)}…` : r.content;
+        return `- seq ${r.seq} → ${r.toAgentId}: ${preview}`;
+      });
+      system = `${system}\n\nAlready routed to a thread (do not route_message or re-steer these again):\n${lines.join("\n")}`;
+    }
+  }
+
   const entries = opts.transcript.transcriptFor(opts.agentId);
   const dwarMessages: DwarMessage[] = entries.map((row) => ({
     role: row.toAgentId === opts.agentId ? "user" : "assistant",
@@ -42,7 +80,7 @@ export async function assembleContext(opts: {
   }));
 
   return {
-    system: agent.systemPrompt,
+    system,
     messages: dwarMessages,
     tools: await toolsForLane(opts.db, opts.agentId, opts.lane, agent.parentAgentId === null),
   };

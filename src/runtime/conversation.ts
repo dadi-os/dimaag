@@ -20,7 +20,8 @@ export type ConversationLoopDeps = {
  * Conversation-lane tool loop. Dwar forces tool use; text may accompany tools as
  * narration. The only clean exit is the embedded yield tool. A bare response with
  * no tools is treated as a degraded exit (provider failure), not the happy path.
- * The scratchpad persists across invocations for this agent until process restart.
+ * Scratchpad holds mid-turn tool results only — cleared when the turn ends so
+ * prior yields cannot few-shot the next wake.
  */
 export async function runConversationLoop(deps: ConversationLoopDeps): Promise<void> {
   const scratchpad = deps.scratchpad;
@@ -44,6 +45,7 @@ export async function runConversationLoop(deps: ConversationLoopDeps): Promise<v
       (block): block is DwarToolUseBlock => block.type === "tool_use",
     );
     if (uses.length === 0) {
+      scratchpad.length = 0;
       return;
     }
 
@@ -66,6 +68,7 @@ export async function runConversationLoop(deps: ConversationLoopDeps): Promise<v
     }
     scratchpad.push({ role: "user", content: results });
     if (yielded) {
+      scratchpad.length = 0;
       return;
     }
   }
