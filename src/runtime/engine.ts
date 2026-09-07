@@ -111,10 +111,10 @@ export function createRuntime(opts: {
   }
 
   function enqueueConversation(agentId: string): void {
-    // Coalesce: send_message + reasoning-finally both wake conversation; one run is enough.
-    if (locks.isBusy(agentId, "conversation")) {
-      return;
-    }
+    // Always schedule a run. The lane lock serializes concurrent wakes; dropping here
+    // would lose a second user message that arrives while conversation is busy.
+    // Root's empty-work early-return below absorbs duplicate wakes (e.g. send_message
+    // + reasoning-finally) once there is nothing left to route.
     track(runLane(agentId, "conversation"));
   }
 
