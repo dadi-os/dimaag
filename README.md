@@ -117,3 +117,7 @@ curl -s http://localhost:8091/messages \
   -H 'content-type: application/json' \
   -d '{"to_agent_id":"00000000-0000-4000-8000-000000000001","content":"hello"}'
 ```
+
+## CD
+
+Push to `main` publishes `ghcr.io/<owner>/dimaag` tagged `latest` and the full commit SHA. Publish is gated on CI passing; pull requests never push an image.
