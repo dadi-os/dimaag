@@ -6,7 +6,7 @@ Dimaag is unauthenticated. It lives on a private mesh and is never published to 
 
 ## Agents
 
-Every agent is a row, including root Dadi. Dadi is seeded at migration with a well-known id (`00000000-0000-4000-8000-000000000001`) and the prompt in `prompts/dadi.md`. After that the row is ordinary and mutable.
+Every agent is a row, including root Dadi. Dadi is seeded at migration with a well-known id (`00000000-0000-4000-8000-000000000001`) and the prompt in `prompts/dadi.md`. After that the row is ordinary and mutable. Clients discover root structurally via `GET /agents/root` (the sole agent with `parent_agent_id` null), not by hardcoding the seed id.
 
 `parent_agent_id` is modification authority only. An agent may modify itself and its direct children, not the rest of its lineage. A worker spawned by a domain agent is that domain agent's problem.
 
@@ -73,6 +73,7 @@ There is no `current_status` column. Conversation learns what reasoning is doing
 | `POST` | `/messages` | `{ to_agent_id, content }` from the user (`from_agent_id` is null). Appends to the in-process transcript, starts the target's conversation lane, returns immediately. |
 | `GET` | `/events` | Server-sent events for live `message`, `lane_started` / `lane_finished`, `agent_spawned`, and `agent_modified`. No replay; reconnect and re-fetch `GET /agents`. |
 | `GET` | `/agents` | All agents, including `running` (in-memory lane lock ownership). |
+| `GET` | `/agents/root` | The sole agent with `parent_agent_id` null. Same shape as `/agents/:id`. 404 if none; 409 if more than one (data corruption). |
 | `GET` | `/agents/:id` | Agent plus direct children (each with `running`) and granted tools (`name`, `description`, `usage`). Embedded lane tools are not listed. |
 | `GET` | `/agents/:id/logs` | `?event&limit` audit trail for one agent. Not used for context assembly. Message history is `?event=message`. |
 | `GET` | `/logs` | Cross-agent audit trail. Same `?event&limit` as the per-agent route; `limit` capped at 200. |

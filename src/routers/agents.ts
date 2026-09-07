@@ -1,7 +1,8 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { agentLogs, agents, agentTools, tools } from "../db/schema.js";
 import type { AgentRow } from "../db/schema.js";
+import { DimaagError } from "../errors.js";
 import type { LaneLocks } from "../runtime/locks.js";
 import { requireAgent } from "../runtime/tools.js";
 import { toAgentRecord, toLogRecord } from "../serialize.js";
@@ -18,6 +19,31 @@ function withRunning(row: AgentRow, locks: LaneLocks): AgentRecord {
   };
 }
 
+async function agentDetail(app: FastifyInstance, agentRow: AgentRow) {
+  const childRows = await app.db
+    .select()
+    .from(agents)
+    .where(eq(agents.parentAgentId, agentRow.id));
+  const toolRows = await app.db
+    .select({
+      name: tools.name,
+      description: tools.description,
+      usage: agentTools.usage,
+    })
+    .from(agentTools)
+    .innerJoin(tools, eq(agentTools.toolId, tools.id))
+    .where(eq(agentTools.agentId, agentRow.id));
+  return {
+    ...withRunning(agentRow, app.runtime.locks),
+    children: childRows.map((row) => withRunning(row, app.runtime.locks)),
+    tools: toolRows.map((row) => ({
+      name: row.name,
+      description: row.description,
+      usage: row.usage,
+    })),
+  };
+}
+
 export async function registerAgents(app: FastifyInstance): Promise<void> {
   app.get("/agents", async () => {
     const rows = await app.db.select().from(agents);
@@ -26,28 +52,38 @@ export async function registerAgents(app: FastifyInstance): Promise<void> {
     };
   });
 
+  // Before /agents/:id — "root" is not a UUID.
+  app.get("/agents/root", async () => {
+    const rows = await app.db.select().from(agents).where(isNull(agents.parentAgentId));
+    if (rows.length === 0) {
+      throw new DimaagError(
+        404,
+        "not_found",
+        "no root agent (parent_agent_id is null); seedRootDadi may not have run",
+      );
+    }
+    if (rows.length > 1) {
+      throw new DimaagError(
+        409,
+        "conflict",
+        `data corruption: ${rows.length} agents with parent_agent_id null; expected exactly one`,
+      );
+    }
+    const root = rows[0];
+    if (!root) {
+      throw new DimaagError(
+        404,
+        "not_found",
+        "no root agent (parent_agent_id is null); seedRootDadi may not have run",
+      );
+    }
+    return agentDetail(app, root);
+  });
+
   app.get("/agents/:id", async (request) => {
     const { id } = parse(idParam, request.params);
     const agentRow = await requireAgent(app.db, id);
-    const childRows = await app.db.select().from(agents).where(eq(agents.parentAgentId, id));
-    const toolRows = await app.db
-      .select({
-        name: tools.name,
-        description: tools.description,
-        usage: agentTools.usage,
-      })
-      .from(agentTools)
-      .innerJoin(tools, eq(agentTools.toolId, tools.id))
-      .where(eq(agentTools.agentId, id));
-    return {
-      ...withRunning(agentRow, app.runtime.locks),
-      children: childRows.map((row) => withRunning(row, app.runtime.locks)),
-      tools: toolRows.map((row) => ({
-        name: row.name,
-        description: row.description,
-        usage: row.usage,
-      })),
-    };
+    return agentDetail(app, agentRow);
   });
 
   app.get("/agents/:id/logs", async (request) => {

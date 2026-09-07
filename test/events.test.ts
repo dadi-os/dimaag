@@ -218,6 +218,50 @@ test("GET /agents includes running and it flips true while a lane holds the lock
   await app.close();
 });
 
+test("GET /agents/root returns the null-parent agent; 409 when more than one", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    config,
+    log: silentLog,
+  });
+  const app = await buildApp(config, {
+    db: handle.db,
+    sql: handle.sql,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    runtime,
+  });
+
+  const ok = await app.inject({ method: "GET", url: "/agents/root" });
+  assert.equal(ok.statusCode, 200);
+  const body = ok.json() as {
+    id: string;
+    parent_agent_id: string | null;
+    tools: unknown[];
+    children: unknown[];
+  };
+  assert.equal(body.id, ROOT_DADI_ID);
+  assert.equal(body.parent_agent_id, null);
+  assert.ok(Array.isArray(body.tools));
+  assert.ok(Array.isArray(body.children));
+
+  await insertAgent(handle.db, {
+    name: "second-root",
+    systemPrompt: "corrupt",
+    parentAgentId: null,
+  });
+  const conflict = await app.inject({ method: "GET", url: "/agents/root" });
+  assert.equal(conflict.statusCode, 409);
+  const err = conflict.json() as { error: { type: string; message: string } };
+  assert.equal(err.error.type, "conflict");
+  assert.match(err.error.message, /data corruption/i);
+
+  await app.close();
+});
+
 test("GET /agents/:id includes granted tools with usage and excludes embedded tools", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const runtime = createRuntime({
