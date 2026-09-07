@@ -3,8 +3,20 @@ import type { Db } from "../db/client.js";
 import { agentTools, agents, tools } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
 import type { DwarChatRequest, DwarMessage, DwarTool, Lane } from "../types/domain.js";
-import { DISPATCH_MESSAGE, SEND_MESSAGE, STEER_REASONING, YIELD } from "../types/domain.js";
-import { dispatchMessageTool, sendMessageTool, steerReasoningTool, yieldTool } from "./tools.js";
+import {
+  DISPATCH_MESSAGE,
+  ROUTE_MESSAGE,
+  SEND_MESSAGE,
+  STEER_REASONING,
+  YIELD,
+} from "../types/domain.js";
+import {
+  dispatchMessageTool,
+  routeMessageTool,
+  sendMessageTool,
+  steerReasoningTool,
+  yieldTool,
+} from "./tools.js";
 import type { TranscriptStore } from "./transcript.js";
 
 /**
@@ -32,13 +44,21 @@ export async function assembleContext(opts: {
   return {
     system: agent.systemPrompt,
     messages: dwarMessages,
-    tools: await toolsForLane(opts.db, opts.agentId, opts.lane),
+    tools: await toolsForLane(opts.db, opts.agentId, opts.lane, agent.parentAgentId === null),
   };
 }
 
-async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTool[]> {
+async function toolsForLane(
+  db: Db,
+  agentId: string,
+  lane: Lane,
+  isRoot: boolean,
+): Promise<DwarTool[]> {
   if (lane === "conversation") {
-    return [dispatchMessageTool, steerReasoningTool, yieldTool];
+    const embedded: DwarTool[] = isRoot
+      ? [routeMessageTool, dispatchMessageTool, steerReasoningTool, yieldTool]
+      : [dispatchMessageTool, steerReasoningTool, yieldTool];
+    return embedded;
   }
   const grants = await db
     .select({
@@ -59,4 +79,9 @@ async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTo
 }
 
 export const embeddedReasoningTools = [SEND_MESSAGE, YIELD] as const;
-export const embeddedConversationTools = [DISPATCH_MESSAGE, STEER_REASONING, YIELD] as const;
+export const embeddedConversationTools = [
+  ROUTE_MESSAGE,
+  DISPATCH_MESSAGE,
+  STEER_REASONING,
+  YIELD,
+] as const;

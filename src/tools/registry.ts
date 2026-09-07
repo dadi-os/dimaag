@@ -10,8 +10,8 @@ import { ingest } from "./yaad/ingest.js";
 
 /**
  * Every non-embedded tool. Embedded lane plumbing (send_message, dispatch_message,
- * steer_reasoning, yield) is deliberately NOT here — those are not grantable and never
- * appear in the tools table.
+ * route_message, steer_reasoning, yield) is deliberately NOT here — those are not
+ * grantable and never appear in the tools table.
  */
 const definitions = [
   spawnAgent,

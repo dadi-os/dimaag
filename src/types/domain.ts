@@ -79,6 +79,7 @@ export const ROOT_DADI_ID = "00000000-0000-4000-8000-000000000001";
 
 export const SEND_MESSAGE = "send_message";
 export const DISPATCH_MESSAGE = "dispatch_message";
+export const ROUTE_MESSAGE = "route_message";
 export const STEER_REASONING = "steer_reasoning";
 export const YIELD = "yield";
 export const SPAWN_AGENT = "spawn_agent";

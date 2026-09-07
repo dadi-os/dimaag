@@ -147,6 +147,57 @@ test("dispatch_message emits message with agent_id set to the recipient", async 
   await runtime.waitUntilIdle();
 });
 
+test("route_message delivers as from_agent_id null; non-root cannot call it", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const targetId = await insertAgent(handle.db, {
+    name: "route-target",
+    systemPrompt: "target",
+  });
+  const childId = await insertAgent(handle.db, {
+    name: "not-root",
+    systemPrompt: "child",
+    parentAgentId: ROOT_DADI_ID,
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    config,
+    log: silentLog,
+  });
+  const seen: RuntimeEvent[] = [];
+  runtime.events.subscribe((event) => {
+    if (event.type === "message") {
+      seen.push(event);
+    }
+  });
+
+  const denied = await executeTool(runtime.toolContext(childId, "conversation"), {
+    type: "tool_use",
+    id: "r-deny",
+    name: "route_message",
+    input: { to_agent_id: targetId, content: "hello" },
+  });
+  assert.equal(denied.isError, true);
+  assert.equal(seen.length, 0);
+
+  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "conversation"), {
+    type: "tool_use",
+    id: "r-ok",
+    name: "route_message",
+    input: { to_agent_id: targetId, content: "hello from user" },
+  });
+  assert.equal(result.isError, false);
+  assert.equal(seen.length, 1);
+  const event = seen[0];
+  assert.ok(event && event.type === "message");
+  assert.equal(event.agent_id, targetId);
+  assert.equal(event.from_agent_id, null);
+  assert.equal(event.to_agent_id, targetId);
+  assert.equal(event.content, "hello from user");
+  await runtime.waitUntilIdle();
+});
+
 test("lane_finished is emitted even when the lane run throws", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const dwar = mockDwar({

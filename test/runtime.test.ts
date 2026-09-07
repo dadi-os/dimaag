@@ -197,9 +197,28 @@ test("conversation context has dispatch_message and not send_message", async () 
     transcript: new TranscriptStore(),
   });
   const names = ctx.tools.map((tool) => tool.name);
+  assert.ok(names.includes("route_message"));
   assert.ok(names.includes(DISPATCH_MESSAGE));
   assert.ok(names.includes("yield"));
   assert.equal(names.includes(SEND_MESSAGE), false);
+});
+
+test("non-root conversation context has no route_message", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const childId = await insertAgent(handle.db, {
+    name: "thread",
+    systemPrompt: "thread",
+    parentAgentId: ROOT_DADI_ID,
+  });
+  const ctx = await assembleContext({
+    db: handle.db,
+    agentId: childId,
+    lane: "conversation",
+    transcript: new TranscriptStore(),
+  });
+  const names = ctx.tools.map((tool) => tool.name);
+  assert.equal(names.includes("route_message"), false);
+  assert.ok(names.includes(DISPATCH_MESSAGE));
 });
 
 test("spawn_agent requires system_prompt and grants nothing", async () => {
