@@ -1,4 +1,5 @@
 import type { DwarChatRequest, DwarChatResponse, DwarMessage, DwarToolUseBlock } from "../types/domain.js";
+import { YIELD } from "../types/domain.js";
 import type { IntentQueue } from "./intents.js";
 import { formatIntentTurn } from "./intents.js";
 import type { ToolExecResult } from "./tools.js";
@@ -16,10 +17,10 @@ export type ConversationLoopDeps = {
 };
 
 /**
- * Conversation-lane tool loop over dispatch_message and steer_reasoning.
- * The scratchpad is passed in by reference and persists across invocations for this
- * agent — it is not reset here. It dies only when the process restarts. No iteration
- * cap: Dwar's own per-call timeout and lane_queue_timeout_ms are the only bounds.
+ * Conversation-lane tool loop. Dwar forces tool use; text may accompany tools as
+ * narration. The only clean exit is the embedded yield tool. A bare response with
+ * no tools is treated as a degraded exit (provider failure), not the happy path.
+ * The scratchpad persists across invocations for this agent until process restart.
  */
 export async function runConversationLoop(deps: ConversationLoopDeps): Promise<void> {
   const scratchpad = deps.scratchpad;
@@ -39,14 +40,20 @@ export async function runConversationLoop(deps: ConversationLoopDeps): Promise<v
     });
     await deps.logThought(response);
 
-    const uses = response.content.filter((block) => block.type === "tool_use");
-    if (response.stop_reason !== "tool_use" || uses.length === 0) {
+    const uses = response.content.filter(
+      (block): block is DwarToolUseBlock => block.type === "tool_use",
+    );
+    if (uses.length === 0) {
       return;
     }
 
     scratchpad.push({ role: "assistant", content: response.content });
     const results = [];
+    let yielded = false;
     for (const call of uses) {
+      if (call.name === YIELD) {
+        yielded = true;
+      }
       const result = await deps.executeTool(call);
       await deps.logToolCall(call, result);
       await deps.logToolResult(call.id, result);
@@ -58,5 +65,8 @@ export async function runConversationLoop(deps: ConversationLoopDeps): Promise<v
       });
     }
     scratchpad.push({ role: "user", content: results });
+    if (yielded) {
+      return;
+    }
   }
 }

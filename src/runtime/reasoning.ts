@@ -1,4 +1,5 @@
 import type { DwarChatRequest, DwarChatResponse, DwarMessage, DwarToolUseBlock } from "../types/domain.js";
+import { YIELD } from "../types/domain.js";
 import type { SteerQueue } from "./steer.js";
 import { formatSteerTurn } from "./steer.js";
 import type { ToolExecResult } from "./tools.js";
@@ -16,10 +17,10 @@ export type ReasoningLoopDeps = {
 };
 
 /**
- * Reasoning-lane scratchpad loop. The scratchpad is passed in by reference and persists
- * across invocations for this agent — it is not reset here. It dies only when the
- * process restarts. No iteration cap: Dwar's own per-call timeout and lane_queue_timeout_ms
- * are the only bounds on a running loop.
+ * Reasoning-lane scratchpad loop. Dwar forces tool use; text may accompany tools as
+ * internal working output. The only clean exit is the embedded yield tool. A bare
+ * response with no tools is a degraded exit; pending steers still continue the loop.
+ * The scratchpad persists across invocations for this agent until process restart.
  */
 export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
   const scratchpad = deps.scratchpad;
@@ -39,8 +40,10 @@ export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
     });
     await deps.logThought(response);
 
-    const uses = response.content.filter((block) => block.type === "tool_use");
-    if (response.stop_reason !== "tool_use" || uses.length === 0) {
+    const uses = response.content.filter(
+      (block): block is DwarToolUseBlock => block.type === "tool_use",
+    );
+    if (uses.length === 0) {
       scratchpad.push({ role: "assistant", content: response.content });
       if (deps.steer.hasItems(deps.agentId)) {
         continue;
@@ -50,7 +53,11 @@ export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
 
     scratchpad.push({ role: "assistant", content: response.content });
     const results = [];
+    let yielded = false;
     for (const call of uses) {
+      if (call.name === YIELD) {
+        yielded = true;
+      }
       const result = await deps.executeTool(call);
       await deps.logToolCall(call, result);
       await deps.logToolResult(call.id, result);
@@ -62,5 +69,8 @@ export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
       });
     }
     scratchpad.push({ role: "user", content: results });
+    if (yielded) {
+      return;
+    }
   }
 }

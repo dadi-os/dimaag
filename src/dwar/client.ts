@@ -12,6 +12,7 @@ const chatBlockSchema = z.discriminatedUnion("type", [
     id: z.string(),
     name: z.string(),
     input: z.unknown(),
+    thought_signature: z.string().nullish(),
   }),
 ]);
 
@@ -51,12 +52,22 @@ export function createDwarClient(config: Config): DwarClient {
         if (block.type === "text") {
           return { type: "text" as const, text: block.text };
         }
-        return {
-          type: "tool_use" as const,
+        const out: {
+          type: "tool_use";
+          id: string;
+          name: string;
+          input: unknown;
+          thought_signature?: string;
+        } = {
+          type: "tool_use",
           id: block.id,
           name: block.name,
           input: block.input,
         };
+        if (block.thought_signature) {
+          out.thought_signature = block.thought_signature;
+        }
+        return out;
       }),
     };
   }

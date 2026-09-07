@@ -44,6 +44,11 @@ export function toolUse(name: string, input: unknown, id = "call-1"): DwarChatRe
   };
 }
 
+/** Default mock lane exit — call the embedded yield tool. */
+export function yieldTurn(id = "yield-1"): DwarChatResponse {
+  return toolUse("yield", {}, id);
+}
+
 export function mockDwar(opts: {
   reason?: (
     request: DwarChatRequest,
@@ -65,14 +70,14 @@ export function mockDwar(opts: {
       if (opts.reason) {
         return opts.reason(request);
       }
-      return endTurn("reasoning idle");
+      return yieldTurn("reason-yield");
     },
     async converse(request) {
       conversationCalls.push(request);
       if (opts.converse) {
         return opts.converse(request);
       }
-      return endTurn("conversation idle");
+      return yieldTurn("converse-yield");
     },
   };
 }

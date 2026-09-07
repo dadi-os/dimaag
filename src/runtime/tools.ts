@@ -2,7 +2,7 @@ import { z, ZodError } from "zod";
 import { writeAgentLog } from "../db/logs.js";
 import { DimaagError } from "../errors.js";
 import type { DwarTool, DwarToolUseBlock } from "../types/domain.js";
-import { DISPATCH_MESSAGE, SEND_MESSAGE, STEER_REASONING } from "../types/domain.js";
+import { DISPATCH_MESSAGE, SEND_MESSAGE, STEER_REASONING, YIELD } from "../types/domain.js";
 import { findTool } from "../tools/registry.js";
 import {
   fail,
@@ -50,6 +50,12 @@ export const steerReasoningInputSchema: Record<string, unknown> = {
   required: ["instruction"],
 };
 
+export const yieldInputSchema: Record<string, unknown> = {
+  type: "object",
+  properties: {},
+  additionalProperties: false,
+};
+
 export const sendMessageTool: DwarTool = {
   name: SEND_MESSAGE,
   description:
@@ -60,7 +66,7 @@ export const sendMessageTool: DwarTool = {
 export const dispatchMessageTool: DwarTool = {
   name: DISPATCH_MESSAGE,
   description:
-    "Write a message to another agent or to the user (to_agent_id null). This is the only way a message addressed to someone else is persisted.",
+    "Write a message to another agent or to the user (to_agent_id null). This is the only way a message addressed to someone else is persisted. Does not end the turn — call yield when done.",
   input_schema: dispatchMessageInputSchema,
 };
 
@@ -69,6 +75,13 @@ export const steerReasoningTool: DwarTool = {
   description:
     "Queue an instruction for your own reasoning lane. Starts a reasoning run if that lane is idle.",
   input_schema: steerReasoningInputSchema,
+};
+
+export const yieldTool: DwarTool = {
+  name: YIELD,
+  description:
+    "End this lane turn. Call when you have nothing more to do right now. Sending a message or running other tools does not end the turn — only yield does.",
+  input_schema: yieldInputSchema,
 };
 
 const sendInput = z.object({
@@ -85,11 +98,17 @@ const steerInput = z.object({
   instruction: z.string().min(1),
 });
 
+const yieldInput = z.object({}).strict();
+
 export async function executeTool(
   ctx: ToolContext,
   call: DwarToolUseBlock,
 ): Promise<ToolExecResult> {
   try {
+    if (call.name === YIELD) {
+      yieldInput.parse(call.input ?? {});
+      return ok({ yielded: true });
+    }
     if (ctx.lane === "reasoning") {
       if (call.name === SEND_MESSAGE) {
         return await runSendMessage(ctx, call.input);

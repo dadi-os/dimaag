@@ -9,14 +9,6 @@ import { executeTool } from "../src/runtime/tools.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import { STEER_REASONING } from "../src/types/domain.js";
 
-function endTurn(text = "done"): DwarChatResponse {
-  return {
-    content: [{ type: "text", text }],
-    stop_reason: "end_turn",
-    usage: { input_tokens: 1, output_tokens: 1 },
-  };
-}
-
 function toolUse(name: string, input: unknown): DwarChatResponse {
   return {
     content: [{ type: "tool_use", id: "call-1", name, input }],
@@ -43,7 +35,7 @@ test("a steer arriving mid-loop is applied on the next iteration", async () => {
         steer.append(agentId, "check the voice PR");
         return toolUse("send_message", { to_agent_id: null, intent: "status" });
       }
-      return endTurn();
+      return toolUse("yield", {});
     },
     executeTool: async () => ({ content: "{}", isError: false, audit: {} }),
     steer,

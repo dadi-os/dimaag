@@ -6,9 +6,8 @@ import { writeAgentLog } from "../src/db/logs.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { EventBus, type RuntimeEvent } from "../src/runtime/events.js";
 import { executeTool } from "../src/runtime/tools.js";
-import { DISPATCH_MESSAGE, ROOT_DADI_ID, SEND_MESSAGE } from "../src/types/domain.js";
+import { DISPATCH_MESSAGE, ROOT_DADI_ID, SEND_MESSAGE, YIELD } from "../src/types/domain.js";
 import {
-  endTurn,
   insertAgent,
   mockDwar,
   mockYaad,
@@ -295,6 +294,7 @@ test("GET /agents/:id includes granted tools with usage and excludes embedded to
   assert.equal(names.includes(SEND_MESSAGE), false);
   assert.equal(names.includes(DISPATCH_MESSAGE), false);
   assert.equal(names.includes("steer_reasoning"), false);
+  assert.equal(names.includes(YIELD), false);
   await app.close();
 });
 

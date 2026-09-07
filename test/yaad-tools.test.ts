@@ -60,10 +60,10 @@ test("assembleContext for root Dadi includes Yaad tools, platform tools, and sen
     transcript: new TranscriptStore(),
   });
   const names = new Set(ctx.tools.map((tool) => tool.name));
-  for (const name of [...PLATFORM_TOOLS, ...YAAD_TOOLS, SEND_MESSAGE]) {
+  for (const name of [...PLATFORM_TOOLS, ...YAAD_TOOLS, SEND_MESSAGE, "yield"]) {
     assert.ok(names.has(name), `missing tool ${name}`);
   }
-  assert.equal(names.size, 9);
+  assert.equal(names.size, 10);
 });
 
 test("recall tool shapes the response and preserves sufficient", async () => {

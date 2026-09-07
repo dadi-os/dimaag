@@ -137,6 +137,7 @@ test("reasoning context has send_message and no dispatch_message", async () => {
   });
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes(SEND_MESSAGE));
+  assert.ok(names.includes("yield"));
   assert.equal(names.includes(DISPATCH_MESSAGE), false);
 });
 
@@ -197,6 +198,7 @@ test("conversation context has dispatch_message and not send_message", async () 
   });
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes(DISPATCH_MESSAGE));
+  assert.ok(names.includes("yield"));
   assert.equal(names.includes(SEND_MESSAGE), false);
 });
 
@@ -233,7 +235,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
   });
   assert.deepEqual(
     childCtx.tools.map((tool) => tool.name),
-    [SEND_MESSAGE],
+    [SEND_MESSAGE, "yield"],
   );
 });
 

@@ -3,8 +3,8 @@ import type { Db } from "../db/client.js";
 import { agentTools, agents, tools } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
 import type { DwarChatRequest, DwarMessage, DwarTool, Lane } from "../types/domain.js";
-import { DISPATCH_MESSAGE, SEND_MESSAGE, STEER_REASONING } from "../types/domain.js";
-import { dispatchMessageTool, sendMessageTool, steerReasoningTool } from "./tools.js";
+import { DISPATCH_MESSAGE, SEND_MESSAGE, STEER_REASONING, YIELD } from "../types/domain.js";
+import { dispatchMessageTool, sendMessageTool, steerReasoningTool, yieldTool } from "./tools.js";
 import type { TranscriptStore } from "./transcript.js";
 
 /**
@@ -38,7 +38,7 @@ export async function assembleContext(opts: {
 
 async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTool[]> {
   if (lane === "conversation") {
-    return [dispatchMessageTool, steerReasoningTool];
+    return [dispatchMessageTool, steerReasoningTool, yieldTool];
   }
   const grants = await db
     .select({
@@ -55,8 +55,8 @@ async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTo
     description: `${grant.description}\n\n${grant.usage}`,
     input_schema: grant.inputSchema,
   }));
-  return [...granted, sendMessageTool];
+  return [...granted, sendMessageTool, yieldTool];
 }
 
-export const embeddedReasoningTools = [SEND_MESSAGE] as const;
-export const embeddedConversationTools = [DISPATCH_MESSAGE, STEER_REASONING] as const;
+export const embeddedReasoningTools = [SEND_MESSAGE, YIELD] as const;
+export const embeddedConversationTools = [DISPATCH_MESSAGE, STEER_REASONING, YIELD] as const;
