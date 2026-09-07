@@ -23,6 +23,7 @@ export async function buildApp(
   deps: { db: Db; sql: Sql; dwar: DwarClient; yaad: YaadClient; runtime?: Runtime },
 ): Promise<FastifyInstance> {
   const app = Fastify({
+    disableRequestLogging: true,
     logger: {
       level: config.env.logLevel,
       base: { service: "dimaag" },
