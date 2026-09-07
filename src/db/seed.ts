@@ -7,7 +7,8 @@ import type { Db } from "./client.js";
 import { agentTools, agents } from "./schema.js";
 
 /**
- * Idempotent root-Dadi insert. After this runs, Dadi is an ordinary row.
+ * Idempotent root-Dadi upsert. Prompt tracks prompts/dadi.md on every migrate
+ * so routing instructions (route_message) stay current; other columns are left alone.
  */
 export async function seedRootDadi(db: Db, serviceRoot: string): Promise<void> {
   const systemPrompt = readFileSync(join(serviceRoot, "prompts/dadi.md"), "utf8");
@@ -20,7 +21,10 @@ export async function seedRootDadi(db: Db, serviceRoot: string): Promise<void> {
       parentAgentId: null,
       active: true,
     })
-    .onConflictDoNothing({ target: agents.id });
+    .onConflictDoUpdate({
+      target: agents.id,
+      set: { systemPrompt },
+    });
 }
 
 const DADI_GRANTS: Array<{ tool: string; usage: string }> = [
