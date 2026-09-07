@@ -72,7 +72,7 @@ There is no `current_status` column. Conversation learns what reasoning is doing
 | Method | Path | Notes |
 | --- | --- | --- |
 | `GET` | `/health` | `{ "status": "ok" }` |
-| `POST` | `/messages` | `{ to_agent_id, content }` from the user (`from_agent_id` is null). Appends to the in-process transcript, starts the target's conversation lane, returns immediately. |
+| `POST` | `/messages` | `{ to_agent_id, content, attachments? }` from the user (`from_agent_id` is null). Images are described via Dwar `/image/describe` and patched into text before the transcript write so chat lanes stay text-only. Starts the target's conversation lane; returns the patched `content`. |
 | `GET` | `/events` | Server-sent events for live `message`, `lane_started` / `lane_finished`, `agent_spawned`, and `agent_modified`. No replay; reconnect and re-fetch `GET /agents`. |
 | `GET` | `/agents` | All agents, including `running` (in-memory lane lock ownership). |
 | `GET` | `/agents/root` | The sole agent with `parent_agent_id` null. Same shape as `/agents/:id`. 404 if none; 409 if more than one (data corruption). |

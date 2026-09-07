@@ -23,6 +23,8 @@ export async function buildApp(
   deps: { db: Db; sql: Sql; dwar: DwarClient; yaad: YaadClient; runtime?: Runtime },
 ): Promise<FastifyInstance> {
   const app = Fastify({
+    // Base64 image attachments (Dwar describe max 10MB) need headroom over Fastify's 1MB default.
+    bodyLimit: 16 * 1024 * 1024,
     logController: new LogController({ disableRequestLogging: true }),
     logger: {
       level: config.env.logLevel,

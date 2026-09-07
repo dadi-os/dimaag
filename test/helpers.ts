@@ -56,15 +56,33 @@ export function mockDwar(opts: {
   converse?: (
     request: DwarChatRequest,
   ) => DwarChatResponse | Promise<DwarChatResponse>;
+  describeImage?: (request: {
+    image: { media_type: string; data: string };
+    prompt?: string;
+  }) =>
+    | { description: string; usage: { input_tokens: number; output_tokens: number } }
+    | Promise<{
+        description: string;
+        usage: { input_tokens: number; output_tokens: number };
+      }>;
 }): DwarClient & {
   reasoningCalls: DwarChatRequest[];
   conversationCalls: DwarChatRequest[];
+  describeCalls: Array<{
+    image: { media_type: string; data: string };
+    prompt?: string;
+  }>;
 } {
   const reasoningCalls: DwarChatRequest[] = [];
   const conversationCalls: DwarChatRequest[] = [];
+  const describeCalls: Array<{
+    image: { media_type: string; data: string };
+    prompt?: string;
+  }> = [];
   return {
     reasoningCalls,
     conversationCalls,
+    describeCalls,
     async reason(request) {
       reasoningCalls.push(request);
       if (opts.reason) {
@@ -78,6 +96,16 @@ export function mockDwar(opts: {
         return opts.converse(request);
       }
       return yieldTurn("converse-yield");
+    },
+    async describeImage(request) {
+      describeCalls.push(request);
+      if (opts.describeImage) {
+        return opts.describeImage(request);
+      }
+      return {
+        description: "mock image description",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      };
     },
   };
 }

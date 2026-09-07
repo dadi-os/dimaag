@@ -25,9 +25,30 @@ const chatResponseSchema = z.object({
   }),
 });
 
+const describeResponseSchema = z.object({
+  description: z.string().min(1),
+  usage: z.object({
+    input_tokens: z.number(),
+    output_tokens: z.number(),
+  }),
+});
+
+export type DwarDescribeImageRequest = {
+  image: { media_type: string; data: string };
+  prompt?: string;
+};
+
+export type DwarDescribeImageResponse = {
+  description: string;
+  usage: { input_tokens: number; output_tokens: number };
+};
+
 export type DwarClient = {
   reason: (request: DwarChatRequest) => Promise<DwarChatResponse>;
   converse: (request: DwarChatRequest) => Promise<DwarChatResponse>;
+  describeImage: (
+    request: DwarDescribeImageRequest,
+  ) => Promise<DwarDescribeImageResponse>;
 };
 
 export function createDwarClient(config: Config): DwarClient {
@@ -72,9 +93,27 @@ export function createDwarClient(config: Config): DwarClient {
     };
   }
 
+  async function describeImage(
+    request: DwarDescribeImageRequest,
+  ): Promise<DwarDescribeImageResponse> {
+    const body: Record<string, unknown> = { image: request.image };
+    if (request.prompt !== undefined) {
+      body.prompt = request.prompt;
+    }
+    const data = await withRetry(config, () =>
+      http.post("/image/describe", body).then((res) => res.data),
+    );
+    const parsed = describeResponseSchema.safeParse(data);
+    if (!parsed.success) {
+      throw new DimaagError(502, "dwar", "Dwar image describe response is malformed");
+    }
+    return parsed.data;
+  }
+
   return {
     reason: (request) => postChat("/chat/reasoning", request),
     converse: (request) => postChat("/chat/conversation", request),
+    describeImage,
   };
 }
 

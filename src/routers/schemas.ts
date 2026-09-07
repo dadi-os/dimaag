@@ -18,12 +18,31 @@ export function formatZod(error: ZodError): string {
     .join("; ");
 }
 
+const messageAttachment = z
+  .object({
+    media_type: z.string().min(1),
+    data: z.string().min(1),
+    filename: z.string().min(1).optional(),
+  })
+  .strict();
+
 export const postMessageBody = z
   .object({
     to_agent_id: z.string().uuid(),
-    content: z.string().min(1),
+    /** May be empty when attachments are present; patched server-side. */
+    content: z.string(),
+    attachments: z.array(messageAttachment).max(8).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((body, ctx) => {
+    if (body.content.trim().length === 0 && (body.attachments?.length ?? 0) === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "content or attachments required",
+        path: ["content"],
+      });
+    }
+  });
 
 export const idParam = z.object({ id: z.string().uuid() }).strict();
 
