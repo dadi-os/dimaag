@@ -1,6 +1,5 @@
 {
   "name": "dimaag",
-  "version": "0.1.0",
   "description": "Agent runtime for Dadi",
   "type": "module",
   "engines": {

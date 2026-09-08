@@ -34,7 +34,7 @@ dimaag/
 
 Topology is hardcoded in `src/constants.ts`.
 
-`DATABASE_URL` is required at startup (no empty default). Copy `.env.example` to `.env`; Nas reads it for Dimaag and `dimaag-postgres`.
+`DATABASE_URL` is required at startup (no empty default). Nas injects it in compose and on the appliance (`postgres://dimaag:dimaag@dimaag-postgres:5432/dimaag`). There is no Dimaag `.env` — Postgres is not Preferences-editable.
 
 ## Local run
 
