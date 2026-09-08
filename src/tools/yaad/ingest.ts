@@ -9,6 +9,7 @@ const input = z
   })
   .strict();
 
+/** Store a fact/event via Yaad `/ingest` (source always `agent`). */
 export const ingest = defineTool({
   name: "ingest",
   description:

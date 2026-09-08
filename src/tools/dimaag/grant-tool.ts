@@ -11,6 +11,7 @@ const input = z.object({
   usage: z.string().min(1),
 });
 
+/** Grant a registry tool to a direct child, with a usage hint. */
 export const grantTool = defineTool({
   name: "grant_tool",
   description:

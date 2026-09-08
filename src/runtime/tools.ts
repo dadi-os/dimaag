@@ -1,3 +1,8 @@
+/**
+ * Built-in lane tools (send/dispatch/route/steer/yield) and the executeTool dispatcher.
+ * Registry tools are resolved for the reasoning lane; conversation uses the switch below.
+ */
+
 import { z, ZodError } from "zod";
 import { writeAgentLog } from "../db/logs.js";
 import { DimaagError } from "../errors.js";
@@ -78,6 +83,7 @@ export const yieldInputSchema: Record<string, unknown> = {
   additionalProperties: false,
 };
 
+/** Hand intent to conversation; does not persist a message. */
 export const sendMessageTool: DwarTool = {
   name: SEND_MESSAGE,
   description:
@@ -85,6 +91,7 @@ export const sendMessageTool: DwarTool = {
   input_schema: sendMessageInputSchema,
 };
 
+/** Persist and deliver a message to another agent or the user. */
 export const dispatchMessageTool: DwarTool = {
   name: DISPATCH_MESSAGE,
   description:
@@ -92,6 +99,7 @@ export const dispatchMessageTool: DwarTool = {
   input_schema: dispatchMessageInputSchema,
 };
 
+/** Root-only: copy the user's message onto a thread agent verbatim. */
 export const routeMessageTool: DwarTool = {
   name: ROUTE_MESSAGE,
   description:
@@ -99,6 +107,7 @@ export const routeMessageTool: DwarTool = {
   input_schema: routeMessageInputSchema,
 };
 
+/** Queue an instruction for the caller's reasoning lane. */
 export const steerReasoningTool: DwarTool = {
   name: STEER_REASONING,
   description:
@@ -106,6 +115,7 @@ export const steerReasoningTool: DwarTool = {
   input_schema: steerReasoningInputSchema,
 };
 
+/** End the current lane turn. */
 export const yieldTool: DwarTool = {
   name: YIELD,
   description:
@@ -134,6 +144,7 @@ const steerInput = z.object({
 
 const yieldInput = z.object({}).strict();
 
+/** Dispatch a tool_use block for the caller's lane; map Zod/4xx to tool errors. */
 export async function executeTool(
   ctx: ToolContext,
   call: DwarToolUseBlock,

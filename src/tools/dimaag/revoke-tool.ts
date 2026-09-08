@@ -11,6 +11,7 @@ const input = z.object({
   tool_name: z.string().min(1),
 });
 
+/** Revoke a previously granted tool from a direct child. */
 export const revokeTool = defineTool({
   name: "revoke_tool",
   description:

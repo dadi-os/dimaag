@@ -1,3 +1,5 @@
+/** `GET /events` — Server-Sent Events stream of runtime events. */
+
 import type { FastifyInstance } from "fastify";
 
 export async function registerEvents(app: FastifyInstance): Promise<void> {

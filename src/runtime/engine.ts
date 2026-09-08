@@ -1,3 +1,10 @@
+/**
+ * Agent runtime: lane locks, steer/intent queues, transcript, and lane runners.
+ * Conversation enqueue always schedules a run — the lane lock serializes concurrent
+ * wakes so a second user message is not dropped while conversation is busy. Root's
+ * empty-work early-return absorbs duplicate wakes once there is nothing left to route.
+ */
+
 import { eq } from "drizzle-orm";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
@@ -34,6 +41,7 @@ export type Runtime = {
   toolContext: (callerId: string, lane: Lane) => ToolContext;
 };
 
+/** Wire locks, queues, and lane runners for one process. */
 export function createRuntime(opts: {
   db: Db;
   dwar: DwarClient;
@@ -110,11 +118,11 @@ export function createRuntime(opts: {
     };
   }
 
+  /**
+   * Always schedule a conversation run. The lane lock serializes concurrent wakes;
+   * dropping here would lose a second user message that arrives while busy.
+   */
   function enqueueConversation(agentId: string): void {
-    // Always schedule a run. The lane lock serializes concurrent wakes; dropping here
-    // would lose a second user message that arrives while conversation is busy.
-    // Root's empty-work early-return below absorbs duplicate wakes (e.g. send_message
-    // + reasoning-finally) once there is nothing left to route.
     track(runLane(agentId, "conversation"));
   }
 
@@ -122,6 +130,10 @@ export function createRuntime(opts: {
     track(runLane(agentId, "reasoning"));
   }
 
+  /**
+   * Acquire the lane lock and run reasoning or conversation.
+   * Root conversation skips the LLM when a wake arrives after route_message with no work left.
+   */
   async function runLane(agentId: string, lane: Lane): Promise<void> {
     let release: (() => void) | undefined;
     try {
@@ -141,7 +153,6 @@ export function createRuntime(opts: {
         if (lane === "reasoning") {
           await runReasoningLoop(reasoningDeps(agentId));
         } else {
-          // Root router: extra wakes after route_message must not re-LLM the same user text.
           if (
             agent.parentAgentId === null &&
             !intents.hasItems(agentId) &&

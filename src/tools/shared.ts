@@ -1,3 +1,5 @@
+/** Shared tool result helpers and agent lookup used by handlers. */
+
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { agents } from "../db/schema.js";
@@ -13,6 +15,7 @@ import type { YaadClient } from "../yaad/client.js";
 export type ToolExecResult = {
   content: string;
   isError: boolean;
+  /** Extra fields merged into the durable tool_call audit log. */
   audit: Record<string, unknown>;
 };
 
@@ -38,6 +41,7 @@ export function ok(value: unknown, audit: Record<string, unknown> = {}): ToolExe
   return { content: JSON.stringify(value), isError: false, audit };
 }
 
+/** Load an agent row or throw `404 not_found`. */
 export async function requireAgent(db: Db, id: string) {
   const rows = await db.select().from(agents).where(eq(agents.id, id));
   const row = rows[0];
@@ -47,6 +51,7 @@ export async function requireAgent(db: Db, id: string) {
   return row;
 }
 
+/** True when err (or a nested cause) is Postgres unique_violation `23505`. */
 export function isUniqueViolation(err: unknown): boolean {
   let current: unknown = err;
   for (let i = 0; i < 4; i++) {

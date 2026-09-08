@@ -6,6 +6,7 @@ const input = z.object({
   id: z.string().uuid(),
 });
 
+/** Fetch one Yaad node with detail and incident edges. */
 export const getNode = defineTool({
   name: "get_node",
   description:

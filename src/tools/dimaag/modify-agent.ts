@@ -14,6 +14,7 @@ const input = z
     message: "system_prompt or active is required",
   });
 
+/** Update system_prompt / active for self or a direct child. */
 export const modifyAgent = defineTool({
   name: "modify_agent",
   description:

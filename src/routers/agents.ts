@@ -1,3 +1,5 @@
+/** Agent list/detail/log routes, including `/agents/root` (registered before `:id`). */
+
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { agentLogs, agents, agentTools, tools } from "../db/schema.js";
@@ -44,6 +46,10 @@ async function agentDetail(app: FastifyInstance, agentRow: AgentRow) {
   };
 }
 
+/**
+ * Register agent list/detail/log routes.
+ * `/agents/root` is registered before `/agents/:id` because "root" is not a UUID.
+ */
 export async function registerAgents(app: FastifyInstance): Promise<void> {
   app.get("/agents", async () => {
     const rows = await app.db.select().from(agents);
@@ -52,7 +58,6 @@ export async function registerAgents(app: FastifyInstance): Promise<void> {
     };
   });
 
-  // Before /agents/:id — "root" is not a UUID.
   app.get("/agents/root", async () => {
     const rows = await app.db.select().from(agents).where(isNull(agents.parentAgentId));
     if (rows.length === 0) {

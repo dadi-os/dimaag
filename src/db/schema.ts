@@ -1,3 +1,5 @@
+/** Drizzle table definitions for agents, logs, tools, and grants. */
+
 import {
   boolean,
   check,
@@ -66,6 +68,7 @@ export const tools = pgTable(
   (table) => [uniqueIndex("tools_name_idx").on(table.name)],
 );
 
+/** Per-agent tool grant with a usage hint shown alongside the tool description. */
 export const agentTools = pgTable(
   "agent_tools",
   {

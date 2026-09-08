@@ -1,3 +1,5 @@
+/** Apply migrations, sync the tool catalog, and seed root Dadi. */
+
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { migrate as runMigrate } from "drizzle-orm/postgres-js/migrator";

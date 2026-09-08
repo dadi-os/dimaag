@@ -1,3 +1,5 @@
+/** Map Drizzle agent/log rows to API snake_case records. */
+
 import type { AgentLogRow, AgentRow } from "./db/schema.js";
 import type { AgentRecord, LogEvent, LogRecord, Lane } from "./types/domain.js";
 import { DimaagError } from "./errors.js";
@@ -21,6 +23,7 @@ function parseLogEvent(value: string): LogEvent {
   throw new DimaagError(500, "internal_error", `invalid log event in database: ${value}`);
 }
 
+/** Agent row without the ephemeral `running` lock flags (filled by routers). */
 export function toAgentRecord(row: AgentRow): Omit<AgentRecord, "running"> {
   return {
     id: row.id,

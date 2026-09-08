@@ -1,3 +1,5 @@
+/** Mount message, agent, and SSE event routes. */
+
 import type { FastifyInstance } from "fastify";
 import { registerAgents } from "./agents.js";
 import { registerEvents } from "./events.js";

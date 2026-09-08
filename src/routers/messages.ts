@@ -1,3 +1,5 @@
+/** `POST /messages` — deliver a user message (optional image attachments) to an agent. */
+
 import type { FastifyInstance } from "fastify";
 import { patchMessageContent } from "../runtime/attachments.js";
 import { deliverUserMessage } from "../runtime/deliver.js";

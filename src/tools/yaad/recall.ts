@@ -7,6 +7,7 @@ const input = z.object({
   limit: z.number().int().positive().optional(),
 });
 
+/** Semantic memory search via Yaad `/recall`. */
 export const recall = defineTool({
   name: "recall",
   description:

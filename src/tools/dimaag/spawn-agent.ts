@@ -9,6 +9,7 @@ const input = z.object({
   system_prompt: z.string().min(1),
 });
 
+/** Create a child agent with the caller as parent (no tools until grant_tool). */
 export const spawnAgent = defineTool({
   name: "spawn_agent",
   description:

@@ -1,3 +1,5 @@
+/** HTTP client for Dwar chat (reasoning / conversation) and image describe. */
+
 import axios, { type AxiosInstance } from "axios";
 import { z } from "zod";
 import type { Config } from "../config.js";
@@ -43,6 +45,7 @@ export type DwarDescribeImageResponse = {
   usage: { input_tokens: number; output_tokens: number };
 };
 
+/** Dwar surface used by Dimaag: reasoning/conversation chat and image captioning. */
 export type DwarClient = {
   reason: (request: DwarChatRequest) => Promise<DwarChatResponse>;
   converse: (request: DwarChatRequest) => Promise<DwarChatResponse>;
@@ -51,6 +54,7 @@ export type DwarClient = {
   ) => Promise<DwarDescribeImageResponse>;
 };
 
+/** Build a retrying axios client pointed at `DWAR_BASE_URL`. */
 export function createDwarClient(config: Config): DwarClient {
   const http: AxiosInstance = axios.create({
     baseURL: DWAR_BASE_URL,

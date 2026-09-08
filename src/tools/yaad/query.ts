@@ -12,6 +12,7 @@ const input = z.object({
   offset: z.number().int().min(0).optional(),
 });
 
+/** Exact/filter memory lookup via Yaad `/query`. */
 export const query = defineTool({
   name: "query",
   description:

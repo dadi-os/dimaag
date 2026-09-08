@@ -1,3 +1,8 @@
+/**
+ * In-process pub/sub for runtime events (messages, lane lifecycle, agent changes).
+ * Subscriber errors are swallowed so a broken listener cannot take down a lane run.
+ */
+
 import type { Lane } from "../types/domain.js";
 
 export type RuntimeEvent =
@@ -32,7 +37,6 @@ export class EventBus {
       try {
         listener(event);
       } catch {
-        // A broken subscriber must never take down a lane run.
       }
     }
   }

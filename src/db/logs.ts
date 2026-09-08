@@ -1,3 +1,5 @@
+/** Append durable agent log rows (thought, tool_call, tool_result, message). */
+
 import { randomUUID } from "node:crypto";
 import type { Db } from "./client.js";
 import { agentLogs } from "./schema.js";

@@ -1,3 +1,5 @@
+/** HTTP client for Yaad recall, query, get_node, and ingest. */
+
 import axios, { type AxiosInstance } from "axios";
 import { z } from "zod";
 import type { Config } from "../config.js";
@@ -86,6 +88,7 @@ export type IngestRequest = {
   source: "agent";
 };
 
+/** Yaad surface used by agent tools. */
 export type YaadClient = {
   recall: (body: { query: string; limit?: number }) => Promise<RecallResponse>;
   query: (body: QueryRequest) => Promise<QueryResponse>;
@@ -93,6 +96,7 @@ export type YaadClient = {
   ingest: (body: IngestRequest) => Promise<IngestResponse>;
 };
 
+/** Build a retrying axios client pointed at `YAAD_BASE_URL`. */
 export function createYaadClient(config: Config): YaadClient {
   const http: AxiosInstance = axios.create({
     baseURL: YAAD_BASE_URL,
