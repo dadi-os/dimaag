@@ -154,7 +154,7 @@ function mapDwarError(err: unknown): DimaagError {
   }
   if (axios.isAxiosError(err)) {
     if (!err.response) {
-      return new DimaagError(502, "dwar_unreachable", "Dwar is unreachable");
+      return new DimaagError(502, "upstream_unreachable", "Dwar is unreachable");
     }
     const message = dwarMessage(err.response.data);
     return new DimaagError(502, "dwar", message);

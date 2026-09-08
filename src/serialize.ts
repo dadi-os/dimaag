@@ -6,7 +6,7 @@ function parseLane(value: string): Lane {
   if (value === "reasoning" || value === "conversation") {
     return value;
   }
-  throw new DimaagError(500, "internal", `invalid lane in database: ${value}`);
+  throw new DimaagError(500, "internal_error", `invalid lane in database: ${value}`);
 }
 
 function parseLogEvent(value: string): LogEvent {
@@ -18,7 +18,7 @@ function parseLogEvent(value: string): LogEvent {
   ) {
     return value;
   }
-  throw new DimaagError(500, "internal", `invalid log event in database: ${value}`);
+  throw new DimaagError(500, "internal_error", `invalid log event in database: ${value}`);
 }
 
 export function toAgentRecord(row: AgentRow): Omit<AgentRecord, "running"> {

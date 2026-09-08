@@ -163,7 +163,7 @@ function mapYaadError(err: unknown): DimaagError {
   }
   if (axios.isAxiosError(err)) {
     if (!err.response) {
-      return new DimaagError(502, "yaad_unreachable", "Yaad is unreachable");
+      return new DimaagError(502, "upstream_unreachable", "Yaad is unreachable");
     }
     const status = err.response.status;
     const message = yaadMessage(err.response.data);

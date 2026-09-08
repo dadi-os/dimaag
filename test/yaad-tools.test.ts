@@ -280,7 +280,7 @@ test("Yaad unreachable maps to isError and the lane continues", async () => {
   });
   const yaad = mockYaad({
     recall: () => {
-      throw new DimaagError(502, "yaad_unreachable", "Yaad is unreachable");
+      throw new DimaagError(502, "upstream_unreachable", "Yaad is unreachable");
     },
   });
   const runtime = createRuntime({

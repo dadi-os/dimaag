@@ -4,6 +4,7 @@ import type { Db, Sql } from "./db/client.js";
 import type { DwarClient } from "./dwar/client.js";
 import type { YaadClient } from "./yaad/client.js";
 import { DimaagError } from "./errors.js";
+import { registerRequestLogging } from "./logging.js";
 import { createRuntime, type Runtime } from "./runtime/engine.js";
 import { registerV1 } from "./routers/index.js";
 
@@ -18,12 +19,12 @@ declare module "fastify" {
   }
 }
 
+/** Build the Dimaag Fastify app with nas-aligned request logging. */
 export async function buildApp(
   config: Config,
   deps: { db: Db; sql: Sql; dwar: DwarClient; yaad: YaadClient; runtime?: Runtime },
 ): Promise<FastifyInstance> {
   const app = Fastify({
-    // Base64 image attachments (Dwar describe max 10MB) need headroom over Fastify's 1MB default.
     bodyLimit: 16 * 1024 * 1024,
     logController: new LogController({ disableRequestLogging: true }),
     logger: {
@@ -37,6 +38,7 @@ export async function buildApp(
       },
     },
   });
+  await registerRequestLogging(app);
   const runtime =
     deps.runtime ??
     createRuntime({
@@ -55,6 +57,10 @@ export async function buildApp(
 
   app.setErrorHandler((err, request, reply) => {
     if (err instanceof DimaagError) {
+      request.log.warn(
+        { code: err.type, request_id: request.requestId, status: err.statusCode },
+        err.message,
+      );
       return reply.status(err.statusCode).send({
         error: { type: err.type, message: err.message },
       });
@@ -68,13 +74,20 @@ export async function buildApp(
         : 500;
     const message = err instanceof Error ? err.message : "internal error";
     if (statusCode >= 400 && statusCode < 500) {
+      request.log.warn(
+        { code: "invalid_request", request_id: request.requestId, status: statusCode },
+        message,
+      );
       return reply.status(statusCode).send({
         error: { type: "invalid_request", message },
       });
     }
-    request.log.error(err);
+    request.log.error(
+      { code: "internal_error", request_id: request.requestId, status: 500, err },
+      "internal error",
+    );
     return reply.status(500).send({
-      error: { type: "internal", message: "internal error" },
+      error: { type: "internal_error", message: "internal error" },
     });
   });
 
