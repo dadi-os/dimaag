@@ -172,14 +172,14 @@ test("edit_file 409 surfaces the match count", async () => {
     id: "ed1",
     name: "edit_file",
     input: {
-      path: "/var/lib/dadi/projects/a.txt",
+      path: "/var/lib/dadi/a.txt",
       old_string: "foo",
       new_string: "bar",
     },
   });
   assert.equal(result.isError, true);
   assert.match(result.content, /matches: 3/);
-  assert.equal(result.audit.path, "/var/lib/dadi/projects/a.txt");
+  assert.equal(result.audit.path, "/var/lib/dadi/a.txt");
 });
 
 test("worker granted execute_shell and read_file sees those plus send_message and yield", async () => {

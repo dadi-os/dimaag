@@ -10,18 +10,18 @@ const input = z
   })
   .strict();
 
-/** Exact-string edit of a project file via Nas. Intended for workers. */
+/** Exact-string edit of a host file via Nas. Intended for workers. */
 export const editFile = defineTool({
   name: "edit_file",
   description:
-    "Replace exactly one occurrence of old_string with new_string in a project file. Path must be absolute. If old_string matches zero or many times the tool errors with the match count — widen or narrow old_string and retry. Never falls back to a fuzzy match.",
+    "Replace exactly one occurrence of old_string with new_string in a host file. Path must be absolute. If old_string matches zero or many times the tool errors with the match count — widen or narrow old_string and retry. Never falls back to a fuzzy match.",
   input,
   inputSchema: {
     type: "object",
     additionalProperties: false,
     required: ["path", "old_string", "new_string"],
     properties: {
-      path: { type: "string", description: "Absolute path under the project root" },
+      path: { type: "string", description: "Absolute host path" },
       old_string: { type: "string", description: "Exact text that must occur once" },
       new_string: { type: "string", description: "Replacement text" },
     },

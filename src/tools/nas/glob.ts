@@ -10,11 +10,11 @@ const input = z
   })
   .strict();
 
-/** Glob files under the Nas project root. Intended for workers. */
+/** Glob files on the host (absolute paths; Nas denies writes to OS/dadiOS runtime trees). Intended for workers. */
 export const globFiles = defineTool({
   name: "glob",
   description:
-    "Find files under the Nas project root matching a doublestar pattern. Paths are absolute, sorted by mtime descending.",
+    "Find files on the host (absolute paths; Nas denies writes to OS/dadiOS runtime trees) matching a doublestar pattern. Paths are absolute, sorted by mtime descending.",
   input,
   inputSchema: {
     type: "object",
@@ -24,7 +24,7 @@ export const globFiles = defineTool({
       pattern: { type: "string", description: "Glob pattern, e.g. **/*.ts" },
       cwd: {
         type: "string",
-        description: "Absolute directory to search from (defaults to project root)",
+        description: "Absolute directory to search from (defaults to Nas state dir)",
       },
       limit: { type: "number", description: "Max paths to return (default 500)" },
     },

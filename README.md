@@ -114,6 +114,8 @@ Thin clients over Nas. Shell is the run-a-command mechanism; file tools are the 
 
 `execute_shell` HTTP timeout is `timeout_seconds + 10` so the client never gives up before Nas reports a shell timeout. On timeout the command keeps running — use `read_terminal` / `send_keys` (e.g. `C-c`) to follow up.
 
+File tools take absolute host paths. Nas **denies writes** to OS and dadiOS runtime trees (`/usr`, `/etc`, `$DADI_STATE_DIR/modules`, …); reads are allowed. There is no project sandbox folder. Default terminal/glob/grep cwd is the Nas state dir (dadi home).
+
 ### Nas (browsers)
 
 Each worker drives one Nas Chromium over CDP (`playwright-core` `connectOverCDP`). Act on accessibility refs, not coordinates. `tab_id` is the CDP target id; omit it to use the focused/attached page. Refs from `accessibility_tree` (`e1`, `e2`, …) are valid only until the next snapshot. Screenshots go through Dwar `/image/describe` — pixels never enter the transcript; the raw image is kept in tool `audit` only.
@@ -133,7 +135,9 @@ Each worker drives one Nas Chromium over CDP (`playwright-core` `connectOverCDP`
 
 ## Persistence
 
-`agents` and `agent_logs` survive restart. Live transcript, scratchpads, locks, steer/intent queues, and the event stream do not. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
+`agents`, `agent_logs`, and `scheduled_messages` survive restart. Live transcript, scratchpads, locks, steer/intent queues, and the event stream do not. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
+
+Schedule tools (`schedule_message`, `list_schedules`, `cancel_schedule`) persist one-shot and recurring deliveries; the in-process scheduler ticks from `[schedule].tick_seconds` in `config.toml` (wall clock uses `TIMEZONE` in `constants.ts`).
 
 ## Routes
 

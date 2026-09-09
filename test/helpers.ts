@@ -361,7 +361,7 @@ export function mockNas(opts: {
       if (opts.createTerminal) {
         return opts.createTerminal(body);
       }
-      return { id: "t1", cwd: "/var/lib/dadi/projects" };
+      return { id: "t1", cwd: "/var/lib/dadi" };
     },
     async listTerminals() {
       listTerminalsCalls += 1;

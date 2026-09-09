@@ -12,7 +12,7 @@ const input = z
 export const spawnTerminal = defineTool({
   name: "spawn_terminal",
   description:
-    "Start a new host terminal session. Returns a terminal_id that you hand to a worker (in its system prompt or a message). Optional cwd defaults to the Nas project root.",
+    "Start a new host terminal session. Returns a terminal_id that you hand to a worker (in its system prompt or a message). Optional cwd defaults to Nas state dir (dadi home).",
   input,
   inputSchema: {
     type: "object",
@@ -20,7 +20,7 @@ export const spawnTerminal = defineTool({
     properties: {
       cwd: {
         type: "string",
-        description: "Absolute working directory for the new session (defaults to project root)",
+        description: "Absolute working directory for the new session (defaults to Nas state dir)",
       },
     },
   },

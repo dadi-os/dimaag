@@ -12,11 +12,11 @@ const input = z
   })
   .strict();
 
-/** Grep project files via Nas (ripgrep). Intended for workers. */
+/** Grep host files via Nas (ripgrep). Intended for workers. */
 export const grepFiles = defineTool({
   name: "grep",
   description:
-    "Search file contents under the Nas project root with a regex (ripgrep). Optional glob restricts which files are searched.",
+    "Search file contents on the host (absolute paths; Nas denies writes to OS/dadiOS runtime trees) with a regex (ripgrep). Optional glob restricts which files are searched.",
   input,
   inputSchema: {
     type: "object",
@@ -26,7 +26,7 @@ export const grepFiles = defineTool({
       pattern: { type: "string", description: "Regex pattern" },
       cwd: {
         type: "string",
-        description: "Absolute directory to search from (defaults to project root)",
+        description: "Absolute directory to search from (defaults to Nas state dir)",
       },
       glob: { type: "string", description: "Optional file glob filter for ripgrep" },
       limit: { type: "number", description: "Max matches (default 200)" },

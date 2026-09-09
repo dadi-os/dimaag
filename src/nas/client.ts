@@ -309,18 +309,6 @@ function mapNasError(err: unknown): DimaagError {
     const status = err.response.status;
     const data = err.response.data;
 
-    // edit_file conflict: Nas returns `{ matches: N }` without an error envelope.
-    if (
-      status === 409 &&
-      typeof data === "object" &&
-      data !== null &&
-      "matches" in data &&
-      typeof (data as { matches: unknown }).matches === "number"
-    ) {
-      const matches = (data as { matches: number }).matches;
-      return new DimaagError(409, "conflict", `matches: ${matches}`);
-    }
-
     const { type, message } = nasErrorParts(data);
     if (PASSTHROUGH_TYPES.has(type)) {
       return new DimaagError(status, type, message);

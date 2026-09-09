@@ -131,24 +131,24 @@ const DADI_GRANTS: Array<{ tool: string; usage: string }> = [
   },
   {
     tool: "read_file",
-    usage: "For workers that read project files. Paths must be absolute under the Nas project root.",
+    usage: "For workers that read host files. Paths must be absolute. Nas denies writes to OS and dadiOS runtime trees.",
   },
   {
     tool: "write_file",
-    usage: "For workers that create or overwrite project files.",
+    usage: "For workers that create or overwrite host files.",
   },
   {
     tool: "edit_file",
     usage:
-      "For workers that make exact string replacements in project files. On a match-count error, widen or narrow old_string.",
+      "For workers that make exact string replacements in host files. On a match-count error, widen or narrow old_string.",
   },
   {
     tool: "glob",
-    usage: "For workers that need to find files by pattern under the project root.",
+    usage: "For workers that need to find files by pattern on the host (absolute paths).",
   },
   {
     tool: "grep",
-    usage: "For workers that search file contents under the project root.",
+    usage: "For workers that search file contents on the host (absolute paths).",
   },
   {
     tool: "spawn_browser",

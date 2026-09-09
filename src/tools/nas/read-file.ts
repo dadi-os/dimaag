@@ -11,18 +11,18 @@ const input = z
   })
   .strict();
 
-/** Read a project file via Nas. Intended for workers. */
+/** Read a host file via Nas. Intended for workers. */
 export const readFile = defineTool({
   name: "read_file",
   description:
-    "Read a text file under the Nas project root. Path must be absolute. Returns line-numbered content (N\\tline), total_lines, and truncated. Binary files fail.",
+    "Read a text file at an absolute host path. Returns line-numbered content (N\\tline), total_lines, and truncated. Binary files fail.",
   input,
   inputSchema: {
     type: "object",
     additionalProperties: false,
     required: ["path"],
     properties: {
-      path: { type: "string", description: "Absolute path under the project root" },
+      path: { type: "string", description: "Absolute host path" },
       offset: { type: "number", description: "1-based start line (default 1)" },
       limit: { type: "number", description: "Max lines to return (default 500)" },
       max_bytes: { type: "number", description: "Max content bytes (default 65536)" },
