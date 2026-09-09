@@ -1,9 +1,10 @@
-/** Drizzle table definitions for agents, logs, tools, and grants. */
+/** Drizzle table definitions for agents, logs, tools, grants, and scheduled messages. */
 
 import {
   boolean,
   check,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -84,7 +85,45 @@ export const agentTools = pgTable(
   (table) => [primaryKey({ columns: [table.agentId, table.toolId] })],
 );
 
+/**
+ * Deferred dispatch_message that survives restart. Presence of the row is the
+ * state — no status/active/last_fired columns.
+ *
+ * - `run_at` is the next fire time (ticker cursor), never a "created for" time.
+ * - `interval_minutes` null = one-shot (delete on fire); non-null = recurring
+ *   (`run_at` advances by the interval after each fire).
+ * - `from_agent_id` is always set; scheduled messages are never from the human.
+ */
+export const scheduledMessages = pgTable(
+  "scheduled_messages",
+  {
+    id: uuid("id").primaryKey(),
+    fromAgentId: uuid("from_agent_id")
+      .notNull()
+      .references(() => agents.id),
+    toAgentId: uuid("to_agent_id")
+      .notNull()
+      .references(() => agents.id),
+    content: text("content").notNull(),
+    runAt: timestamptz("run_at").notNull(),
+    intervalMinutes: integer("interval_minutes"),
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("scheduled_messages_run_at_idx").on(table.runAt),
+    check(
+      "scheduled_messages_interval_minutes_check",
+      sql`${table.intervalMinutes} IS NULL OR ${table.intervalMinutes} >= 1`,
+    ),
+    check(
+      "scheduled_messages_from_to_check",
+      sql`${table.fromAgentId} <> ${table.toAgentId}`,
+    ),
+  ],
+);
+
 export type AgentRow = typeof agents.$inferSelect;
 export type AgentLogRow = typeof agentLogs.$inferSelect;
 export type ToolRow = typeof tools.$inferSelect;
 export type AgentToolRow = typeof agentTools.$inferSelect;
+export type ScheduledMessageRow = typeof scheduledMessages.$inferSelect;

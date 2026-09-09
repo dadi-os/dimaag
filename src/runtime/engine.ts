@@ -10,8 +10,10 @@ import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
 import { writeAgentLog } from "../db/logs.js";
 import { agents } from "../db/schema.js";
+import { BrowserDriver } from "../browser/driver.js";
 import type { DwarClient } from "../dwar/client.js";
 import type { GharClient } from "../ghar/client.js";
+import type { NasClient } from "../nas/client.js";
 import type { YaadClient } from "../yaad/client.js";
 import type { DwarChatResponse, DwarMessage, DwarToolUseBlock, Lane } from "../types/domain.js";
 import { assembleContext } from "./context.js";
@@ -23,6 +25,7 @@ import { runReasoningLoop } from "./reasoning.js";
 import { SteerQueue } from "./steer.js";
 import { executeTool, type ToolContext, type ToolExecResult } from "./tools.js";
 import { TranscriptStore } from "./transcript.js";
+import { createScheduler, type Scheduler } from "./scheduler.js";
 
 export type RuntimeLog = {
   error: (obj: unknown, msg?: string) => void;
@@ -36,6 +39,8 @@ export type Runtime = {
   intents: IntentQueue;
   transcript: TranscriptStore;
   events: EventBus;
+  browsers: BrowserDriver;
+  scheduler: Scheduler;
   enqueueConversation: (agentId: string) => void;
   enqueueReasoning: (agentId: string) => void;
   waitUntilIdle: () => Promise<void>;
@@ -48,6 +53,7 @@ export function createRuntime(opts: {
   dwar: DwarClient;
   yaad: YaadClient;
   ghar: GharClient;
+  nas: NasClient;
   config: Config;
   log: RuntimeLog;
 }): Runtime {
@@ -56,6 +62,7 @@ export function createRuntime(opts: {
   const intents = new IntentQueue();
   const transcript = new TranscriptStore();
   const events = new EventBus();
+  const browsers = new BrowserDriver(opts.nas, opts.config);
   const reasoningScratchpads = new Map<string, DwarMessage[]>();
   const conversationScratchpads = new Map<string, DwarMessage[]>();
   let pending = 0;
@@ -92,12 +99,35 @@ export function createRuntime(opts: {
     return pad;
   }
 
+  /**
+   * Always schedule a conversation run. The lane lock serializes concurrent wakes;
+   * dropping here would lose a second user message that arrives while busy.
+   */
+  function enqueueConversation(agentId: string): void {
+    track(runLane(agentId, "conversation"));
+  }
+
+  function enqueueReasoning(agentId: string): void {
+    track(runLane(agentId, "reasoning"));
+  }
+
+  const scheduler = createScheduler({
+    db: opts.db,
+    transcript,
+    events,
+    enqueueConversation,
+    log: opts.log,
+    tickSeconds: opts.config.schedule.tick_seconds,
+  });
+
   const runtime: Runtime = {
     locks,
     steer,
     intents,
     transcript,
     events,
+    browsers,
+    scheduler,
     enqueueConversation,
     enqueueReasoning,
     waitUntilIdle,
@@ -111,6 +141,9 @@ export function createRuntime(opts: {
       lane,
       yaad: opts.yaad,
       ghar: opts.ghar,
+      nas: opts.nas,
+      dwar: opts.dwar,
+      browsers,
       steer,
       intents,
       locks,
@@ -119,18 +152,6 @@ export function createRuntime(opts: {
       enqueueConversation,
       enqueueReasoning,
     };
-  }
-
-  /**
-   * Always schedule a conversation run. The lane lock serializes concurrent wakes;
-   * dropping here would lose a second user message that arrives while busy.
-   */
-  function enqueueConversation(agentId: string): void {
-    track(runLane(agentId, "conversation"));
-  }
-
-  function enqueueReasoning(agentId: string): void {
-    track(runLane(agentId, "reasoning"));
   }
 
   /**

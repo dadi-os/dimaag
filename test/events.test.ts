@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
+import { and, eq } from "drizzle-orm";
 import { buildApp } from "../src/app.js";
 import { migrate } from "../src/db/migrate.js";
 import { writeAgentLog } from "../src/db/logs.js";
+import { agentLogs } from "../src/db/schema.js";
+import { deliverAgentMessage } from "../src/runtime/deliver.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { EventBus, type RuntimeEvent } from "../src/runtime/events.js";
 import { executeTool } from "../src/runtime/tools.js";
+import { TranscriptStore } from "../src/runtime/transcript.js";
 import { DISPATCH_MESSAGE, ROOT_DADI_ID, SEND_MESSAGE, YIELD } from "../src/types/domain.js";
 import {
   insertAgent,
   mockDwar,
   mockGhar,
+  mockNas,
   mockYaad,
   openTestDb,
   resetRuntime,
@@ -80,7 +85,7 @@ test("POST /messages emits a message event", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -95,7 +100,7 @@ test("POST /messages emits a message event", async () => {
     sql: handle.sql,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     runtime,
   });
   const res = await app.inject({
@@ -125,7 +130,7 @@ test("dispatch_message emits message with agent_id set to the recipient", async 
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -151,6 +156,58 @@ test("dispatch_message emits message with agent_id set to the recipient", async 
   await runtime.waitUntilIdle();
 });
 
+test("deliverAgentMessage merges extraPayload into both message log rows", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const toId = await insertAgent(handle.db, {
+    name: "deliver-extra-target",
+    systemPrompt: "target",
+  });
+  const transcript = new TranscriptStore();
+  const events = new EventBus();
+  const seen: RuntimeEvent[] = [];
+  events.subscribe((event) => {
+    if (event.type === "message") {
+      seen.push(event);
+    }
+  });
+  const enqueued: string[] = [];
+
+  const beforeLen = transcript.transcriptFor(toId).length;
+  await deliverAgentMessage(
+    {
+      db: handle.db,
+      transcript,
+      events,
+      enqueueConversation: (agentId) => {
+        enqueued.push(agentId);
+      },
+    },
+    {
+      fromAgentId: ROOT_DADI_ID,
+      toAgentId: toId,
+      content: "scheduled ping",
+      extraPayload: { schedule_id: "x" },
+    },
+  );
+
+  assert.equal(transcript.transcriptFor(toId).length, beforeLen + 1);
+  assert.equal(seen.length, 1);
+  assert.deepEqual(enqueued, [toId]);
+
+  const logs = await handle.db
+    .select()
+    .from(agentLogs)
+    .where(and(eq(agentLogs.event, "message"), eq(agentLogs.lane, "conversation")));
+  const messageLogs = logs.filter(
+    (row) =>
+      row.payload.schedule_id === "x" &&
+      (row.agentId === ROOT_DADI_ID || row.agentId === toId),
+  );
+  assert.equal(messageLogs.length, 2);
+  const directions = new Set(messageLogs.map((row) => row.payload.direction));
+  assert.deepEqual(directions, new Set(["send", "receive"]));
+});
+
 test("route_message delivers as from_agent_id null; non-root cannot call it", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const targetId = await insertAgent(handle.db, {
@@ -166,7 +223,7 @@ test("route_message delivers as from_agent_id null; non-root cannot call it", as
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -214,7 +271,7 @@ test("lane_finished is emitted even when the lane run throws", async () => {
     db: handle.db,
     dwar,
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -240,7 +297,7 @@ test("GET /agents includes running and it flips true while a lane holds the lock
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -249,7 +306,7 @@ test("GET /agents includes running and it flips true while a lane holds the lock
     sql: handle.sql,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     runtime,
   });
 
@@ -282,7 +339,7 @@ test("GET /agents/root returns the null-parent agent; 409 when more than one", a
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -291,7 +348,7 @@ test("GET /agents/root returns the null-parent agent; 409 when more than one", a
     sql: handle.sql,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     runtime,
   });
 
@@ -328,7 +385,7 @@ test("GET /agents/:id includes granted tools with usage and excludes embedded to
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -337,7 +394,7 @@ test("GET /agents/:id includes granted tools with usage and excludes embedded to
     sql: handle.sql,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     runtime,
   });
   const res = await app.inject({ method: "GET", url: `/agents/${ROOT_DADI_ID}` });
@@ -390,7 +447,7 @@ test("GET /logs returns across agents; event filters; limit above cap is 422", a
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -399,7 +456,7 @@ test("GET /logs returns across agents; event filters; limit above cap is 422", a
     sql: handle.sql,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(),
+    ghar: mockGhar(), nas: mockNas(),
     runtime,
   });
 

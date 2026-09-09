@@ -10,7 +10,10 @@ import type { LaneLocks } from "../runtime/locks.js";
 import type { SteerQueue } from "../runtime/steer.js";
 import type { IntentQueue } from "../runtime/intents.js";
 import type { TranscriptStore } from "../runtime/transcript.js";
+import type { BrowserDriver } from "../browser/driver.js";
+import type { DwarClient } from "../dwar/client.js";
 import type { GharClient } from "../ghar/client.js";
+import type { NasClient } from "../nas/client.js";
 import type { YaadClient } from "../yaad/client.js";
 
 export type ToolExecResult = {
@@ -26,6 +29,9 @@ export type ToolContext = {
   lane: Lane;
   yaad: YaadClient;
   ghar: GharClient;
+  nas: NasClient;
+  dwar: DwarClient;
+  browsers: BrowserDriver;
   steer: SteerQueue;
   intents: IntentQueue;
   locks: LaneLocks;

@@ -4,7 +4,6 @@
  */
 
 import { z, ZodError } from "zod";
-import { writeAgentLog } from "../db/logs.js";
 import { DimaagError } from "../errors.js";
 import type { DwarTool, DwarToolUseBlock } from "../types/domain.js";
 import {
@@ -22,7 +21,7 @@ import {
   type ToolContext,
   type ToolExecResult,
 } from "../tools/shared.js";
-import { deliverUserMessage } from "./deliver.js";
+import { deliverAgentMessage, deliverUserMessage } from "./deliver.js";
 
 export type { ToolContext, ToolExecResult } from "../tools/shared.js";
 export { requireAgent } from "../tools/shared.js";
@@ -201,49 +200,19 @@ async function runDispatchMessage(ctx: ToolContext, raw: unknown): Promise<ToolE
   if (input.to_agent_id !== null) {
     await requireAgent(ctx.db, input.to_agent_id);
   }
-  const row = ctx.transcript.append({
-    fromAgentId: ctx.callerId,
-    toAgentId: input.to_agent_id,
-    content: input.content,
-  });
-  await writeAgentLog(ctx.db, {
-    agentId: ctx.callerId,
-    lane: "conversation",
-    event: "message",
-    payload: {
-      direction: "send",
-      message_id: null,
-      from_agent_id: ctx.callerId,
-      to_agent_id: row.toAgentId,
-      content: row.content,
-      seq: row.seq,
+  const row = await deliverAgentMessage(
+    {
+      db: ctx.db,
+      transcript: ctx.transcript,
+      events: ctx.events,
+      enqueueConversation: ctx.enqueueConversation,
     },
-  });
-  if (row.toAgentId !== null) {
-    await writeAgentLog(ctx.db, {
-      agentId: row.toAgentId,
-      lane: "conversation",
-      event: "message",
-      payload: {
-        direction: "receive",
-        message_id: null,
-        from_agent_id: ctx.callerId,
-        to_agent_id: row.toAgentId,
-        content: row.content,
-        seq: row.seq,
-      },
-    });
-    ctx.enqueueConversation(row.toAgentId);
-  }
-  ctx.events.emit({
-    type: "message",
-    agent_id: row.toAgentId ?? ctx.callerId,
-    from_agent_id: ctx.callerId,
-    to_agent_id: row.toAgentId,
-    content: row.content,
-    seq: row.seq,
-    at: row.createdAt.toISOString(),
-  });
+    {
+      fromAgentId: ctx.callerId,
+      toAgentId: input.to_agent_id,
+      content: input.content,
+    },
+  );
   return ok({ to_agent_id: row.toAgentId, content: row.content, seq: row.seq });
 }
 

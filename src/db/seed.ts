@@ -49,6 +49,21 @@ const DADI_GRANTS: Array<{ tool: string; usage: string }> = [
     usage: "Take a tool back from a child when it no longer needs it.",
   },
   {
+    tool: "schedule_message",
+    usage:
+      "When the user wants something to happen later or on a repeating basis (a daily briefing, a reminder, a periodic check), spawn or pick the thread that will do the work, grant it its tools, then schedule the instruction to that thread. Root never does the scheduled work itself.",
+  },
+  {
+    tool: "list_schedules",
+    usage:
+      "When the user asks what is scheduled, or before changing a recurring job so you cancel the right one.",
+  },
+  {
+    tool: "cancel_schedule",
+    usage:
+      "When the user stops or changes something recurring. Cancel the old row before scheduling a replacement.",
+  },
+  {
     tool: "recall",
     usage:
       "For thread agents that need memory. Root reasoning should not use this to answer the user — grant it to the thread instead.",
@@ -87,6 +102,112 @@ const DADI_GRANTS: Array<{ tool: string; usage: string }> = [
     tool: "get_device_events",
     usage:
       "When the user asks what happened to a device or why it changed — use cause to separate your earlier actions from someone flipping the wall switch.",
+  },
+  {
+    tool: "spawn_terminal",
+    usage:
+      "When a coding or shell job needs a host terminal — spawn one, then grant execute_shell / file tools to the worker and put the terminal_id in its prompt or a message.",
+  },
+  {
+    tool: "list_terminals",
+    usage: "When you need to see which host terminals are alive and whether any are busy.",
+  },
+  {
+    tool: "close_terminal",
+    usage: "When a worker is done and the host terminal should be destroyed.",
+  },
+  {
+    tool: "execute_shell",
+    usage:
+      "For workers that run shell commands on a handed-off terminal_id. Not for reading or editing files — use the file tools.",
+  },
+  {
+    tool: "read_terminal",
+    usage: "For workers following a still-running command after execute_shell timed out.",
+  },
+  {
+    tool: "send_keys",
+    usage: "For workers that need to interrupt or answer a prompt in a terminal (e.g. C-c, Enter).",
+  },
+  {
+    tool: "read_file",
+    usage: "For workers that read project files. Paths must be absolute under the Nas project root.",
+  },
+  {
+    tool: "write_file",
+    usage: "For workers that create or overwrite project files.",
+  },
+  {
+    tool: "edit_file",
+    usage:
+      "For workers that make exact string replacements in project files. On a match-count error, widen or narrow old_string.",
+  },
+  {
+    tool: "glob",
+    usage: "For workers that need to find files by pattern under the project root.",
+  },
+  {
+    tool: "grep",
+    usage: "For workers that search file contents under the project root.",
+  },
+  {
+    tool: "spawn_browser",
+    usage:
+      "When a job needs a real headed browser — spawn one, grant browser tools to the worker, and put browser_id in its prompt or a message.",
+  },
+  {
+    tool: "list_browsers",
+    usage: "When you need to see which Nas browsers are alive and healthy.",
+  },
+  {
+    tool: "close_browser",
+    usage: "When a browser worker is done and the Chromium instance should be destroyed.",
+  },
+  {
+    tool: "list_tabs",
+    usage: "For browser workers listing open tabs (tab_id is the CDP target id).",
+  },
+  {
+    tool: "new_tab",
+    usage: "For browser workers opening another tab in their browser.",
+  },
+  {
+    tool: "close_tab",
+    usage: "For browser workers closing a tab by tab_id.",
+  },
+  {
+    tool: "navigate",
+    usage: "For browser workers loading a URL, then usually accessibility_tree.",
+  },
+  {
+    tool: "accessibility_tree",
+    usage:
+      "For browser workers before click/type/select — refs are only valid until the next snapshot.",
+  },
+  {
+    tool: "click",
+    usage: "For browser workers clicking a ref from the latest accessibility_tree.",
+  },
+  {
+    tool: "type",
+    usage: "For browser workers filling a field by ref; submit presses Enter.",
+  },
+  {
+    tool: "select",
+    usage: "For browser workers choosing a <select> option by value or label via ref.",
+  },
+  {
+    tool: "wait_for",
+    usage: "For browser workers waiting on text, a ref, or network idle.",
+  },
+  {
+    tool: "screenshot",
+    usage:
+      "For browser workers only when a snapshot is not enough (canvas, captcha, visual check). Returns a Dwar description, not pixels.",
+  },
+  {
+    tool: "extract_text",
+    usage: "For browser workers reading long page text when a snapshot is noise.",
   },
 ];
 

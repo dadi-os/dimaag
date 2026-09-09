@@ -13,6 +13,7 @@ import {
   insertAgent,
   mockDwar,
   mockGhar,
+  mockNas,
   mockYaad,
   openTestDb,
   resetRuntime,
@@ -39,7 +40,7 @@ test("syncTools registers Ghar tools and root Dadi holds them", async () => {
   for (const name of GHAR_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 12);
+  assert.equal(allTools().length, 40);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
@@ -76,6 +77,7 @@ test("list_devices passes filters through to the Ghar client", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar,
+    nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -113,6 +115,7 @@ test("control_device attributes cause to the calling agent, not root", async () 
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar,
+    nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -149,6 +152,7 @@ test("Ghar unreachable fails with ghar code, not an empty success", async () => 
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar,
+    nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -192,6 +196,7 @@ test("capability_unsupported and device_unreachable stay distinguishable", async
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar,
+    nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -240,6 +245,7 @@ test("get_device_events passes filters through and bounds the default limit", as
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar,
+    nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -288,6 +294,7 @@ test("get_state returns only requested devices with changed_at", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar,
+    nas: mockNas(),
     config,
     log: silentLog,
   });

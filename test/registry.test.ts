@@ -37,7 +37,7 @@ test("findTool returns registered tools", () => {
 });
 
 test("syncTools throws when an agent_tools grant points at a tool not in the registry", async () => {
-  await handle.sql`TRUNCATE agent_logs, agent_tools, tools, agents CASCADE`;
+  await handle.sql`TRUNCATE scheduled_messages, agent_logs, agent_tools, tools, agents CASCADE`;
 
   const agentId = await insertAgent(handle.db, {
     name: "orphan-holder",
@@ -70,6 +70,6 @@ test("syncTools throws when an agent_tools grant points at a tool not in the reg
 });
 
 test("syncTools with no grants resolves", async () => {
-  await handle.sql`TRUNCATE agent_logs, agent_tools, tools, agents CASCADE`;
+  await handle.sql`TRUNCATE scheduled_messages, agent_logs, agent_tools, tools, agents CASCADE`;
   await assert.doesNotReject(() => syncTools(handle.db));
 });

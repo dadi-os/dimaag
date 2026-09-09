@@ -15,6 +15,23 @@ import type {
   ListEventsRequest,
 } from "../src/ghar/client.js";
 import type {
+  BrowserInfo,
+  CaptureRequest,
+  CreateBrowserResponse,
+  CreateTerminalRequest,
+  CreateTerminalResponse,
+  EditFileRequest,
+  ExecRequest,
+  ExecResponse,
+  GlobRequest,
+  GrepRequest,
+  KeysRequest,
+  NasClient,
+  ReadFileRequest,
+  TerminalInfo,
+  WriteFileRequest,
+} from "../src/nas/client.js";
+import type {
   IngestRequest,
   IngestResponse,
   NodeResponse,
@@ -247,6 +264,212 @@ export function mockGhar(opts: {
   };
 }
 
+export function mockNas(opts: {
+  createTerminal?: (
+    body?: CreateTerminalRequest,
+  ) => Promise<CreateTerminalResponse> | CreateTerminalResponse;
+  listTerminals?: () => Promise<TerminalInfo[]> | TerminalInfo[];
+  closeTerminal?: (id: string) => Promise<void> | void;
+  exec?: (id: string, body: ExecRequest) => Promise<ExecResponse> | ExecResponse;
+  capture?: (
+    id: string,
+    query?: CaptureRequest,
+  ) => Promise<{ output: string }> | { output: string };
+  sendKeys?: (
+    id: string,
+    body: KeysRequest,
+  ) => Promise<{ sent: true }> | { sent: true };
+  readFile?: (
+    body: ReadFileRequest,
+  ) =>
+    | Promise<{ content: string; total_lines: number; truncated: boolean }>
+    | { content: string; total_lines: number; truncated: boolean };
+  writeFile?: (
+    body: WriteFileRequest,
+  ) => Promise<{ bytes: number }> | { bytes: number };
+  editFile?: (
+    body: EditFileRequest,
+  ) => Promise<{ replaced: true }> | { replaced: true };
+  glob?: (
+    body: GlobRequest,
+  ) => Promise<{ paths: string[]; truncated: boolean }> | { paths: string[]; truncated: boolean };
+  grep?: (
+    body: GrepRequest,
+  ) =>
+    | Promise<{ matches: Array<{ path: string; line: number; text: string }>; truncated: boolean }>
+    | { matches: Array<{ path: string; line: number; text: string }>; truncated: boolean };
+  createBrowser?: () => Promise<CreateBrowserResponse> | CreateBrowserResponse;
+  listBrowsers?: () => Promise<BrowserInfo[]> | BrowserInfo[];
+  closeBrowser?: (id: number) => Promise<void> | void;
+  browserScreenshot?: (id: number) => Promise<Buffer> | Buffer;
+} = {}): NasClient & {
+  createTerminalCalls: Array<CreateTerminalRequest | undefined>;
+  listTerminalsCalls: number;
+  closeTerminalCalls: string[];
+  execCalls: Array<{ id: string; body: ExecRequest }>;
+  captureCalls: Array<{ id: string; query?: CaptureRequest }>;
+  sendKeysCalls: Array<{ id: string; body: KeysRequest }>;
+  readFileCalls: ReadFileRequest[];
+  writeFileCalls: WriteFileRequest[];
+  editFileCalls: EditFileRequest[];
+  globCalls: GlobRequest[];
+  grepCalls: GrepRequest[];
+  createBrowserCalls: number;
+  listBrowsersCalls: number;
+  closeBrowserCalls: number[];
+  browserScreenshotCalls: number[];
+} {
+  const createTerminalCalls: Array<CreateTerminalRequest | undefined> = [];
+  let listTerminalsCalls = 0;
+  const closeTerminalCalls: string[] = [];
+  const execCalls: Array<{ id: string; body: ExecRequest }> = [];
+  const captureCalls: Array<{ id: string; query?: CaptureRequest }> = [];
+  const sendKeysCalls: Array<{ id: string; body: KeysRequest }> = [];
+  const readFileCalls: ReadFileRequest[] = [];
+  const writeFileCalls: WriteFileRequest[] = [];
+  const editFileCalls: EditFileRequest[] = [];
+  const globCalls: GlobRequest[] = [];
+  const grepCalls: GrepRequest[] = [];
+  let createBrowserCalls = 0;
+  let listBrowsersCalls = 0;
+  const closeBrowserCalls: number[] = [];
+  const browserScreenshotCalls: number[] = [];
+  return {
+    createTerminalCalls,
+    get listTerminalsCalls() {
+      return listTerminalsCalls;
+    },
+    closeTerminalCalls,
+    execCalls,
+    captureCalls,
+    sendKeysCalls,
+    readFileCalls,
+    writeFileCalls,
+    editFileCalls,
+    globCalls,
+    grepCalls,
+    get createBrowserCalls() {
+      return createBrowserCalls;
+    },
+    get listBrowsersCalls() {
+      return listBrowsersCalls;
+    },
+    closeBrowserCalls,
+    browserScreenshotCalls,
+    async createTerminal(body) {
+      createTerminalCalls.push(body);
+      if (opts.createTerminal) {
+        return opts.createTerminal(body);
+      }
+      return { id: "t1", cwd: "/var/lib/dadi/projects" };
+    },
+    async listTerminals() {
+      listTerminalsCalls += 1;
+      if (opts.listTerminals) {
+        return opts.listTerminals();
+      }
+      return [];
+    },
+    async closeTerminal(id) {
+      closeTerminalCalls.push(id);
+      if (opts.closeTerminal) {
+        await opts.closeTerminal(id);
+      }
+    },
+    async exec(id, body) {
+      execCalls.push({ id, body });
+      if (opts.exec) {
+        return opts.exec(id, body);
+      }
+      return { exit_code: 0, output: "", truncated: false, timed_out: false };
+    },
+    async capture(id, query) {
+      captureCalls.push({ id, query });
+      if (opts.capture) {
+        return opts.capture(id, query);
+      }
+      return { output: "" };
+    },
+    async sendKeys(id, body) {
+      sendKeysCalls.push({ id, body });
+      if (opts.sendKeys) {
+        return opts.sendKeys(id, body);
+      }
+      return { sent: true };
+    },
+    async readFile(body) {
+      readFileCalls.push(body);
+      if (opts.readFile) {
+        return opts.readFile(body);
+      }
+      return { content: "", total_lines: 0, truncated: false };
+    },
+    async writeFile(body) {
+      writeFileCalls.push(body);
+      if (opts.writeFile) {
+        return opts.writeFile(body);
+      }
+      return { bytes: body.content.length };
+    },
+    async editFile(body) {
+      editFileCalls.push(body);
+      if (opts.editFile) {
+        return opts.editFile(body);
+      }
+      return { replaced: true };
+    },
+    async glob(body) {
+      globCalls.push(body);
+      if (opts.glob) {
+        return opts.glob(body);
+      }
+      return { paths: [], truncated: false };
+    },
+    async grep(body) {
+      grepCalls.push(body);
+      if (opts.grep) {
+        return opts.grep(body);
+      }
+      return { matches: [], truncated: false };
+    },
+    async createBrowser() {
+      createBrowserCalls += 1;
+      if (opts.createBrowser) {
+        return opts.createBrowser();
+      }
+      return {
+        id: 10,
+        display: ":10",
+        cdp_url: "ws://127.0.0.1:9310/devtools/browser/test",
+      };
+    },
+    async listBrowsers() {
+      listBrowsersCalls += 1;
+      if (opts.listBrowsers) {
+        return opts.listBrowsers();
+      }
+      return [];
+    },
+    async closeBrowser(id) {
+      closeBrowserCalls.push(id);
+      if (opts.closeBrowser) {
+        await opts.closeBrowser(id);
+      }
+    },
+    async browserScreenshot(id) {
+      browserScreenshotCalls.push(id);
+      if (opts.browserScreenshot) {
+        return opts.browserScreenshot(id);
+      }
+      // 1x1 PNG
+      return Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      );
+    },
+  };
+}
+
 export async function openTestDb(): Promise<{ db: Db; sql: Sql; close: () => Promise<void> }> {
   const config = loadConfig();
   const { client, db } = createDb(config.env.databaseUrl);
@@ -258,7 +481,7 @@ export async function openTestDb(): Promise<{ db: Db; sql: Sql; close: () => Pro
 }
 
 export async function resetRuntime(sql: Sql, db: Db, config: Config): Promise<void> {
-  await sql`TRUNCATE agent_logs, agent_tools, tools, agents CASCADE`;
+  await sql`TRUNCATE scheduled_messages, agent_logs, agent_tools, tools, agents CASCADE`;
   await syncTools(db);
   await seed(db, config);
 }

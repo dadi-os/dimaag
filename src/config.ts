@@ -10,6 +10,7 @@ import {
   GHAR_BASE_URL,
   HOST,
   LOG_LEVEL,
+  NAS,
   PORT,
   YAAD_BASE_URL,
 } from "./constants.js";
@@ -36,6 +37,19 @@ const fileSchema = z.object({
     retry_attempts: z.number().int().positive(),
     backoff_ms: z.array(z.number().min(0)).nonempty(),
   }),
+  nas: z.object({
+    timeout_ms: z.number().int().positive(),
+    retry_attempts: z.number().int().positive(),
+    backoff_ms: z.array(z.number().min(0)).nonempty(),
+  }),
+  browser: z.object({
+    action_timeout_ms: z.number().int().positive(),
+    navigation_timeout_ms: z.number().int().positive(),
+    snapshot_max_bytes: z.number().int().positive(),
+  }),
+  schedule: z.object({
+    tick_seconds: z.number().int().positive(),
+  }),
 });
 
 export type FileConfig = z.infer<typeof fileSchema>;
@@ -47,6 +61,7 @@ export type Config = {
     dwarBaseUrl: string;
     yaadBaseUrl: string;
     gharBaseUrl: string;
+    nasBaseUrl: string;
     host: string;
     port: number;
     logLevel: typeof LOG_LEVEL;
@@ -55,6 +70,9 @@ export type Config = {
   dwar: FileConfig["dwar"];
   yaad: FileConfig["yaad"];
   ghar: FileConfig["ghar"];
+  nas: FileConfig["nas"];
+  browser: FileConfig["browser"];
+  schedule: FileConfig["schedule"];
 };
 
 export function loadFileConfig(): FileConfig {
@@ -98,6 +116,7 @@ export function loadConfig(): Config {
       dwarBaseUrl: DWAR_BASE_URL,
       yaadBaseUrl: YAAD_BASE_URL,
       gharBaseUrl: GHAR_BASE_URL,
+      nasBaseUrl: NAS,
       host: HOST,
       port: PORT,
       logLevel: LOG_LEVEL,
@@ -106,6 +125,9 @@ export function loadConfig(): Config {
     dwar: file.dwar,
     yaad: file.yaad,
     ghar: file.ghar,
+    nas: file.nas,
+    browser: file.browser,
+    schedule: file.schedule,
   };
   return cached;
 }

@@ -23,6 +23,19 @@ export type LogRecord = {
   created_at: string;
 };
 
+/** API shape for a scheduled_messages row. Presence of the row is the state. */
+export type ScheduledMessageRecord = {
+  id: string;
+  from_agent_id: string;
+  to_agent_id: string;
+  content: string;
+  /** Next fire time (ISO). Ticker cursor — advanced after each fire. */
+  run_at: string;
+  /** null = one-shot; >= 1 = recurring interval in minutes. */
+  interval_minutes: number | null;
+  created_at: string;
+};
+
 export type DwarTextBlock = {
   type: "text";
   text: string;

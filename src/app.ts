@@ -3,6 +3,7 @@ import type { Config } from "./config.js";
 import type { Db, Sql } from "./db/client.js";
 import type { DwarClient } from "./dwar/client.js";
 import type { GharClient } from "./ghar/client.js";
+import type { NasClient } from "./nas/client.js";
 import type { YaadClient } from "./yaad/client.js";
 import { DimaagError } from "./errors.js";
 import { registerRequestLogging } from "./logging.js";
@@ -17,6 +18,7 @@ declare module "fastify" {
     dwar: DwarClient;
     yaad: YaadClient;
     ghar: GharClient;
+    nas: NasClient;
     runtime: Runtime;
   }
 }
@@ -30,6 +32,7 @@ export async function buildApp(
     dwar: DwarClient;
     yaad: YaadClient;
     ghar: GharClient;
+    nas: NasClient;
     runtime?: Runtime;
   },
 ): Promise<FastifyInstance> {
@@ -55,6 +58,7 @@ export async function buildApp(
       dwar: deps.dwar,
       yaad: deps.yaad,
       ghar: deps.ghar,
+      nas: deps.nas,
       config,
       log: app.log,
     });
@@ -64,7 +68,12 @@ export async function buildApp(
   app.decorate("dwar", deps.dwar);
   app.decorate("yaad", deps.yaad);
   app.decorate("ghar", deps.ghar);
+  app.decorate("nas", deps.nas);
   app.decorate("runtime", runtime);
+  runtime.scheduler.start();
+  app.addHook("onClose", async () => {
+    runtime.scheduler.stop();
+  });
 
   app.setErrorHandler((err, request, reply) => {
     if (err instanceof DimaagError) {

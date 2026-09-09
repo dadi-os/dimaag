@@ -1,7 +1,13 @@
-/** Map Drizzle agent/log rows to API snake_case records. */
+/** Map Drizzle agent/log/scheduled-message rows to API snake_case records. */
 
-import type { AgentLogRow, AgentRow } from "./db/schema.js";
-import type { AgentRecord, LogEvent, LogRecord, Lane } from "./types/domain.js";
+import type { AgentLogRow, AgentRow, ScheduledMessageRow } from "./db/schema.js";
+import type {
+  AgentRecord,
+  LogEvent,
+  LogRecord,
+  Lane,
+  ScheduledMessageRecord,
+} from "./types/domain.js";
 import { DimaagError } from "./errors.js";
 
 function parseLane(value: string): Lane {
@@ -43,6 +49,18 @@ export function toLogRecord(row: AgentLogRow): LogRecord {
     lane: parseLane(row.lane),
     event: parseLogEvent(row.event),
     payload: row.payload,
+    created_at: row.createdAt.toISOString(),
+  };
+}
+
+export function toScheduledMessageRecord(row: ScheduledMessageRow): ScheduledMessageRecord {
+  return {
+    id: row.id,
+    from_agent_id: row.fromAgentId,
+    to_agent_id: row.toAgentId,
+    content: row.content,
+    run_at: row.runAt.toISOString(),
+    interval_minutes: row.intervalMinutes,
     created_at: row.createdAt.toISOString(),
   };
 }

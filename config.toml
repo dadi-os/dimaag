@@ -18,3 +18,16 @@ backoff_ms = [500, 1000, 2000]
 timeout_ms = 30000
 retry_attempts = 3
 backoff_ms = [500, 1000, 2000]
+
+[nas]
+timeout_ms = 30000
+retry_attempts = 3
+backoff_ms = [500, 1000, 2000]
+
+[browser]
+action_timeout_ms = 5000
+navigation_timeout_ms = 30000
+snapshot_max_bytes = 32768
+
+[schedule]
+tick_seconds = 10
