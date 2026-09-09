@@ -13,3 +13,8 @@ backoff_ms = [500, 1000, 2000]
 timeout_ms = 360000
 retry_attempts = 3
 backoff_ms = [500, 1000, 2000]
+
+[ghar]
+timeout_ms = 30000
+retry_attempts = 3
+backoff_ms = [500, 1000, 2000]

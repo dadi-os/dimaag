@@ -7,6 +7,7 @@ Agent runtime for dadi. It owns agent identity, transcripts, the dual-lane loop,
 - Postgres (`DATABASE_URL`)
 - Dwar at `http://dwar.dadi` for chat and image describe
 - Yaad at `http://yaad.dadi` for memory tools
+- Ghar at `http://ghar.dadi` for home device tools
 - Nas for mesh DNS, compose/prod networking, and the shared logging contract
 
 ## Layout
@@ -18,8 +19,9 @@ dimaag/
     db/           Drizzle, migrate, seed, agent logs
     dwar/         Dwar axios client
     yaad/         Yaad axios client
+    ghar/         Ghar axios client
     runtime/      dual-lane engine, transcript, events, locks
-    tools/        grantable tool registry (dimaag + yaad)
+    tools/        grantable tool registry (dimaag + yaad + ghar)
     routers/      HTTP routes + schemas
     types/        domain types
   test/
@@ -30,7 +32,7 @@ dimaag/
 
 ## Config vs env
 
-`config.toml` (checked in): lane queue timeout, Dwar/Yaad timeout and retry.
+`config.toml` (checked in): lane queue timeout, Dwar/Yaad/Ghar timeout and retry.
 
 Topology is hardcoded in `src/constants.ts`.
 
@@ -58,7 +60,7 @@ Migrations seed root Dadi and sync the tool registry.
 
 Logs follow the nas JSON contract (`service=dimaag`, request summary, `code` on errors). Default Fastify access logging is off.
 
-HTTP errors: `{ "error": { "type": "<code>", "message": "..." } }`. Shared codes include `invalid_request`, `not_found`, `upstream_unreachable`, `internal_error`. Domain codes include `dwar`, `yaad`, `conflict`. See nas README for the shared catalog.
+HTTP errors: `{ "error": { "type": "<code>", "message": "..." } }`. Shared codes include `invalid_request`, `not_found`, `upstream_unreachable`, `internal_error`. Domain codes include `dwar`, `yaad`, `ghar`, `conflict`. See nas README for the shared catalog.
 
 ## Agents
 

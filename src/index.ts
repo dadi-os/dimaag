@@ -6,6 +6,7 @@ import { buildApp } from "./app.js";
 import { createDb } from "./db/client.js";
 import { migrate } from "./db/migrate.js";
 import { createDwarClient } from "./dwar/client.js";
+import { createGharClient } from "./ghar/client.js";
 import { createYaadClient } from "./yaad/client.js";
 
 const config = loadConfig();
@@ -16,6 +17,7 @@ const app = await buildApp(config, {
   sql: client,
   dwar: createDwarClient(config),
   yaad: createYaadClient(config),
+  ghar: createGharClient(config),
 });
 
 const shutdown = async () => {

@@ -14,6 +14,7 @@ import { DimaagError } from "../src/errors.js";
 import {
   endTurn,
   mockDwar,
+  mockGhar,
   mockYaad,
   openTestDb,
   resetRuntime,
@@ -42,7 +43,7 @@ test("syncTools registers Yaad tools and root Dadi grants resolve", async () => 
   for (const name of YAAD_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 8);
+  assert.equal(allTools().length, 12);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
@@ -63,7 +64,7 @@ test("assembleContext for root Dadi includes Yaad tools, platform tools, and sen
   for (const name of [...PLATFORM_TOOLS, ...YAAD_TOOLS, SEND_MESSAGE, "yield"]) {
     assert.ok(names.has(name), `missing tool ${name}`);
   }
-  assert.equal(names.size, 10);
+  assert.equal(names.size, 14);
 });
 
 test("recall tool shapes the response and preserves sufficient", async () => {
@@ -96,6 +97,7 @@ test("recall tool shapes the response and preserves sufficient", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad,
+    ghar: mockGhar(),
     config,
     log: silentLog,
   });
@@ -129,6 +131,7 @@ test("query tool passes filters through", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad,
+    ghar: mockGhar(),
     config,
     log: silentLog,
   });
@@ -175,6 +178,7 @@ test("get_node tool returns the Yaad node response", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad,
+    ghar: mockGhar(),
     config,
     log: silentLog,
   });
@@ -206,6 +210,7 @@ test("ingest stamps occurred_at and source; rejects occurred_at in tool input", 
     db: handle.db,
     dwar: mockDwar({}),
     yaad,
+    ghar: mockGhar(),
     config,
     log: silentLog,
   });
@@ -252,6 +257,7 @@ test("Yaad 4xx maps to isError without throwing", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad,
+    ghar: mockGhar(),
     config,
     log: silentLog,
   });
@@ -287,6 +293,7 @@ test("Yaad unreachable maps to isError and the lane continues", async () => {
     db: handle.db,
     dwar,
     yaad,
+    ghar: mockGhar(),
     config,
     log: silentLog,
   });

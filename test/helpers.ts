@@ -6,6 +6,15 @@ import { seed } from "../src/db/seed.js";
 import type { DwarChatRequest, DwarChatResponse } from "../src/types/domain.js";
 import type { DwarClient } from "../src/dwar/client.js";
 import type {
+  CommandRequest,
+  GharAttributeState,
+  GharClient,
+  GharDevice,
+  GharEvent,
+  ListDevicesRequest,
+  ListEventsRequest,
+} from "../src/ghar/client.js";
+import type {
   IngestRequest,
   IngestResponse,
   NodeResponse,
@@ -172,6 +181,68 @@ export function mockYaad(opts: {
         },
         operations: [{ op: "noop", reason: "nothing" }],
       };
+    },
+  };
+}
+
+export function mockGhar(opts: {
+  listDevices?: (
+    query?: ListDevicesRequest,
+  ) => Promise<{ devices: GharDevice[] }> | { devices: GharDevice[] };
+  getState?: () =>
+    | Promise<{ devices: Record<string, Record<string, GharAttributeState>> }>
+    | { devices: Record<string, Record<string, GharAttributeState>> };
+  command?: (
+    deviceId: string,
+    body: CommandRequest,
+  ) => Promise<{ ok: true }> | { ok: true };
+  listEvents?: (
+    query?: ListEventsRequest,
+  ) => Promise<{ events: GharEvent[] }> | { events: GharEvent[] };
+} = {}): GharClient & {
+  listDevicesCalls: Array<ListDevicesRequest | undefined>;
+  getStateCalls: number;
+  commandCalls: Array<{ deviceId: string; body: CommandRequest }>;
+  listEventsCalls: Array<ListEventsRequest | undefined>;
+} {
+  const listDevicesCalls: Array<ListDevicesRequest | undefined> = [];
+  let getStateCalls = 0;
+  const commandCalls: Array<{ deviceId: string; body: CommandRequest }> = [];
+  const listEventsCalls: Array<ListEventsRequest | undefined> = [];
+  return {
+    listDevicesCalls,
+    get getStateCalls() {
+      return getStateCalls;
+    },
+    commandCalls,
+    listEventsCalls,
+    async listDevices(query) {
+      listDevicesCalls.push(query);
+      if (opts.listDevices) {
+        return opts.listDevices(query);
+      }
+      return { devices: [] };
+    },
+    async getState() {
+      getStateCalls += 1;
+      if (opts.getState) {
+        return opts.getState();
+      }
+      return { devices: {} };
+    },
+    async command(deviceId, body) {
+      commandCalls.push({ deviceId, body });
+      if (opts.command) {
+        return opts.command(deviceId, body);
+      }
+      return { ok: true };
+    },
+    async listEvents(query) {
+      listEventsCalls.push(query);
+      if (opts.listEvents) {
+        return opts.listEvents(query);
+      }
+      return { events: [] };
     },
   };
 }

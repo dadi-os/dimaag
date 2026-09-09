@@ -2,6 +2,7 @@ import Fastify, { LogController, type FastifyInstance } from "fastify";
 import type { Config } from "./config.js";
 import type { Db, Sql } from "./db/client.js";
 import type { DwarClient } from "./dwar/client.js";
+import type { GharClient } from "./ghar/client.js";
 import type { YaadClient } from "./yaad/client.js";
 import { DimaagError } from "./errors.js";
 import { registerRequestLogging } from "./logging.js";
@@ -15,6 +16,7 @@ declare module "fastify" {
     sql: Sql;
     dwar: DwarClient;
     yaad: YaadClient;
+    ghar: GharClient;
     runtime: Runtime;
   }
 }
@@ -22,7 +24,14 @@ declare module "fastify" {
 /** Build the Dimaag Fastify app with nas-aligned request logging. */
 export async function buildApp(
   config: Config,
-  deps: { db: Db; sql: Sql; dwar: DwarClient; yaad: YaadClient; runtime?: Runtime },
+  deps: {
+    db: Db;
+    sql: Sql;
+    dwar: DwarClient;
+    yaad: YaadClient;
+    ghar: GharClient;
+    runtime?: Runtime;
+  },
 ): Promise<FastifyInstance> {
   const app = Fastify({
     bodyLimit: 16 * 1024 * 1024,
@@ -45,6 +54,7 @@ export async function buildApp(
       db: deps.db,
       dwar: deps.dwar,
       yaad: deps.yaad,
+      ghar: deps.ghar,
       config,
       log: app.log,
     });
@@ -53,6 +63,7 @@ export async function buildApp(
   app.decorate("sql", deps.sql);
   app.decorate("dwar", deps.dwar);
   app.decorate("yaad", deps.yaad);
+  app.decorate("ghar", deps.ghar);
   app.decorate("runtime", runtime);
 
   app.setErrorHandler((err, request, reply) => {

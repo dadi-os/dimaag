@@ -68,6 +68,26 @@ const DADI_GRANTS: Array<{ tool: string; usage: string }> = [
     usage:
       "For thread agents that store facts. Root reasoning must not ingest on the user's behalf — spawn/grant a memory-capable thread and route the message there.",
   },
+  {
+    tool: "list_devices",
+    usage:
+      "When the user asks what is in the house, or before you control a device you have not already looked up this turn.",
+  },
+  {
+    tool: "get_state",
+    usage:
+      "When the question is about how long something has held its current value — empty rooms, lights left on — not when they want a history of changes.",
+  },
+  {
+    tool: "control_device",
+    usage:
+      "When the user asks you to change a light, switch, or other device. Confirm the device id and capability from list_devices first if you do not already have them.",
+  },
+  {
+    tool: "get_device_events",
+    usage:
+      "When the user asks what happened to a device or why it changed — use cause to separate your earlier actions from someone flipping the wall switch.",
+  },
 ];
 
 export async function seed(db: Db, config: Config): Promise<void> {

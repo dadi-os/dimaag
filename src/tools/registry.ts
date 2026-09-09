@@ -3,6 +3,10 @@ import { spawnAgent } from "./dimaag/spawn-agent.js";
 import { modifyAgent } from "./dimaag/modify-agent.js";
 import { grantTool } from "./dimaag/grant-tool.js";
 import { revokeTool } from "./dimaag/revoke-tool.js";
+import { listDevices } from "./ghar/list-devices.js";
+import { getState } from "./ghar/get-state.js";
+import { controlDevice } from "./ghar/control-device.js";
+import { getDeviceEvents } from "./ghar/get-device-events.js";
 import { recall } from "./yaad/recall.js";
 import { query } from "./yaad/query.js";
 import { getNode } from "./yaad/get-node.js";
@@ -22,6 +26,10 @@ const definitions = [
   query,
   getNode,
   ingest,
+  listDevices,
+  getState,
+  controlDevice,
+  getDeviceEvents,
 ] as unknown as ToolDefinition[];
 
 const byName = new Map<string, ToolDefinition>();

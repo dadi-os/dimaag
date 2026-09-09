@@ -5,7 +5,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
-import { DWAR_BASE_URL, HOST, LOG_LEVEL, PORT, YAAD_BASE_URL } from "./constants.js";
+import {
+  DWAR_BASE_URL,
+  GHAR_BASE_URL,
+  HOST,
+  LOG_LEVEL,
+  PORT,
+  YAAD_BASE_URL,
+} from "./constants.js";
 
 const serviceRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const tomlPath = join(serviceRoot, "config.toml");
@@ -24,6 +31,11 @@ const fileSchema = z.object({
     retry_attempts: z.number().int().positive(),
     backoff_ms: z.array(z.number().min(0)).nonempty(),
   }),
+  ghar: z.object({
+    timeout_ms: z.number().int().positive(),
+    retry_attempts: z.number().int().positive(),
+    backoff_ms: z.array(z.number().min(0)).nonempty(),
+  }),
 });
 
 export type FileConfig = z.infer<typeof fileSchema>;
@@ -34,6 +46,7 @@ export type Config = {
     databaseUrl: string;
     dwarBaseUrl: string;
     yaadBaseUrl: string;
+    gharBaseUrl: string;
     host: string;
     port: number;
     logLevel: typeof LOG_LEVEL;
@@ -41,6 +54,7 @@ export type Config = {
   runtime: FileConfig["runtime"];
   dwar: FileConfig["dwar"];
   yaad: FileConfig["yaad"];
+  ghar: FileConfig["ghar"];
 };
 
 export function loadFileConfig(): FileConfig {
@@ -83,6 +97,7 @@ export function loadConfig(): Config {
       databaseUrl,
       dwarBaseUrl: DWAR_BASE_URL,
       yaadBaseUrl: YAAD_BASE_URL,
+      gharBaseUrl: GHAR_BASE_URL,
       host: HOST,
       port: PORT,
       logLevel: LOG_LEVEL,
@@ -90,6 +105,7 @@ export function loadConfig(): Config {
     runtime: file.runtime,
     dwar: file.dwar,
     yaad: file.yaad,
+    ghar: file.ghar,
   };
   return cached;
 }
