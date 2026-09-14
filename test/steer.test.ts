@@ -6,6 +6,7 @@ import { SteerQueue, STEER_TURN_PREFIX } from "../src/runtime/steer.js";
 import { LaneLocks } from "../src/runtime/locks.js";
 import { IntentQueue } from "../src/runtime/intents.js";
 import { executeTool } from "../src/runtime/tools.js";
+import { HostSessions } from "../src/runtime/sessions.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import { STEER_REASONING } from "../src/types/domain.js";
 
@@ -67,6 +68,7 @@ test("steer_reasoning starts a run when reasoning is idle", async () => {
       intents: new IntentQueue(),
       locks,
       transcript: new TranscriptStore(),
+      sessions: new HostSessions(),
       enqueueConversation: () => {},
       enqueueReasoning: (id) => {
         started.push(id);
@@ -99,6 +101,7 @@ test("steer_reasoning does not start a second run while reasoning is busy", asyn
       intents: new IntentQueue(),
       locks,
       transcript: new TranscriptStore(),
+      sessions: new HostSessions(),
       enqueueConversation: () => {},
       enqueueReasoning: (id) => {
         started.push(id);

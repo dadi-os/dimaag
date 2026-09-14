@@ -333,6 +333,89 @@ test("GET /agents includes running and it flips true while a lane holds the lock
   await app.close();
 });
 
+test("GET /agents surfaces sessions after worker host tools", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const nas = mockNas({
+    browserScreenshot: () => Buffer.from("png"),
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    nas,
+    config,
+    log: silentLog,
+  });
+  const app = await buildApp(config, {
+    db: handle.db,
+    sql: handle.sql,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    nas,
+    runtime,
+  });
+
+  const idle = await app.inject({ method: "GET", url: "/agents" });
+  assert.equal(idle.statusCode, 200);
+  const idleRoot = (
+    idle.json() as {
+      agents: Array<{ id: string; sessions: { browsers: number[]; terminals: unknown[] } }>;
+    }
+  ).agents.find((agent) => agent.id === ROOT_DADI_ID);
+  assert.ok(idleRoot);
+  assert.deepEqual(idleRoot.sessions, { browsers: [], terminals: [] });
+
+  const shot = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    type: "tool_use",
+    id: "shot1",
+    name: "browser_screenshot",
+    input: { browser_id: 10, scope: "display" },
+  });
+  assert.equal(shot.isError, false, shot.content);
+
+  const exec = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    type: "tool_use",
+    id: "ex1",
+    name: "terminal_execute_shell",
+    input: { terminal_id: "t1", command: "git status" },
+  });
+  assert.equal(exec.isError, false, exec.content);
+
+  const live = await app.inject({ method: "GET", url: "/agents" });
+  const liveRoot = (
+    live.json() as {
+      agents: Array<{
+        id: string;
+        sessions: { browsers: number[]; terminals: Array<{ id: string; last_command: string | null }> };
+      }>;
+    }
+  ).agents.find((agent) => agent.id === ROOT_DADI_ID);
+  assert.ok(liveRoot);
+  assert.deepEqual(liveRoot.sessions.browsers, [10]);
+  assert.deepEqual(liveRoot.sessions.terminals, [{ id: "t1", last_command: "git status" }]);
+
+  const closed = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    type: "tool_use",
+    id: "cb1",
+    name: "browser_close",
+    input: { browser_id: 10 },
+  });
+  assert.equal(closed.isError, false, closed.content);
+
+  const afterClose = await app.inject({ method: "GET", url: "/agents" });
+  const afterRoot = (
+    afterClose.json() as {
+      agents: Array<{ id: string; sessions: { browsers: number[] } }>;
+    }
+  ).agents.find((agent) => agent.id === ROOT_DADI_ID);
+  assert.ok(afterRoot);
+  assert.deepEqual(afterRoot.sessions.browsers, []);
+
+  await app.close();
+});
+
 test("GET /agents/root returns the null-parent agent; 409 when more than one", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const runtime = createRuntime({

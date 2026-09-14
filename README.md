@@ -67,7 +67,7 @@ HTTP errors: `{ "error": { "type": "<code>", "message": "..." } }`. Shared codes
 
 ## Agents
 
-Every agent is a row, including root Dadi (seeded at migration). Clients discover root via `GET /agents/root`. `parent_agent_id` is modification authority only. There is no thread table — a "Dadi thread" is a child of root.
+Every agent is a row, including root Dadi (seeded at migration). Clients discover root via `GET /agents/root`. `parent_agent_id` is modification authority only. There is no thread table — a "Dadi thread" is a child of root. `GET /agents` also includes ephemeral `running` (lane locks) and `sessions` (Nas browsers and terminals the agent recently drove). Spawn/list do not attach; worker tools that take `browser_id` or `terminal_id` do. Both maps die with the process.
 
 ## The user is null
 
@@ -187,7 +187,7 @@ On dadiOS, `/usr/bin/dadi` wraps the same client with `DIMAAG_URL=http://dimaag.
 
 ## Persistence
 
-`agents`, `agent_logs`, and `scheduled_messages` survive restart. Live transcript, scratchpads, locks, steer/intent queues, and the event stream do not. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
+`agents`, `agent_logs`, and `scheduled_messages` survive restart. Live transcript, scratchpads, locks, steer/intent queues, host `sessions`, and the event stream do not. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
 
 Schedule tools (`dimaag_schedule_message`, `dimaag_list_schedules`, `dimaag_cancel_schedule`) persist one-shot and recurring deliveries; the in-process scheduler ticks from `[schedule].tick_seconds` in `config.toml` (wall clock uses `TIMEZONE` in `constants.ts`).
 
@@ -198,7 +198,7 @@ Schedule tools (`dimaag_schedule_message`, `dimaag_list_schedules`, `dimaag_canc
 | `GET` | `/health` | `{ "status": "ok" }` |
 | `POST` | `/messages` | user → agent; images described via Dwar |
 | `GET` | `/events` | SSE live events; no replay |
-| `GET` | `/agents` | all agents + `running` |
+| `GET` | `/agents` | all agents + `running` + `sessions` |
 | `GET` | `/agents/root` | sole root agent |
 | `GET` | `/agents/:id` | agent, children, grants |
 | `GET` | `/agents/:id/logs` | per-agent audit trail |

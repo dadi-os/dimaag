@@ -24,6 +24,7 @@ import { IntentQueue } from "./intents.js";
 import { LaneLocks } from "./locks.js";
 import { runReasoningLoop } from "./reasoning.js";
 import { SteerQueue } from "./steer.js";
+import { HostSessions } from "./sessions.js";
 import { executeTool, type ToolContext, type ToolExecResult } from "./tools.js";
 import { TranscriptStore } from "./transcript.js";
 import { createScheduler, type Scheduler } from "./scheduler.js";
@@ -42,6 +43,7 @@ export type Runtime = {
   events: EventBus;
   hath: HathGateway;
   browsers: BrowserDriver;
+  sessions: HostSessions;
   scheduler: Scheduler;
   enqueueConversation: (agentId: string) => void;
   enqueueReasoning: (agentId: string) => void;
@@ -66,6 +68,7 @@ export function createRuntime(opts: {
   const events = new EventBus();
   const hath = new HathGateway(events, opts.config.hath.timeout_ms);
   const browsers = new BrowserDriver(opts.nas, opts.config);
+  const sessions = new HostSessions();
   const reasoningScratchpads = new Map<string, DwarMessage[]>();
   const conversationScratchpads = new Map<string, DwarMessage[]>();
   let pending = 0;
@@ -131,6 +134,7 @@ export function createRuntime(opts: {
     events,
     hath,
     browsers,
+    sessions,
     scheduler,
     enqueueConversation,
     enqueueReasoning,
@@ -154,6 +158,7 @@ export function createRuntime(opts: {
       locks,
       transcript,
       events,
+      sessions,
       enqueueConversation,
       enqueueReasoning,
     };

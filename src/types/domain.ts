@@ -2,6 +2,12 @@ export type Lane = "reasoning" | "conversation";
 
 export type LogEvent = "thought" | "tool_call" | "tool_result" | "message";
 
+/** Nas browsers/terminals this agent recently drove. Empty after process restart. */
+export type AgentSessions = {
+  browsers: number[];
+  terminals: Array<{ id: string; last_command: string | null }>;
+};
+
 export type AgentRecord = {
   id: string;
   name: string;
@@ -10,6 +16,8 @@ export type AgentRecord = {
   active: boolean;
   /** In-memory lane lock ownership. Always false right after a process restart. */
   running: { reasoning: boolean; conversation: boolean };
+  /** In-memory host attachments. Always empty right after a process restart. */
+  sessions: AgentSessions;
   created_at: string;
   updated_at: string;
 };

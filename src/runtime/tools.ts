@@ -148,6 +148,16 @@ export async function executeTool(
   ctx: ToolContext,
   call: DwarToolUseBlock,
 ): Promise<ToolExecResult> {
+  const result = await dispatchTool(ctx, call);
+  ctx.sessions.observe(ctx.callerId, call.name, call.input, result.isError);
+  return result;
+}
+
+/** Route one tool_use to the matching handler without session bookkeeping. */
+async function dispatchTool(
+  ctx: ToolContext,
+  call: DwarToolUseBlock,
+): Promise<ToolExecResult> {
   try {
     if (call.name === YIELD) {
       yieldInput.parse(call.input ?? {});

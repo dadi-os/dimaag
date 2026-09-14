@@ -29,8 +29,8 @@ function parseLogEvent(value: string): LogEvent {
   throw new DimaagError(500, "internal_error", `invalid log event in database: ${value}`);
 }
 
-/** Agent row without the ephemeral `running` lock flags (filled by routers). */
-export function toAgentRecord(row: AgentRow): Omit<AgentRecord, "running"> {
+/** Agent row without ephemeral `running` / `sessions` (filled by routers). */
+export function toAgentRecord(row: AgentRow): Omit<AgentRecord, "running" | "sessions"> {
   return {
     id: row.id,
     name: row.name,

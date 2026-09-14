@@ -16,6 +16,7 @@ import type { GharClient } from "../ghar/client.js";
 import type { NasClient } from "../nas/client.js";
 import type { YaadClient } from "../yaad/client.js";
 import type { HathGateway } from "../runtime/hath.js";
+import type { HostSessions } from "../runtime/sessions.js";
 
 export type ToolExecResult = {
   content: string;
@@ -39,6 +40,7 @@ export type ToolContext = {
   locks: LaneLocks;
   transcript: TranscriptStore;
   events: EventBus;
+  sessions: HostSessions;
   enqueueConversation: (agentId: string) => void;
   enqueueReasoning: (agentId: string) => void;
 };

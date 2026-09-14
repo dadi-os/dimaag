@@ -5,19 +5,20 @@ import type { FastifyInstance } from "fastify";
 import { agentLogs, agents, agentTools, tools } from "../db/schema.js";
 import type { AgentRow } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
-import type { LaneLocks } from "../runtime/locks.js";
 import { requireAgent } from "../runtime/tools.js";
 import { toAgentRecord, toLogRecord } from "../serialize.js";
 import type { AgentRecord } from "../types/domain.js";
 import { idParam, logsQuery, parse } from "./schemas.js";
 
-function withRunning(row: AgentRow, locks: LaneLocks): AgentRecord {
+/** Attach ephemeral running locks and host sessions for API responses. */
+function withLive(row: AgentRow, runtime: FastifyInstance["runtime"]): AgentRecord {
   return {
     ...toAgentRecord(row),
     running: {
-      reasoning: locks.isHeld(row.id, "reasoning"),
-      conversation: locks.isHeld(row.id, "conversation"),
+      reasoning: runtime.locks.isHeld(row.id, "reasoning"),
+      conversation: runtime.locks.isHeld(row.id, "conversation"),
     },
+    sessions: runtime.sessions.forAgent(row.id),
   };
 }
 
@@ -36,8 +37,8 @@ async function agentDetail(app: FastifyInstance, agentRow: AgentRow) {
     .innerJoin(tools, eq(agentTools.toolId, tools.id))
     .where(eq(agentTools.agentId, agentRow.id));
   return {
-    ...withRunning(agentRow, app.runtime.locks),
-    children: childRows.map((row) => withRunning(row, app.runtime.locks)),
+    ...withLive(agentRow, app.runtime),
+    children: childRows.map((row) => withLive(row, app.runtime)),
     tools: toolRows.map((row) => ({
       name: row.name,
       description: row.description,
@@ -54,7 +55,7 @@ export async function registerAgents(app: FastifyInstance): Promise<void> {
   app.get("/agents", async () => {
     const rows = await app.db.select().from(agents);
     return {
-      agents: rows.map((row) => withRunning(row, app.runtime.locks)),
+      agents: rows.map((row) => withLive(row, app.runtime)),
     };
   });
 
