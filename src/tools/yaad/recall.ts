@@ -9,9 +9,8 @@ const input = z.object({
 
 /** Semantic memory search via Yaad `/recall`. */
 export const recall = defineTool({
-  name: "recall",
-  description:
-    'Search memory by meaning. Use this for open questions about people, past events, preferences, and anything you\'d answer with "what do I know about X." Returns ranked results with a `sufficient` flag — when that is false, the memory graph did not have enough to answer confidently, and you should say so rather than filling the gap yourself.',
+  name: "yaad_recall",
+  description: 'Search memory by meaning. Use this for open questions about people, past events, preferences, and anything you\'d answer with "what do I know about X." Returns ranked results with a `sufficient` flag — when that is false, the memory graph did not have enough to answer confidently, and you should say so rather than filling the gap yourself.',
   input,
   inputSchema: {
     type: "object",

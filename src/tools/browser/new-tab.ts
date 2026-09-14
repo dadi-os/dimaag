@@ -11,7 +11,7 @@ const input = z
 
 /** Open a new tab. Intended for workers. */
 export const newTab = defineTool({
-  name: "new_tab",
+  name: "browser_new_tab",
   description: "Open a new tab in the browser. Optional url navigates immediately. Returns tab_id (CDP target id).",
   input,
   inputSchema: {

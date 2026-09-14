@@ -112,7 +112,7 @@ test("integration: snapshot refs, actions, tabs, truncate, stale_ref", async (t)
     await assert.rejects(
       () => driver.click(browserId, tabId, buttonRef),
       (err: unknown) => {
-        assert.ok(err && typeof err === "object" && "type" in err);
+        assert.ok(err && typeof err === "object" && "browser_type" in err);
         assert.equal((err as { type: string }).type, "stale_ref");
         return true;
       },

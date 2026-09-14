@@ -11,9 +11,8 @@ const input = z
 
 /** Write a host file via Nas. Intended for workers. */
 export const writeFile = defineTool({
-  name: "write_file",
-  description:
-    "Create or overwrite a text file on the host (absolute paths; Nas denies writes to OS/dadiOS runtime trees). Path must be absolute. Parent directories are created as needed.",
+  name: "terminal_write_file",
+  description: "Create or overwrite a text file on the host (absolute paths; Nas denies writes to OS/dadiOS runtime trees). Path must be absolute. Parent directories are created as needed.",
   input,
   inputSchema: {
     type: "object",

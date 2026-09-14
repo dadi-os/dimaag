@@ -6,9 +6,8 @@ const input = z.object({}).strict();
 
 /** List Nas browsers. Intended for managers. */
 export const listBrowsers = defineTool({
-  name: "list_browsers",
-  description:
-    "List live Nas browsers (id, display, cdp_url, healthy). healthy false means Xvfb is up but Chromium is not answering CDP.",
+  name: "browser_list",
+  description: "List live Nas browsers (id, display, cdp_url, healthy). healthy false means Xvfb is up but Chromium is not answering CDP.",
   input,
   inputSchema: {
     type: "object",

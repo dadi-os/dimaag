@@ -10,7 +10,7 @@ const input = z
 
 /** Kill a host terminal via Nas `DELETE /terminals/{id}`. Intended for managers. */
 export const closeTerminal = defineTool({
-  name: "close_terminal",
+  name: "terminal_close",
   description: "Destroy a host terminal session by id. Fails loudly if the terminal does not exist.",
   input,
   inputSchema: {

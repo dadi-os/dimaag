@@ -22,9 +22,9 @@ const input = z
 
 /** Discover devices and their capabilities via Ghar `GET /devices`. */
 export const listDevices = defineTool({
-  name: "list_devices",
+  name: "ghar_list_devices",
   description:
-    "Find what devices exist in the house and what each one can do. Call this before control_device when you do not already know the device id and its capabilities from this turn — the capabilities listed here are exactly the ones control_device accepts. Prefer filtering by room, tag, or capability instead of listing everything and reasoning over the full set.",
+    "Find what devices exist in the house and what each one can do. Call this before ghar_control_device when you do not already know the device id and its capabilities from this turn — the capabilities listed here are exactly the ones ghar_control_device accepts. Prefer filtering by room, tag, or capability instead of listing everything and reasoning over the full set.",
   input,
   inputSchema: {
     type: "object",

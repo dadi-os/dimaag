@@ -10,9 +10,8 @@ const input = z
 
 /** Create a host terminal via Nas `POST /terminals`. Intended for managers. */
 export const spawnTerminal = defineTool({
-  name: "spawn_terminal",
-  description:
-    "Start a new host terminal session. Returns a terminal_id that you hand to a worker (in its system prompt or a message). Optional cwd defaults to Nas state dir (dadi home).",
+  name: "terminal_spawn",
+  description: "Start a new host terminal session. Returns a terminal_id that you hand to a worker (in its system prompt or a message). Optional cwd defaults to Nas state dir (dadi home).",
   input,
   inputSchema: {
     type: "object",

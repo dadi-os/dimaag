@@ -6,9 +6,8 @@ const input = z.object({}).strict();
 
 /** List host terminals via Nas `GET /terminals`. Intended for managers. */
 export const listTerminals = defineTool({
-  name: "list_terminals",
-  description:
-    "List live host terminals (id, cwd, created_at, busy). Busy means a command is still running in that pane.",
+  name: "terminal_list",
+  description: "List live host terminals (id, cwd, created_at, busy). Busy means a command is still running in that pane.",
   input,
   inputSchema: {
     type: "object",

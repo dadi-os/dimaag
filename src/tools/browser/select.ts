@@ -13,9 +13,9 @@ const input = z
 
 /** Select an option by ref. Intended for workers. */
 export const selectOption = defineTool({
-  name: "select",
+  name: "browser_select",
   description:
-    "Choose an option on a <select> by option value or label. Ref must come from the latest accessibility_tree.",
+    "Choose an option on a <browser_select> by option value or label. Ref must come from the latest browser_accessibility_tree.",
   input,
   inputSchema: {
     type: "object",

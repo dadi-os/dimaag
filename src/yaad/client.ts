@@ -66,10 +66,23 @@ const ingestResponseSchema = z
   })
   .passthrough();
 
+const nodeHistoryRecordSchema = z
+  .object({
+    id: z.string(),
+    node_id: z.string().uuid(),
+    field: z.enum(["title", "body", "occurred_at", "deleted"]),
+    old_value: z.string().nullable(),
+    new_value: z.string().nullable(),
+    changed_at: z.string(),
+    source: z.enum(["manual", "agent", "ingest"]),
+  })
+  .passthrough();
+
 export type RecallResponse = z.infer<typeof recallResponseSchema>;
 export type QueryResponse = z.infer<typeof queryResponseSchema>;
 export type NodeResponse = z.infer<typeof nodeResponseSchema>;
 export type IngestResponse = z.infer<typeof ingestResponseSchema>;
+export type NodeHistoryRecord = z.infer<typeof nodeHistoryRecordSchema>;
 
 export type QueryRequest = {
   kind?: "person" | "memory" | "plan" | "place";
@@ -94,6 +107,11 @@ export type YaadClient = {
   query: (body: QueryRequest) => Promise<QueryResponse>;
   getNode: (id: string) => Promise<NodeResponse>;
   ingest: (body: IngestRequest) => Promise<IngestResponse>;
+  getNodeHistory: (id: string) => Promise<{ history: NodeHistoryRecord[] }>;
+  searchHistory: (body: {
+    query: string;
+    limit?: number;
+  }) => Promise<{ results: NodeHistoryRecord[] }>;
 };
 
 /** Build a retrying axios client pointed at `YAAD_BASE_URL`. */
@@ -119,6 +137,17 @@ export function createYaadClient(config: Config): YaadClient {
     query: (body) => post("/query", body, queryResponseSchema),
     getNode: (id) => get(`/nodes/${id}`, nodeResponseSchema),
     ingest: (body) => post("/ingest", body, ingestResponseSchema),
+    getNodeHistory: (id) =>
+      get(
+        `/nodes/${id}/history`,
+        z.object({ history: z.array(nodeHistoryRecordSchema) }).passthrough(),
+      ),
+    searchHistory: (body) =>
+      post(
+        "/history/search",
+        body,
+        z.object({ results: z.array(nodeHistoryRecordSchema) }).passthrough(),
+      ),
   };
 }
 

@@ -19,12 +19,12 @@ after(async () => {
 });
 
 test("toolId is deterministic for the same name", () => {
-  assert.equal(toolId("spawn_agent"), toolId("spawn_agent"));
-  assert.equal(toolId("modify_agent"), toolId("modify_agent"));
+  assert.equal(toolId("dimaag_spawn_agent"), toolId("dimaag_spawn_agent"));
+  assert.equal(toolId("dimaag_modify_agent"), toolId("dimaag_modify_agent"));
 });
 
 test("toolId produces distinct ids for distinct names", () => {
-  assert.notEqual(toolId("spawn_agent"), toolId("modify_agent"));
+  assert.notEqual(toolId("dimaag_spawn_agent"), toolId("dimaag_modify_agent"));
 });
 
 test("findTool returns undefined for a name not in the registry", () => {
@@ -32,11 +32,11 @@ test("findTool returns undefined for a name not in the registry", () => {
 });
 
 test("findTool returns registered tools", () => {
-  assert.equal(findTool("spawn_agent")?.name, "spawn_agent");
-  assert.equal(findTool("grant_tool")?.name, "grant_tool");
+  assert.equal(findTool("dimaag_spawn_agent")?.name, "dimaag_spawn_agent");
+  assert.equal(findTool("dimaag_grant_tool")?.name, "dimaag_grant_tool");
 });
 
-test("syncTools throws when an agent_tools grant points at a tool not in the registry", async () => {
+test("syncTools prunes grants and tool rows not in the registry", async () => {
   await handle.sql`TRUNCATE scheduled_messages, agent_logs, agent_tools, tools, agents CASCADE`;
 
   const agentId = await insertAgent(handle.db, {
@@ -53,19 +53,19 @@ test("syncTools throws when an agent_tools grant points at a tool not in the reg
   await handle.db.insert(agentTools).values({
     agentId,
     toolId: orphanToolId,
-    usage: "should trip sync",
+    usage: "should be pruned",
   });
 
-  await assert.rejects(
-    () => syncTools(handle.db),
-    (err: unknown) => {
-      assert.ok(err instanceof Error);
-      assert.match(
-        err.message,
-        new RegExp(`agent ${agentId} -> tool ${orphanToolId}`),
-      );
-      return true;
-    },
+  await assert.doesNotReject(() => syncTools(handle.db));
+  const leftoverGrants = await handle.db.select().from(agentTools);
+  assert.equal(
+    leftoverGrants.filter((row) => row.toolId === orphanToolId).length,
+    0,
+  );
+  const leftoverTools = await handle.db.select().from(tools);
+  assert.equal(
+    leftoverTools.filter((row) => row.id === orphanToolId).length,
+    0,
   );
 });
 

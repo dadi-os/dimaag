@@ -13,9 +13,9 @@ const input = z
 
 /** Navigate a tab. Intended for workers. */
 export const navigate = defineTool({
-  name: "navigate",
+  name: "browser_navigate",
   description:
-    "Navigate the focused tab (or tab_id) to a URL. Returns the final url and title. Prefer accessibility_tree after navigation to act by ref.",
+    "Navigate the focused tab (or tab_id) to a URL. Returns the final url and title. Prefer browser_accessibility_tree after navigation to act by ref.",
   input,
   inputSchema: {
     type: "object",

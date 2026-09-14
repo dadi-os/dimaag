@@ -11,9 +11,9 @@ const input = z
 
 /** Store a fact/event via Yaad `/ingest` (source always `agent`). */
 export const ingest = defineTool({
-  name: "ingest",
+  name: "yaad_ingest",
   description:
-    "Store something in memory. Pass the fact or event as plain text — Yaad extracts the people, places, plans, and relationships itself, and reconciles them against what is already stored rather than creating duplicates. Use participant_ids when you already know the node ids of people involved (from a prior recall or query) so the extraction pins to those exact people instead of matching by name.",
+    "Store something in memory. Pass the fact or event as plain text — Yaad extracts the people, places, plans, and relationships itself, and reconciles them against what is already stored rather than creating duplicates. Use participant_ids when you already know the node ids of people involved (from a prior yaad_recall or yaad_query) so the extraction pins to those exact people instead of matching by name.",
   input,
   inputSchema: {
     type: "object",

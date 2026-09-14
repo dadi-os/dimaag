@@ -10,9 +10,8 @@ const input = z
 
 /** List tabs in a browser. Intended for workers. */
 export const listTabs = defineTool({
-  name: "list_tabs",
-  description:
-    "List open tabs for a browser. tab_id is the CDP target id. focused marks the tab used when tab_id is omitted on other tools.",
+  name: "browser_list_tabs",
+  description: "List open tabs for a browser. tab_id is the CDP target id. focused marks the tab used when tab_id is omitted on other tools.",
   input,
   inputSchema: {
     type: "object",

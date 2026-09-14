@@ -19,9 +19,8 @@ const input = z
 
 /** Wait for a condition. Intended for workers. */
 export const waitFor = defineTool({
-  name: "wait_for",
-  description:
-    "Wait until visible text appears, a ref is visible, and/or the network is idle. At least one condition is required. Default timeout 10000ms.",
+  name: "browser_wait_for",
+  description: "Wait until visible text appears, a ref is visible, and/or the network is idle. At least one condition is required. Default timeout 10000ms.",
   input,
   inputSchema: {
     type: "object",

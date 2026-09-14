@@ -14,9 +14,9 @@ const input = z
 
 /** Grep host files via Nas (ripgrep). Intended for workers. */
 export const grepFiles = defineTool({
-  name: "grep",
+  name: "terminal_grep",
   description:
-    "Search file contents on the host (absolute paths; Nas denies writes to OS/dadiOS runtime trees) with a regex (ripgrep). Optional glob restricts which files are searched.",
+    "Search file contents on the host (absolute paths; Nas denies writes to OS/dadiOS runtime trees) with a regex (ripgrep). Optional terminal_glob restricts which files are searched.",
   input,
   inputSchema: {
     type: "object",

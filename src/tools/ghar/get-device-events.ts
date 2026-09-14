@@ -21,7 +21,7 @@ const input = z
 
 /** Historical device events via Ghar `GET /events`. */
 export const getDeviceEvents = defineTool({
-  name: "get_device_events",
+  name: "ghar_get_device_events",
   description:
     `Read what happened in the house from the device event log. Filter by device, room, tag, attribute key, time range, and cause. cause distinguishes agent actions from someone flipping a physical switch (external) and from other user-attributed commands — that distinction is usually the point of the question. There is no live watcher: this is how you learn house history. Returns at most ${MAX_EVENTS} rows; pass since as the last event id you saw to page forward without duplicates.`,
   input,

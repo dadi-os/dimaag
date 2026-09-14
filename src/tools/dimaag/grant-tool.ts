@@ -13,9 +13,8 @@ const input = z.object({
 
 /** Grant a registry tool to a direct child, with a usage hint. */
 export const grantTool = defineTool({
-  name: "grant_tool",
-  description:
-    "Give one of your direct children a tool. usage explains when and why that specific agent should reach for it, which the child sees alongside the tool's own description.",
+  name: "dimaag_grant_tool",
+  description: "Give one of your direct children a tool. usage explains when and why that specific agent should reach for it, which the child sees alongside the tool's own description.",
   input,
   inputSchema: {
     type: "object",

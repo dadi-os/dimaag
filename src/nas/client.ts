@@ -133,6 +133,53 @@ export type GrepRequest = {
 export type CreateBrowserResponse = z.infer<typeof createBrowserResponseSchema>;
 export type BrowserInfo = z.infer<typeof browserInfoSchema>;
 
+const statusOkSchema = z.object({ status: z.string() }).passthrough();
+
+const pullUpdatesResponseSchema = z
+  .object({
+    status: z.string(),
+    scope: z.string(),
+    reboot_required: z.boolean(),
+  })
+  .passthrough();
+
+const nasStatusSchema = z
+  .object({
+    uptime_seconds: z.number(),
+    services: z.array(
+      z.object({ name: z.string(), healthy: z.boolean() }).passthrough(),
+    ),
+    disk: z
+      .object({ free_bytes: z.number(), total_bytes: z.number() })
+      .passthrough(),
+  })
+  .passthrough();
+
+const nasLogEntrySchema = z
+  .object({
+    time: z.string(),
+    service: z.string(),
+    level: z.string(),
+    msg: z.string(),
+    code: z.string().optional(),
+    raw: z.string().optional(),
+  })
+  .passthrough();
+
+export type NasStatus = z.infer<typeof nasStatusSchema>;
+export type NasLogEntry = z.infer<typeof nasLogEntrySchema>;
+export type PullUpdatesScope = "modules" | "os" | "all";
+export type PullUpdatesResponse = z.infer<typeof pullUpdatesResponseSchema>;
+
+export type NasLogsParams = {
+  services?: string;
+  level?: string;
+  q?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+};
+
 /** Nas surface used by agent tools. */
 export type NasClient = {
   createTerminal: (body?: CreateTerminalRequest) => Promise<CreateTerminalResponse>;
@@ -150,6 +197,13 @@ export type NasClient = {
   listBrowsers: () => Promise<BrowserInfo[]>;
   closeBrowser: (id: number) => Promise<void>;
   browserScreenshot: (id: number) => Promise<Buffer>;
+  getStatus: () => Promise<NasStatus>;
+  getLogs: (params?: NasLogsParams) => Promise<{ entries: NasLogEntry[] }>;
+  restartModule: (name: string) => Promise<{ status: string }>;
+  pullUpdates: (scope: PullUpdatesScope) => Promise<PullUpdatesResponse>;
+  stackUp: () => Promise<{ status: string }>;
+  stackDown: () => Promise<{ status: string }>;
+  provision: (nodeName: string) => Promise<{ bundle: string }>;
 };
 
 /** Build a retrying axios client pointed at `NAS`. */
@@ -230,6 +284,23 @@ export function createNasClient(config: Config): NasClient {
       }
       return data;
     },
+    getStatus: () => get("/status", nasStatusSchema),
+    getLogs: (params = {}) =>
+      get("/logs", z.object({ entries: z.array(nasLogEntrySchema) }).passthrough(), {
+        params: omitUndefined(params as Record<string, unknown>),
+      }),
+    restartModule: (name) =>
+      post(`/modules/${encodeURIComponent(name)}/restart`, {}, statusOkSchema),
+    pullUpdates: (scope) =>
+      post("/pull_updates", { scope }, pullUpdatesResponseSchema),
+    stackUp: () => post("/stack/up", {}, statusOkSchema),
+    stackDown: () => post("/stack/down", {}, statusOkSchema),
+    provision: (nodeName) =>
+      post(
+        "/provision",
+        { node_name: nodeName },
+        z.object({ bundle: z.string() }).passthrough(),
+      ),
   };
 }
 

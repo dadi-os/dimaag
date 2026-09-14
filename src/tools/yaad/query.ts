@@ -14,9 +14,9 @@ const input = z.object({
 
 /** Exact/filter memory lookup via Yaad `/query`. */
 export const query = defineTool({
-  name: "query",
+  name: "yaad_query",
   description:
-    'Look up memory by exact criteria. Use this for date ranges ("what\'s on my calendar Tuesday"), exact names ("the person named Marcus"), and filtering by kind or plan status. This is exact matching, not similarity — for fuzzy questions use recall instead. At least one filter is required. Events spanning multiple days are returned for any date they overlap, so a trip from the 3rd to the 8th appears when you ask about the 5th.',
+    'Look up memory by exact criteria. Use this for date ranges ("what\'s on my calendar Tuesday"), exact names ("the person named Marcus"), and filtering by kind or plan status. This is exact matching, not similarity — for fuzzy questions use yaad_recall instead. At least one filter is required. Events spanning multiple days are returned for any date they overlap, so a trip from the 3rd to the 8th appears when you ask about the 5th.',
   input,
   inputSchema: {
     type: "object",

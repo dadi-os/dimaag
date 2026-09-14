@@ -11,9 +11,9 @@ const input = z
 
 /** Send raw tmux keys to a terminal via Nas. Intended for workers. */
 export const sendKeys = defineTool({
-  name: "send_keys",
+  name: "terminal_send_keys",
   description:
-    "Send keystrokes to a host terminal (tmux send-keys). Examples: [\"C-c\"] to interrupt a running command, [\"y\", \"Enter\"] to answer a prompt. Use after execute_shell times out when you need to stop or interact with the still-running process.",
+    "Send keystrokes to a host terminal (tmux send-keys). Examples: [\"C-c\"] to interrupt a running command, [\"y\", \"Enter\"] to answer a prompt. Use after terminal_execute_shell times out when you need to stop or interact with the still-running process.",
   input,
   inputSchema: {
     type: "object",

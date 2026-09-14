@@ -35,17 +35,17 @@ after(async () => {
 });
 
 const NAS_TOOLS = [
-  "spawn_terminal",
-  "list_terminals",
-  "close_terminal",
-  "execute_shell",
-  "read_terminal",
-  "send_keys",
-  "read_file",
-  "write_file",
-  "edit_file",
-  "glob",
-  "grep",
+  "terminal_spawn",
+  "terminal_list",
+  "terminal_close",
+  "terminal_execute_shell",
+  "terminal_read",
+  "terminal_send_keys",
+  "terminal_read_file",
+  "terminal_write_file",
+  "terminal_edit_file",
+  "terminal_glob",
+  "terminal_grep",
 ] as const;
 
 test("syncTools registers Nas tools and root Dadi holds them", async () => {
@@ -53,7 +53,7 @@ test("syncTools registers Nas tools and root Dadi holds them", async () => {
   for (const name of NAS_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 40);
+  assert.equal(allTools().length, 50);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
@@ -84,7 +84,7 @@ test("execute_shell passes through exit code, output, and timed_out", async () =
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "ex1",
-    name: "execute_shell",
+    name: "terminal_execute_shell",
     input: { terminal_id: "t1", command: "sleep 5", timeout_seconds: 1 },
   });
   assert.equal(result.isError, false);
@@ -117,7 +117,7 @@ test("Nas 404 becomes not_found tool error without killing the lane", async () =
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "ex2",
-    name: "execute_shell",
+    name: "terminal_execute_shell",
     input: { terminal_id: "t99", command: "echo hi" },
   });
   assert.equal(result.isError, true);
@@ -144,7 +144,7 @@ test("Nas 409 on execute_shell becomes busy tool error", async () => {
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "ex3",
-    name: "execute_shell",
+    name: "terminal_execute_shell",
     input: { terminal_id: "t1", command: "echo hi" },
   });
   assert.equal(result.isError, true);
@@ -170,7 +170,7 @@ test("edit_file 409 surfaces the match count", async () => {
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "ed1",
-    name: "edit_file",
+    name: "terminal_edit_file",
     input: {
       path: "/var/lib/dadi/a.txt",
       old_string: "foo",
@@ -198,11 +198,11 @@ test("worker granted execute_shell and read_file sees those plus send_message an
     systemPrompt: "use terminal t1",
     parentAgentId: ROOT_DADI_ID,
   });
-  for (const toolName of ["execute_shell", "read_file"] as const) {
+  for (const toolName of ["terminal_execute_shell", "terminal_read_file"] as const) {
     const granted = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
       type: "tool_use",
       id: `g-${toolName}`,
-      name: "grant_tool",
+      name: "dimaag_grant_tool",
       input: {
         agent_id: childId,
         tool_name: toolName,
@@ -219,6 +219,6 @@ test("worker granted execute_shell and read_file sees those plus send_message an
   });
   assert.deepEqual(
     ctx.tools.map((tool) => tool.name).sort(),
-    ["execute_shell", "read_file", SEND_MESSAGE, "yield"].sort(),
+    ["terminal_execute_shell", "terminal_read_file", SEND_MESSAGE, "yield"].sort(),
   );
 });

@@ -12,9 +12,8 @@ const input = z
 
 /** Exact-string edit of a host file via Nas. Intended for workers. */
 export const editFile = defineTool({
-  name: "edit_file",
-  description:
-    "Replace exactly one occurrence of old_string with new_string in a host file. Path must be absolute. If old_string matches zero or many times the tool errors with the match count — widen or narrow old_string and retry. Never falls back to a fuzzy match.",
+  name: "terminal_edit_file",
+  description: "Replace exactly one occurrence of old_string with new_string in a host file. Path must be absolute. If old_string matches zero or many times the tool errors with the match count — widen or narrow old_string and retry. Never falls back to a fuzzy match.",
   input,
   inputSchema: {
     type: "object",

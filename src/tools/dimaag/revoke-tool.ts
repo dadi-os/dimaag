@@ -13,9 +13,8 @@ const input = z.object({
 
 /** Revoke a previously granted tool from a direct child. */
 export const revokeTool = defineTool({
-  name: "revoke_tool",
-  description:
-    "Take a tool back from one of your direct children. Fails if the child does not hold that tool.",
+  name: "dimaag_revoke_tool",
+  description: "Take a tool back from one of your direct children. Fails if the child does not hold that tool.",
   input,
   inputSchema: {
     type: "object",

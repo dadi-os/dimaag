@@ -14,9 +14,9 @@ const input = z
 
 /** Type into a field by ref. Intended for workers. */
 export const typeText = defineTool({
-  name: "type",
+  name: "browser_type",
   description:
-    "Clear the field at ref, then type text. Set submit true to press Enter afterward. Refs come from accessibility_tree and go stale after the next snapshot.",
+    "Clear the field at ref, then browser_type text. Set submit true to press Enter afterward. Refs come from browser_accessibility_tree and go stale after the next snapshot.",
   input,
   inputSchema: {
     type: "object",

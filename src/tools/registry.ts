@@ -20,25 +20,35 @@ import { revokeTool } from "./dimaag/revoke-tool.js";
 import { scheduleMessage } from "./dimaag/schedule-message.js";
 import { listSchedules } from "./dimaag/list-schedules.js";
 import { cancelSchedule } from "./dimaag/cancel-schedule.js";
+import { getLogs as dimaagGetLogs } from "./dimaag/get-logs.js";
 import { listDevices } from "./ghar/list-devices.js";
 import { getState } from "./ghar/get-state.js";
 import { controlDevice } from "./ghar/control-device.js";
 import { getDeviceEvents } from "./ghar/get-device-events.js";
-import { closeTerminal } from "./nas/close-terminal.js";
-import { editFile } from "./nas/edit-file.js";
-import { executeShell } from "./nas/execute-shell.js";
-import { globFiles } from "./nas/glob.js";
-import { grepFiles } from "./nas/grep.js";
-import { listTerminals } from "./nas/list-terminals.js";
-import { readFile } from "./nas/read-file.js";
-import { readTerminal } from "./nas/read-terminal.js";
-import { sendKeys } from "./nas/send-keys.js";
-import { spawnTerminal } from "./nas/spawn-terminal.js";
-import { writeFile } from "./nas/write-file.js";
+import { getStatus as nasGetStatus } from "./nas/get-status.js";
+import { getLogs as nasGetLogs } from "./nas/get-logs.js";
+import { restartModule } from "./nas/restart-module.js";
+import { pullUpdates } from "./nas/pull-updates.js";
+import { stackUp } from "./nas/stack-up.js";
+import { stackDown } from "./nas/stack-down.js";
+import { provision } from "./nas/provision.js";
+import { closeTerminal } from "./terminal/close-terminal.js";
+import { editFile } from "./terminal/edit-file.js";
+import { executeShell } from "./terminal/execute-shell.js";
+import { globFiles } from "./terminal/glob.js";
+import { grepFiles } from "./terminal/grep.js";
+import { listTerminals } from "./terminal/list-terminals.js";
+import { readFile } from "./terminal/read-file.js";
+import { readTerminal } from "./terminal/read-terminal.js";
+import { sendKeys } from "./terminal/send-keys.js";
+import { spawnTerminal } from "./terminal/spawn-terminal.js";
+import { writeFile } from "./terminal/write-file.js";
 import { recall } from "./yaad/recall.js";
 import { query } from "./yaad/query.js";
 import { getNode } from "./yaad/get-node.js";
 import { ingest } from "./yaad/ingest.js";
+import { getNodeHistory } from "./yaad/get-node-history.js";
+import { searchHistory } from "./yaad/search-history.js";
 
 /**
  * Every non-embedded tool. Embedded lane plumbing (send_message, dispatch_message,
@@ -53,10 +63,13 @@ const definitions = [
   scheduleMessage,
   listSchedules,
   cancelSchedule,
+  dimaagGetLogs,
   recall,
   query,
   getNode,
   ingest,
+  getNodeHistory,
+  searchHistory,
   listDevices,
   getState,
   controlDevice,
@@ -86,6 +99,13 @@ const definitions = [
   waitFor,
   screenshot,
   extractText,
+  nasGetStatus,
+  nasGetLogs,
+  restartModule,
+  pullUpdates,
+  stackUp,
+  stackDown,
+  provision,
 ] as unknown as ToolDefinition[];
 
 const byName = new Map<string, ToolDefinition>();

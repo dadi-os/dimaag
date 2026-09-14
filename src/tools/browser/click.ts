@@ -12,9 +12,9 @@ const input = z
 
 /** Click by snapshot ref. Intended for workers. */
 export const click = defineTool({
-  name: "click",
+  name: "browser_click",
   description:
-    "Click the element with the given ref from the latest accessibility_tree. Fails with stale_ref if the ref is missing or ambiguous — take a fresh snapshot.",
+    "Click the element with the given ref from the latest browser_accessibility_tree. Fails with stale_ref if the ref is missing or ambiguous — take a fresh snapshot.",
   input,
   inputSchema: {
     type: "object",

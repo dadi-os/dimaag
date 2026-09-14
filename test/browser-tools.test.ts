@@ -31,20 +31,20 @@ after(async () => {
 });
 
 const BROWSER_TOOLS = [
-  "spawn_browser",
-  "list_browsers",
-  "close_browser",
-  "list_tabs",
-  "new_tab",
-  "close_tab",
-  "navigate",
-  "accessibility_tree",
-  "click",
-  "type",
-  "select",
-  "wait_for",
-  "screenshot",
-  "extract_text",
+  "browser_spawn",
+  "browser_list",
+  "browser_close",
+  "browser_list_tabs",
+  "browser_new_tab",
+  "browser_close_tab",
+  "browser_navigate",
+  "browser_accessibility_tree",
+  "browser_click",
+  "browser_type",
+  "browser_select",
+  "browser_wait_for",
+  "browser_screenshot",
+  "browser_extract_text",
 ] as const;
 
 test("syncTools registers browser tools and root Dadi holds them", async () => {
@@ -52,7 +52,7 @@ test("syncTools registers browser tools and root Dadi holds them", async () => {
   for (const name of BROWSER_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 40);
+  assert.equal(allTools().length, 50);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
@@ -90,7 +90,7 @@ test("spawn_browser and list_browsers call Nas", async () => {
   const spawned = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "sb1",
-    name: "spawn_browser",
+    name: "browser_spawn",
     input: {},
   });
   assert.equal(spawned.isError, false, spawned.content);
@@ -102,7 +102,7 @@ test("spawn_browser and list_browsers call Nas", async () => {
   const listed = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "lb1",
-    name: "list_browsers",
+    name: "browser_list",
     input: {},
   });
   assert.equal(listed.isError, false);
@@ -126,7 +126,7 @@ test("close_browser calls Nas and drops the local connection entry", async () =>
   const closed = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "cb1",
-    name: "close_browser",
+    name: "browser_close",
     input: { browser_id: 10 },
   });
   assert.equal(closed.isError, false, closed.content);

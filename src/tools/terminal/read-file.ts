@@ -13,9 +13,8 @@ const input = z
 
 /** Read a host file via Nas. Intended for workers. */
 export const readFile = defineTool({
-  name: "read_file",
-  description:
-    "Read a text file at an absolute host path. Returns line-numbered content (N\\tline), total_lines, and truncated. Binary files fail.",
+  name: "terminal_read_file",
+  description: "Read a text file at an absolute host path. Returns line-numbered content (N\\tline), total_lines, and truncated. Binary files fail.",
   input,
   inputSchema: {
     type: "object",

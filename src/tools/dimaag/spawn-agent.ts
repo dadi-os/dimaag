@@ -11,9 +11,9 @@ const input = z.object({
 
 /** Create a child agent with the caller as parent (no tools until grant_tool). */
 export const spawnAgent = defineTool({
-  name: "spawn_agent",
+  name: "dimaag_spawn_agent",
   description:
-    "Create a child agent with the caller as its parent. The child starts with no granted tools — use grant_tool afterward to give it capabilities.",
+    "Create a child agent with the caller as its parent. The child starts with no granted tools — use dimaag_grant_tool afterward to give it capabilities.",
   input,
   inputSchema: {
     type: "object",

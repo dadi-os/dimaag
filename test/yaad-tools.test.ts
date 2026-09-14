@@ -36,15 +36,23 @@ after(async () => {
   await handle.close();
 });
 
-const YAAD_TOOLS = ["recall", "query", "get_node", "ingest"] as const;
+const YAAD_TOOLS = [
+  "yaad_recall",
+  "yaad_query",
+  "yaad_get_node",
+  "yaad_ingest",
+  "yaad_get_node_history",
+  "yaad_search_history",
+] as const;
 const PLATFORM_TOOLS = [
-  "spawn_agent",
-  "modify_agent",
-  "grant_tool",
-  "revoke_tool",
-  "schedule_message",
-  "list_schedules",
-  "cancel_schedule",
+  "dimaag_spawn_agent",
+  "dimaag_modify_agent",
+  "dimaag_grant_tool",
+  "dimaag_revoke_tool",
+  "dimaag_schedule_message",
+  "dimaag_list_schedules",
+  "dimaag_cancel_schedule",
+  "dimaag_get_logs",
 ] as const;
 
 test("syncTools registers Yaad tools and root Dadi grants resolve", async () => {
@@ -52,7 +60,7 @@ test("syncTools registers Yaad tools and root Dadi grants resolve", async () => 
   for (const name of YAAD_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 40);
+  assert.equal(allTools().length, 50);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
@@ -73,7 +81,7 @@ test("assembleContext for root Dadi includes Yaad tools, platform tools, and sen
   for (const name of [...PLATFORM_TOOLS, ...YAAD_TOOLS, SEND_MESSAGE, "yield"]) {
     assert.ok(names.has(name), `missing tool ${name}`);
   }
-  assert.equal(names.size, 42);
+  assert.equal(names.size, 52);
 });
 
 test("recall tool shapes the response and preserves sufficient", async () => {
@@ -113,7 +121,7 @@ test("recall tool shapes the response and preserves sufficient", async () => {
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "r1",
-    name: "recall",
+    name: "yaad_recall",
     input: { query: "Vedant lunch" },
   });
   assert.equal(result.isError, false);
@@ -147,7 +155,7 @@ test("query tool passes filters through", async () => {
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "q1",
-    name: "query",
+    name: "yaad_query",
     input: {
       kind: "plan",
       occurred_from: "2026-09-14T00:00:00.000Z",
@@ -176,7 +184,7 @@ test("get_node tool returns the Yaad node response", async () => {
       expires_at: null,
       access_count: 0,
       last_accessed_at: null,
-      source: "ingest",
+      source: "yaad_ingest",
       created_at: "2026-09-05T12:00:00.000Z",
       updated_at: "2026-09-05T12:00:00.000Z",
       detail: { address: "Grand River", latitude: null, longitude: null },
@@ -194,7 +202,7 @@ test("get_node tool returns the Yaad node response", async () => {
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "g1",
-    name: "get_node",
+    name: "yaad_get_node",
     input: { id },
   });
   assert.equal(result.isError, false);
@@ -226,7 +234,7 @@ test("ingest stamps occurred_at and source; rejects occurred_at in tool input", 
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "i1",
-    name: "ingest",
+    name: "yaad_ingest",
     input: { text: "Vedant likes orange juice" },
   });
   assert.equal(result.isError, false);
@@ -245,7 +253,7 @@ test("ingest stamps occurred_at and source; rejects occurred_at in tool input", 
   const rejected = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "i2",
-    name: "ingest",
+    name: "yaad_ingest",
     input: {
       text: "should fail",
       occurred_at: "2020-01-01T00:00:00.000Z",
@@ -273,7 +281,7 @@ test("Yaad 4xx maps to isError without throwing", async () => {
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "q2",
-    name: "query",
+    name: "yaad_query",
     input: { kind: "plan" },
   });
   assert.equal(result.isError, true);
@@ -287,7 +295,7 @@ test("Yaad unreachable maps to isError and the lane continues", async () => {
     reason: async () => {
       reasonCalls += 1;
       if (reasonCalls === 1) {
-        return toolUse("recall", { query: "anything" }, "fail-call");
+        return toolUse("yaad_recall", { query: "anything" }, "fail-call");
       }
       return endTurn("recovered");
     },

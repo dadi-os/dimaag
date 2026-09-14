@@ -87,57 +87,95 @@ Transcript is in-process and shared. Conversation starts on inbound message, rea
 
 | tool | Yaad route | when to use |
 | --- | --- | --- |
-| `recall` | `POST /recall` | semantic "what do I know about X" |
-| `query` | `POST /query` | exact dates, names, filters |
-| `get_node` | `GET /nodes/:id` | full node + edges |
-| `ingest` | `POST /ingest` | store a fact |
+| `yaad_recall` | `POST /recall` | semantic "what do I know about X" |
+| `yaad_query` | `POST /query` | exact dates, names, filters |
+| `yaad_get_node` | `GET /nodes/:id` | full node + edges |
+| `yaad_ingest` | `POST /ingest` | store a fact |
+| `yaad_get_node_history` | `GET /nodes/:id/history` | correction log for one node |
+| `yaad_search_history` | `POST /history/search` | semantic search over corrections |
 
 `occurred_at` on ingest is stamped by Dimaag from the clock.
 
-### Nas (terminals + files)
+### Terminal (shell + files)
 
 Thin clients over Nas. Shell is the run-a-command mechanism; file tools are the file-manipulation mechanism — no file IO through the shell by design. Terminal ids are handed off by the spawning agent (prompt or message); Dimaag does not enforce ownership.
 
 | tool | holder | Nas route |
 | --- | --- | --- |
-| `spawn_terminal` | manager | `POST /terminals` |
-| `list_terminals` | manager | `GET /terminals` |
-| `close_terminal` | manager | `DELETE /terminals/{id}` |
-| `execute_shell` | worker | `POST /terminals/{id}/exec` |
-| `read_terminal` | worker | `GET /terminals/{id}/capture` |
-| `send_keys` | worker | `POST /terminals/{id}/keys` |
-| `read_file` | worker | `POST /fs/read` |
-| `write_file` | worker | `POST /fs/write` |
-| `edit_file` | worker | `POST /fs/edit` |
-| `glob` | worker | `POST /fs/glob` |
-| `grep` | worker | `POST /fs/grep` |
+| `terminal_spawn` | manager | `POST /terminals` |
+| `terminal_list` | manager | `GET /terminals` |
+| `terminal_close` | manager | `DELETE /terminals/{id}` |
+| `terminal_execute_shell` | worker | `POST /terminals/{id}/exec` |
+| `terminal_read` | worker | `GET /terminals/{id}/capture` |
+| `terminal_send_keys` | worker | `POST /terminals/{id}/keys` |
+| `terminal_read_file` | worker | `POST /fs/read` |
+| `terminal_write_file` | worker | `POST /fs/write` |
+| `terminal_edit_file` | worker | `POST /fs/edit` |
+| `terminal_glob` | worker | `POST /fs/glob` |
+| `terminal_grep` | worker | `POST /fs/grep` |
 
-`execute_shell` HTTP timeout is `timeout_seconds + 10` so the client never gives up before Nas reports a shell timeout. On timeout the command keeps running — use `read_terminal` / `send_keys` (e.g. `C-c`) to follow up.
+`terminal_execute_shell` HTTP timeout is `timeout_seconds + 10` so the client never gives up before Nas reports a shell timeout. On timeout the command keeps running — use `terminal_read` / `terminal_send_keys` (e.g. `C-c`) to follow up.
 
 File tools take absolute host paths. Nas **denies writes** to OS and dadiOS runtime trees (`/usr`, `/etc`, `$DADI_STATE_DIR/modules`, …); reads are allowed. There is no project sandbox folder. Default terminal/glob/grep cwd is the Nas state dir (dadi home).
 
-### Nas (browsers)
+### Browser
 
-Each worker drives one Nas Chromium over CDP (`playwright-core` `connectOverCDP`). Act on accessibility refs, not coordinates. `tab_id` is the CDP target id; omit it to use the focused/attached page. Refs from `accessibility_tree` (`e1`, `e2`, …) are valid only until the next snapshot. Screenshots go through Dwar `/image/describe` — pixels never enter the transcript; the raw image is kept in tool `audit` only.
+Each worker drives one Nas Chromium over CDP (`playwright-core` `connectOverCDP`). Act on accessibility refs, not coordinates. `tab_id` is the CDP target id; omit it to use the focused/attached page. Refs from `browser_accessibility_tree` (`e1`, `e2`, …) are valid only until the next snapshot. Screenshots go through Dwar `/image/describe` — pixels never enter the transcript; the raw image is kept in tool `audit` only.
 
 | tool | holder | notes |
 | --- | --- | --- |
-| `spawn_browser` | manager | Nas `POST /browsers` → `{ browser_id, cdp_url }` |
-| `list_browsers` | manager | Nas `GET /browsers` |
-| `close_browser` | manager | Nas `DELETE` + drop in-process CDP connection |
-| `list_tabs` / `new_tab` / `close_tab` | worker | CDP target ids |
-| `navigate` | worker | returns `{ url, title }` |
-| `accessibility_tree` | worker | bounded tree + refs; truncated flag |
-| `click` / `type` / `select` | worker | by ref; `stale_ref` if missing/ambiguous |
-| `wait_for` | worker | text, ref, and/or network_idle |
-| `screenshot` | worker | `page` (Playwright) or `display` (Nas monitor) → Dwar describe |
-| `extract_text` | worker | visible body text, bounded |
+| `browser_spawn` | manager | Nas `POST /browsers` → `{ browser_id, cdp_url }` |
+| `browser_list` | manager | Nas `GET /browsers` |
+| `browser_close` | manager | Nas `DELETE` + drop in-process CDP connection |
+| `browser_list_tabs` / `browser_new_tab` / `browser_close_tab` | worker | CDP target ids |
+| `browser_navigate` | worker | returns `{ url, title }` |
+| `browser_accessibility_tree` | worker | bounded tree + refs; truncated flag |
+| `browser_click` / `browser_type` / `browser_select` | worker | by ref; `stale_ref` if missing/ambiguous |
+| `browser_wait_for` | worker | text, ref, and/or network_idle |
+| `browser_screenshot` | worker | `page` (Playwright) or `display` (Nas monitor) → Dwar describe |
+| `browser_extract_text` | worker | visible body text, bounded |
+
+
+### Nas (control plane)
+
+Host ops via Nas HTTP. System logs are Loki (`nas_get_logs`); agent cognition is `dimaag_get_logs`.
+
+| tool | Nas route |
+| --- | --- |
+| `nas_get_status` | `GET /status` |
+| `nas_get_logs` | `GET /logs` |
+| `nas_restart_module` | `POST /modules/{name}/restart` |
+| `nas_pull_updates` | `POST /pull_updates` |
+| `nas_stack_up` | `POST /stack/up` |
+| `nas_stack_down` | `POST /stack/down` |
+| `nas_provision` | `POST /provision` |
+
+### Dimaag (meta)
+
+| tool | notes |
+| --- | --- |
+| `dimaag_spawn_agent` / `dimaag_modify_agent` / `dimaag_grant_tool` / `dimaag_revoke_tool` | agent tree |
+| `dimaag_schedule_message` / `dimaag_list_schedules` / `dimaag_cancel_schedule` | durable schedules |
+| `dimaag_get_logs` | agent audit (`thought` / `tool_call` / `tool_result` / `message`) |
+
+## CLI
+
+`cli/dadi.mjs` invokes registry tools over HTTP. Requires `DIMAAG_URL` (no default).
+
+```sh
+export DIMAAG_URL=http://dimaag.dadi
+dadi help
+dadi nas_get_logs --services dimaag --level error
+dadi help browser_spawn
+```
+
+On dadiOS, `/usr/bin/dadi` wraps the same client with `DIMAAG_URL=http://dimaag.dadi`.
 
 ## Persistence
 
 `agents`, `agent_logs`, and `scheduled_messages` survive restart. Live transcript, scratchpads, locks, steer/intent queues, and the event stream do not. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
 
-Schedule tools (`schedule_message`, `list_schedules`, `cancel_schedule`) persist one-shot and recurring deliveries; the in-process scheduler ticks from `[schedule].tick_seconds` in `config.toml` (wall clock uses `TIMEZONE` in `constants.ts`).
+Schedule tools (`dimaag_schedule_message`, `dimaag_list_schedules`, `dimaag_cancel_schedule`) persist one-shot and recurring deliveries; the in-process scheduler ticks from `[schedule].tick_seconds` in `config.toml` (wall clock uses `TIMEZONE` in `constants.ts`).
 
 ## Routes
 
@@ -151,5 +189,8 @@ Schedule tools (`schedule_message`, `list_schedules`, `cancel_schedule`) persist
 | `GET` | `/agents/:id` | agent, children, grants |
 | `GET` | `/agents/:id/logs` | per-agent audit trail |
 | `GET` | `/logs` | cross-agent audit trail |
+| `GET` | `/tools` | grantable tool catalog |
+| `GET` | `/tools/:name` | one tool schema |
+| `POST` | `/tools/:name/execute` | run tool as root Dadi |
 
 Unknown request fields are a 422. No CORS — clients use Tauri HTTP (or equivalent) outside the browser sandbox.

@@ -6,9 +6,8 @@ const input = z.object({}).strict();
 
 /** Spawn a Nas Chromium+Xvfb browser. Intended for managers. */
 export const spawnBrowser = defineTool({
-  name: "spawn_browser",
-  description:
-    "Start a headed Chromium on its own virtual display via Nas. Returns browser_id and cdp_url — hand browser_id to a worker in its system prompt or a message. The worker drives pages over CDP; do not pass coordinates.",
+  name: "browser_spawn",
+  description: "Start a headed Chromium on its own virtual display via Nas. Returns browser_id and cdp_url — hand browser_id to a worker in its system prompt or a message. The worker drives pages over CDP; do not pass coordinates.",
   input,
   inputSchema: {
     type: "object",

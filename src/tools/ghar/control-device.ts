@@ -22,9 +22,9 @@ const input = z
 
 /** Issue a capability command via Ghar, attributed to the calling agent. */
 export const controlDevice = defineTool({
-  name: "control_device",
+  name: "ghar_control_device",
   description:
-    "Change a device. Pass the device id, a capability from list_devices, and that capability's params. For dimmable, level is 0–100 (not Matter's raw 0–254). switchable params.state is on, off, or toggle. colorable takes color_temp or hue+saturation. If the device lacks the capability you named, that is your mistake — pick a supported capability. If the device does not respond, that is a fact about the world, not a bad argument.",
+    "Change a device. Pass the device id, a capability from ghar_list_devices, and that capability's params. For dimmable, level is 0–100 (not Matter's raw 0–254). switchable params.state is on, off, or toggle. colorable takes color_temp or hue+saturation. If the device lacks the capability you named, that is your mistake — pick a supported capability. If the device does not respond, that is a fact about the world, not a bad argument.",
   input,
   inputSchema: {
     type: "object",

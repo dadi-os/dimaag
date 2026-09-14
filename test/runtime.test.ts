@@ -240,7 +240,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
   const missing = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "sp0",
-    name: "spawn_agent",
+    name: "dimaag_spawn_agent",
     input: { name: "no-prompt-child" },
   });
   assert.equal(missing.isError, true);
@@ -248,7 +248,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
   const spawned = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "sp1",
-    name: "spawn_agent",
+    name: "dimaag_spawn_agent",
     input: { name: "fresh-child", system_prompt: "do one job" },
   });
   assert.equal(spawned.isError, false);
@@ -283,10 +283,10 @@ test("grant_tool on a direct child succeeds and appears in assembleContext", asy
   const granted = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "g1",
-    name: "grant_tool",
+    name: "dimaag_grant_tool",
     input: {
       agent_id: childId,
-      tool_name: "modify_agent",
+      tool_name: "dimaag_modify_agent",
       usage: "tune your own prompt",
     },
   });
@@ -298,7 +298,7 @@ test("grant_tool on a direct child succeeds and appears in assembleContext", asy
     transcript: new TranscriptStore(),
   });
   const names = ctx.tools.map((tool) => tool.name);
-  assert.ok(names.includes("modify_agent"));
+  assert.ok(names.includes("dimaag_modify_agent"));
   assert.ok(names.includes(SEND_MESSAGE));
 });
 
@@ -319,10 +319,10 @@ test("grant_tool on a non-child fails", async () => {
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "g2",
-    name: "grant_tool",
+    name: "dimaag_grant_tool",
     input: {
       agent_id: strangerId,
-      tool_name: "modify_agent",
+      tool_name: "dimaag_modify_agent",
       usage: "nope",
     },
   });
@@ -348,7 +348,7 @@ test("grant_tool naming an unknown tool fails", async () => {
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "g3",
-    name: "grant_tool",
+    name: "dimaag_grant_tool",
     input: {
       agent_id: childId,
       tool_name: "not_a_real_tool",
@@ -377,18 +377,18 @@ test("revoke_tool removes a grant and fails when the child does not hold it", as
   await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "r0",
-    name: "grant_tool",
+    name: "dimaag_grant_tool",
     input: {
       agent_id: childId,
-      tool_name: "modify_agent",
+      tool_name: "dimaag_modify_agent",
       usage: "temporary",
     },
   });
   const revoked = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "r1",
-    name: "revoke_tool",
-    input: { agent_id: childId, tool_name: "modify_agent" },
+    name: "dimaag_revoke_tool",
+    input: { agent_id: childId, tool_name: "dimaag_modify_agent" },
   });
   assert.equal(revoked.isError, false);
   const ctx = await assembleContext({
@@ -398,14 +398,14 @@ test("revoke_tool removes a grant and fails when the child does not hold it", as
     transcript: new TranscriptStore(),
   });
   assert.equal(
-    ctx.tools.map((tool) => tool.name).includes("modify_agent"),
+    ctx.tools.map((tool) => tool.name).includes("dimaag_modify_agent"),
     false,
   );
   const again = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "r2",
-    name: "revoke_tool",
-    input: { agent_id: childId, tool_name: "modify_agent" },
+    name: "dimaag_revoke_tool",
+    input: { agent_id: childId, tool_name: "dimaag_modify_agent" },
   });
   assert.equal(again.isError, true);
   assert.match(again.content, /does not hold/);
@@ -425,7 +425,7 @@ test("an agent can grant a tool it does not itself hold", async () => {
   // Parent holds only grant_tool — not modify_agent — then grants modify_agent to the child.
   await handle.db.insert(agentTools).values({
     agentId: parentId,
-    toolId: toolId("grant_tool"),
+    toolId: toolId("dimaag_grant_tool"),
     usage: "delegate tools",
   });
   const runtime = createRuntime({
@@ -443,16 +443,16 @@ test("an agent can grant a tool it does not itself hold", async () => {
     transcript: new TranscriptStore(),
   });
   assert.equal(
-    parentCtx.tools.map((tool) => tool.name).includes("modify_agent"),
+    parentCtx.tools.map((tool) => tool.name).includes("dimaag_modify_agent"),
     false,
   );
   const granted = await executeTool(runtime.toolContext(parentId, "reasoning"), {
     type: "tool_use",
     id: "g4",
-    name: "grant_tool",
+    name: "dimaag_grant_tool",
     input: {
       agent_id: childId,
-      tool_name: "modify_agent",
+      tool_name: "dimaag_modify_agent",
       usage: "you may modify yourself",
     },
   });
@@ -463,5 +463,5 @@ test("an agent can grant a tool it does not itself hold", async () => {
     lane: "reasoning",
     transcript: new TranscriptStore(),
   });
-  assert.ok(childCtx.tools.map((tool) => tool.name).includes("modify_agent"));
+  assert.ok(childCtx.tools.map((tool) => tool.name).includes("dimaag_modify_agent"));
 });

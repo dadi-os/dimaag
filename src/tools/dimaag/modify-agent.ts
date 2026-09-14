@@ -16,9 +16,8 @@ const input = z
 
 /** Update system_prompt / active for self or a direct child. */
 export const modifyAgent = defineTool({
-  name: "modify_agent",
-  description:
-    "Change an agent's system prompt or active flag. Only the caller or its direct children are allowed.",
+  name: "dimaag_modify_agent",
+  description: "Change an agent's system prompt or active flag. Only the caller or its direct children are allowed.",
   input,
   inputSchema: {
     type: "object",

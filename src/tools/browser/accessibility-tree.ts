@@ -12,9 +12,9 @@ const input = z
 
 /** Accessibility snapshot with refs. Intended for workers. */
 export const accessibilityTree = defineTool({
-  name: "accessibility_tree",
+  name: "browser_accessibility_tree",
   description:
-    "Take a bounded accessibility/DOM snapshot of the page. Interactive elements get refs like e1, e2 written to data-dadi-ref. Refs are valid only until the next accessibility_tree call — always snapshot again before click/type/select. Prefer this over screenshots for normal UI work.",
+    "Take a bounded accessibility/DOM snapshot of the page. Interactive elements get refs like e1, e2 written to data-dadi-ref. Refs are valid only until the next browser_accessibility_tree call — always snapshot again before browser_click/browser_type/browser_select. Prefer this over screenshots for normal UI work.",
   input,
   inputSchema: {
     type: "object",

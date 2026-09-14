@@ -70,10 +70,10 @@ after(async () => {
 });
 
 test("allTools includes the three schedule tools and sync seeds root grants", async () => {
-  assert.equal(allTools().length, 40);
-  assert.equal(findTool("schedule_message")?.name, "schedule_message");
-  assert.equal(findTool("list_schedules")?.name, "list_schedules");
-  assert.equal(findTool("cancel_schedule")?.name, "cancel_schedule");
+  assert.equal(allTools().length, 50);
+  assert.equal(findTool("dimaag_schedule_message")?.name, "dimaag_schedule_message");
+  assert.equal(findTool("dimaag_list_schedules")?.name, "dimaag_list_schedules");
+  assert.equal(findTool("dimaag_cancel_schedule")?.name, "dimaag_cancel_schedule");
 
   await resetRuntime(handle.sql, handle.db, config);
   await syncTools(handle.db);
@@ -87,9 +87,9 @@ test("allTools includes the three schedule tools and sync seeds root grants", as
       return match?.name;
     }),
   );
-  assert.ok(names.has("schedule_message"));
-  assert.ok(names.has("list_schedules"));
-  assert.ok(names.has("cancel_schedule"));
+  assert.ok(names.has("dimaag_schedule_message"));
+  assert.ok(names.has("dimaag_list_schedules"));
+  assert.ok(names.has("dimaag_cancel_schedule"));
 });
 
 test("due one-shot delivers once and deletes the row", async () => {
@@ -500,7 +500,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const self = await executeTool(ctx, {
     type: "tool_use",
     id: "s-self",
-    name: "schedule_message",
+    name: "dimaag_schedule_message",
     input: {
       to_agent_id: ROOT_DADI_ID,
       content: "no",
@@ -513,7 +513,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const missing = await executeTool(ctx, {
     type: "tool_use",
     id: "s-missing",
-    name: "schedule_message",
+    name: "dimaag_schedule_message",
     input: {
       to_agent_id: randomUUID(),
       content: "no",
@@ -526,7 +526,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const past = await executeTool(ctx, {
     type: "tool_use",
     id: "s-past",
-    name: "schedule_message",
+    name: "dimaag_schedule_message",
     input: {
       to_agent_id: peerId,
       content: "no",
@@ -539,7 +539,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const zero = await executeTool(ctx, {
     type: "tool_use",
     id: "s-zero",
-    name: "schedule_message",
+    name: "dimaag_schedule_message",
     input: {
       to_agent_id: peerId,
       content: "no",
@@ -552,7 +552,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const ok = await executeTool(ctx, {
     type: "tool_use",
     id: "s-ok",
-    name: "schedule_message",
+    name: "dimaag_schedule_message",
     input: {
       to_agent_id: peerId,
       content: "hello peer",
@@ -622,7 +622,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const listed = await executeTool(runtime.toolContext(creatorId, "reasoning"), {
     type: "tool_use",
     id: "list",
-    name: "list_schedules",
+    name: "dimaag_list_schedules",
     input: {},
   });
   assert.equal(listed.isError, false);
@@ -637,7 +637,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const denied = await executeTool(runtime.toolContext(otherId, "reasoning"), {
     type: "tool_use",
     id: "cancel-deny",
-    name: "cancel_schedule",
+    name: "dimaag_cancel_schedule",
     input: { schedule_id: mine },
   });
   assert.equal(denied.isError, true);
@@ -646,7 +646,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const unknown = await executeTool(runtime.toolContext(creatorId, "reasoning"), {
     type: "tool_use",
     id: "cancel-unknown",
-    name: "cancel_schedule",
+    name: "dimaag_cancel_schedule",
     input: { schedule_id: randomUUID() },
   });
   assert.equal(unknown.isError, true);
@@ -655,7 +655,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const cancelled = await executeTool(runtime.toolContext(creatorId, "reasoning"), {
     type: "tool_use",
     id: "cancel-ok",
-    name: "cancel_schedule",
+    name: "dimaag_cancel_schedule",
     input: { schedule_id: mine },
   });
   assert.equal(cancelled.isError, false);

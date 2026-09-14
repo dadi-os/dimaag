@@ -33,14 +33,14 @@ after(async () => {
   await handle.close();
 });
 
-const GHAR_TOOLS = ["list_devices", "get_state", "control_device", "get_device_events"] as const;
+const GHAR_TOOLS = ["ghar_list_devices", "ghar_get_state", "ghar_control_device", "ghar_get_device_events"] as const;
 
 test("syncTools registers Ghar tools and root Dadi holds them", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of GHAR_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 40);
+  assert.equal(allTools().length, 50);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
@@ -84,7 +84,7 @@ test("list_devices passes filters through to the Ghar client", async () => {
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "ld1",
-    name: "list_devices",
+    name: "ghar_list_devices",
     input: { room: "hall", tag: "lighting", capability: "dimmable" },
   });
   assert.equal(result.isError, false);
@@ -105,7 +105,7 @@ test("control_device attributes cause to the calling agent, not root", async () 
   });
   await handle.db.insert(agentTools).values({
     agentId: childId,
-    toolId: toolId("control_device"),
+    toolId: toolId("ghar_control_device"),
     usage: "control lights for this thread",
   });
   const deviceId = randomUUID();
@@ -122,7 +122,7 @@ test("control_device attributes cause to the calling agent, not root", async () 
   const result = await executeTool(runtime.toolContext(childId, "reasoning"), {
     type: "tool_use",
     id: "cd1",
-    name: "control_device",
+    name: "ghar_control_device",
     input: {
       device_id: deviceId,
       capability: "dimmable",
@@ -159,7 +159,7 @@ test("Ghar unreachable fails with ghar code, not an empty success", async () => 
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "ld2",
-    name: "list_devices",
+    name: "ghar_list_devices",
     input: {},
   });
   assert.equal(result.isError, true);
@@ -203,7 +203,7 @@ test("capability_unsupported and device_unreachable stay distinguishable", async
   const unsupported = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "cd2",
-    name: "control_device",
+    name: "ghar_control_device",
     input: { device_id: deviceId, capability: "dimmable", params: { level: 10 } },
   });
   assert.equal(unsupported.isError, true);
@@ -213,7 +213,7 @@ test("capability_unsupported and device_unreachable stay distinguishable", async
   const unreachable = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "cd3",
-    name: "control_device",
+    name: "ghar_control_device",
     input: { device_id: deviceId, capability: "dimmable", params: { level: 10 } },
   });
   assert.equal(unreachable.isError, true);
@@ -252,7 +252,7 @@ test("get_device_events passes filters through and bounds the default limit", as
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "ev1",
-    name: "get_device_events",
+    name: "ghar_get_device_events",
     input: {
       device_id: deviceId,
       room: "hall",
@@ -301,7 +301,7 @@ test("get_state returns only requested devices with changed_at", async () => {
   const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
     type: "tool_use",
     id: "gs1",
-    name: "get_state",
+    name: "ghar_get_state",
     input: { device_ids: [a] },
   });
   assert.equal(result.isError, false);

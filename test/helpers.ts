@@ -199,6 +199,12 @@ export function mockYaad(opts: {
         operations: [{ op: "noop", reason: "nothing" }],
       };
     },
+    async getNodeHistory() {
+      return { history: [] };
+    },
+    async searchHistory() {
+      return { results: [] };
+    },
   };
 }
 
@@ -466,6 +472,32 @@ export function mockNas(opts: {
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
         "base64",
       );
+    },
+    async getStatus() {
+      return {
+        uptime_seconds: 0,
+        services: [],
+        disk: { free_bytes: 0, total_bytes: 0 },
+        errors: [],
+      };
+    },
+    async getLogs() {
+      return { entries: [] };
+    },
+    async restartModule() {
+      return { status: "ok" };
+    },
+    async pullUpdates(scope) {
+      return { status: "ok", scope, reboot_required: false };
+    },
+    async stackUp() {
+      return { status: "ok" };
+    },
+    async stackDown() {
+      return { status: "ok" };
+    },
+    async provision(nodeName) {
+      return { bundle: Buffer.from(JSON.stringify({ node_name: nodeName })).toString("base64") };
     },
   };
 }

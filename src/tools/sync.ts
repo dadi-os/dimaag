@@ -20,11 +20,12 @@ export function toolId(name: string): string {
 }
 
 /**
- * Upsert one row per registered tool, then fail loudly if any existing grant
- * points at a tool the registry no longer defines.
+ * Upsert one row per registered tool, prune grants and tool rows that are no
+ * longer in the registry (hard-cut renames), then fail if anything is still orphaned.
  */
 export async function syncTools(db: Db): Promise<void> {
   const definitions = allTools();
+  const knownIds = definitions.map((definition) => toolId(definition.name));
 
   for (const definition of definitions) {
     const id = toolId(definition.name);
@@ -46,23 +47,26 @@ export async function syncTools(db: Db): Promise<void> {
       });
   }
 
-  const knownIds = definitions.map((definition) => toolId(definition.name));
-  const orphaned =
-    knownIds.length === 0
-      ? await db.select({ toolId: agentTools.toolId, agentId: agentTools.agentId }).from(agentTools)
-      : await db
-          .select({ toolId: agentTools.toolId, agentId: agentTools.agentId })
-          .from(agentTools)
-          .where(notInArray(agentTools.toolId, knownIds));
+  if (knownIds.length === 0) {
+    await db.delete(agentTools);
+    await db.delete(tools);
+    return;
+  }
+
+  await db.delete(agentTools).where(notInArray(agentTools.toolId, knownIds));
+  await db.delete(tools).where(notInArray(tools.id, knownIds));
+
+  const orphaned = await db
+    .select({ toolId: agentTools.toolId, agentId: agentTools.agentId })
+    .from(agentTools)
+    .where(notInArray(agentTools.toolId, knownIds));
 
   if (orphaned.length > 0) {
     const detail = orphaned
       .map((row) => `agent ${row.agentId} -> tool ${row.toolId}`)
       .join(", ");
     throw new Error(
-      `agent_tools references tools not in the registry: ${detail}. ` +
-        `A grant pointing at a removed tool silently strips an agent's capability — ` +
-        `remove the grant explicitly or restore the tool definition.`,
+      `agent_tools references tools not in the registry after prune: ${detail}`,
     );
   }
 }

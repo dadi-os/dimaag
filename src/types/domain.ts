@@ -95,5 +95,5 @@ export const DISPATCH_MESSAGE = "dispatch_message";
 export const ROUTE_MESSAGE = "route_message";
 export const STEER_REASONING = "steer_reasoning";
 export const YIELD = "yield";
-export const SPAWN_AGENT = "spawn_agent";
-export const MODIFY_AGENT = "modify_agent";
+export const SPAWN_AGENT = "dimaag_spawn_agent";
+export const MODIFY_AGENT = "dimaag_modify_agent";

@@ -16,9 +16,9 @@ const input = z
  * Prefer accessibility_tree for normal UI; use this for canvas/captcha/visual checks.
  */
 export const screenshot = defineTool({
-  name: "screenshot",
+  name: "browser_screenshot",
   description:
-    "Capture a PNG and return a Dwar image description (pixels never enter the transcript). scope=page screenshots the tab via Playwright; scope=display captures the whole virtual monitor via Nas (popups, download bars). Prefer accessibility_tree for structured UI work — screenshots are a fallback for canvas, captchas, and visual verification.",
+    "Capture a PNG and return a Dwar image description (pixels never enter the transcript). scope=page screenshots the tab via Playwright; scope=display captures the whole virtual monitor via Nas (popups, download bars). Prefer browser_accessibility_tree for structured UI work — screenshots are a fallback for canvas, captchas, and visual verification.",
   input,
   inputSchema: {
     type: "object",

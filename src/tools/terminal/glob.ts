@@ -12,9 +12,8 @@ const input = z
 
 /** Glob files on the host (absolute paths; Nas denies writes to OS/dadiOS runtime trees). Intended for workers. */
 export const globFiles = defineTool({
-  name: "glob",
-  description:
-    "Find files on the host (absolute paths; Nas denies writes to OS/dadiOS runtime trees) matching a doublestar pattern. Paths are absolute, sorted by mtime descending.",
+  name: "terminal_glob",
+  description: "Find files on the host (absolute paths; Nas denies writes to OS/dadiOS runtime trees) matching a doublestar pattern. Paths are absolute, sorted by mtime descending.",
   input,
   inputSchema: {
     type: "object",

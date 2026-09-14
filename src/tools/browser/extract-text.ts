@@ -12,9 +12,8 @@ const input = z
 
 /** Visible page text. Intended for workers. */
 export const extractText = defineTool({
-  name: "extract_text",
-  description:
-    "Return the visible inner text of the page, bounded by max_bytes. Use for read-heavy pages where an accessibility snapshot is mostly noise.",
+  name: "browser_extract_text",
+  description: "Return the visible inner text of the page, bounded by max_bytes. Use for read-heavy pages where an accessibility snapshot is mostly noise.",
   input,
   inputSchema: {
     type: "object",

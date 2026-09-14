@@ -11,7 +11,7 @@ const input = z
 
 /** Close a tab. Intended for workers. */
 export const closeTab = defineTool({
-  name: "close_tab",
+  name: "browser_close_tab",
   description: "Close a tab by CDP target id.",
   input,
   inputSchema: {

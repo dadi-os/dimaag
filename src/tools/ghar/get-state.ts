@@ -13,9 +13,8 @@ const input = z
  * last-changed is the point: staleness questions are answerable in one call.
  */
 export const getState = defineTool({
-  name: "get_state",
-  description:
-    'Read the current values for one or more devices, including how long each value has held (`changed_at`). Use this for questions like "has the hall been empty for a while" or "how long has that light been on" — answer from last-changed here in one call rather than reading event history.',
+  name: "ghar_get_state",
+  description: 'Read the current values for one or more devices, including how long each value has held (`changed_at`). Use this for questions like "has the hall been empty for a while" or "how long has that light been on" — answer from last-changed here in one call rather than reading event history.',
   input,
   inputSchema: {
     type: "object",

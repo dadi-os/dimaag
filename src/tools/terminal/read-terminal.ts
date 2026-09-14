@@ -11,9 +11,9 @@ const input = z
 
 /** Capture terminal pane output via Nas. Intended for workers. */
 export const readTerminal = defineTool({
-  name: "read_terminal",
+  name: "terminal_read",
   description:
-    "Read recent output from a host terminal pane without sending a new command. Use this after execute_shell times out to see a still-running command's progress.",
+    "Read recent output from a host terminal pane without sending a new command. Use this after terminal_execute_shell times out to see a still-running command's progress.",
   input,
   inputSchema: {
     type: "object",
