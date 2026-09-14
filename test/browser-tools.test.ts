@@ -52,7 +52,7 @@ test("syncTools registers browser tools and root Dadi holds them", async () => {
   for (const name of BROWSER_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 50);
+  assert.equal(allTools().length, 58);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));

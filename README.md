@@ -149,6 +149,20 @@ Host ops via Nas HTTP. System logs are Loki (`nas_get_logs`); agent cognition is
 | `nas_stack_up` | `POST /stack/up` |
 | `nas_stack_down` | `POST /stack/down` |
 | `nas_provision` | `POST /provision` |
+| `nas_list_clients` | `GET /clients` |
+
+### Hath (remote clients)
+
+Reverse RPC over SSE `hath_command` + `POST /hath/commands/:id/result`. Discover `node_name` with `nas_list_clients` first.
+
+| tool | notes |
+| --- | --- |
+| `hath_get_info` | platform, OS/app version, timezone |
+| `hath_get_battery` | percent + charging |
+| `hath_get_location` | lat/lng/accuracy |
+| `hath_get_network` | mesh + connection type |
+| `hath_read_clipboard` / `hath_write_clipboard` | clipboard text |
+| `hath_send_file` | write into OS Downloads; returns path |
 
 ### Dimaag (meta)
 

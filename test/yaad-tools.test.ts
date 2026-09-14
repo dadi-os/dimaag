@@ -60,7 +60,7 @@ test("syncTools registers Yaad tools and root Dadi grants resolve", async () => 
   for (const name of YAAD_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 50);
+  assert.equal(allTools().length, 58);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
@@ -81,7 +81,7 @@ test("assembleContext for root Dadi includes Yaad tools, platform tools, and sen
   for (const name of [...PLATFORM_TOOLS, ...YAAD_TOOLS, SEND_MESSAGE, "yield"]) {
     assert.ok(names.has(name), `missing tool ${name}`);
   }
-  assert.equal(names.size, 52);
+  assert.equal(names.size, 60);
 });
 
 test("recall tool shapes the response and preserves sufficient", async () => {

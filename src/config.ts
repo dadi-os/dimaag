@@ -42,6 +42,9 @@ const fileSchema = z.object({
     retry_attempts: z.number().int().positive(),
     backoff_ms: z.array(z.number().min(0)).nonempty(),
   }),
+  hath: z.object({
+    timeout_ms: z.number().int().positive(),
+  }),
   browser: z.object({
     action_timeout_ms: z.number().int().positive(),
     navigation_timeout_ms: z.number().int().positive(),
@@ -71,6 +74,7 @@ export type Config = {
   yaad: FileConfig["yaad"];
   ghar: FileConfig["ghar"];
   nas: FileConfig["nas"];
+  hath: FileConfig["hath"];
   browser: FileConfig["browser"];
   schedule: FileConfig["schedule"];
 };
@@ -126,6 +130,7 @@ export function loadConfig(): Config {
     yaad: file.yaad,
     ghar: file.ghar,
     nas: file.nas,
+    hath: file.hath,
     browser: file.browser,
     schedule: file.schedule,
   };

@@ -133,7 +133,24 @@ export type GrepRequest = {
 export type CreateBrowserResponse = z.infer<typeof createBrowserResponseSchema>;
 export type BrowserInfo = z.infer<typeof browserInfoSchema>;
 
+const provisionResponseSchema = z.object({ bundle: z.string() }).passthrough();
+
 const statusOkSchema = z.object({ status: z.string() }).passthrough();
+
+const meshClientSchema = z
+  .object({
+    node_name: z.string().min(1),
+    online: z.boolean(),
+    last_seen: z.string().nullable(),
+    ip_addresses: z.array(z.string()),
+  })
+  .passthrough();
+
+const listClientsResponseSchema = z
+  .object({
+    clients: z.array(meshClientSchema),
+  })
+  .passthrough();
 
 const pullUpdatesResponseSchema = z
   .object({
@@ -204,6 +221,14 @@ export type NasClient = {
   stackUp: () => Promise<{ status: string }>;
   stackDown: () => Promise<{ status: string }>;
   provision: (nodeName: string) => Promise<{ bundle: string }>;
+  listClients: () => Promise<{ clients: MeshClient[] }>;
+};
+
+export type MeshClient = {
+  node_name: string;
+  online: boolean;
+  last_seen: string | null;
+  ip_addresses: string[];
 };
 
 /** Build a retrying axios client pointed at `NAS`. */
@@ -296,11 +321,8 @@ export function createNasClient(config: Config): NasClient {
     stackUp: () => post("/stack/up", {}, statusOkSchema),
     stackDown: () => post("/stack/down", {}, statusOkSchema),
     provision: (nodeName) =>
-      post(
-        "/provision",
-        { node_name: nodeName },
-        z.object({ bundle: z.string() }).passthrough(),
-      ),
+      post("/provision", { node_name: nodeName }, provisionResponseSchema),
+    listClients: () => get("/clients", listClientsResponseSchema),
   };
 }
 

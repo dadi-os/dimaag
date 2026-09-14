@@ -255,6 +255,38 @@ const DADI_GRANTS: Array<{ tool: string; usage: string }> = [
     tool: "nas_provision",
     usage: "When minting a Hath device provision QR/bundle for a named mesh node.",
   },
+  {
+    tool: "nas_list_clients",
+    usage: "When you need mesh node_name values before calling hath_* tools.",
+  },
+  {
+    tool: "hath_get_info",
+    usage: "When you need identity/OS details for a specific Hath client.",
+  },
+  {
+    tool: "hath_get_battery",
+    usage: "When you need battery level on a Hath client.",
+  },
+  {
+    tool: "hath_get_location",
+    usage: "When you need the client's current location.",
+  },
+  {
+    tool: "hath_get_network",
+    usage: "When you need mesh/network status on a Hath client.",
+  },
+  {
+    tool: "hath_read_clipboard",
+    usage: "When you need the text currently on a Hath client's clipboard.",
+  },
+  {
+    tool: "hath_write_clipboard",
+    usage: "When you need to put text on a Hath client's clipboard.",
+  },
+  {
+    tool: "hath_send_file",
+    usage: "When you need to save a file into a Hath client's Downloads folder.",
+  },
 ];
 
 export async function seed(db: Db, config: Config): Promise<void> {

@@ -15,6 +15,7 @@ import type { DwarClient } from "../dwar/client.js";
 import type { GharClient } from "../ghar/client.js";
 import type { NasClient } from "../nas/client.js";
 import type { YaadClient } from "../yaad/client.js";
+import type { HathGateway } from "../runtime/hath.js";
 
 export type ToolExecResult = {
   content: string;
@@ -32,6 +33,7 @@ export type ToolContext = {
   nas: NasClient;
   dwar: DwarClient;
   browsers: BrowserDriver;
+  hath: HathGateway;
   steer: SteerQueue;
   intents: IntentQueue;
   locks: LaneLocks;

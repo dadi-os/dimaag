@@ -499,6 +499,9 @@ export function mockNas(opts: {
     async provision(nodeName) {
       return { bundle: Buffer.from(JSON.stringify({ node_name: nodeName })).toString("base64") };
     },
+    async listClients() {
+      return { clients: [] };
+    },
   };
 }
 

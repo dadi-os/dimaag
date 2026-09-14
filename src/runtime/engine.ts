@@ -19,6 +19,7 @@ import type { DwarChatResponse, DwarMessage, DwarToolUseBlock, Lane } from "../t
 import { assembleContext } from "./context.js";
 import { runConversationLoop } from "./conversation.js";
 import { EventBus } from "./events.js";
+import { HathGateway } from "./hath.js";
 import { IntentQueue } from "./intents.js";
 import { LaneLocks } from "./locks.js";
 import { runReasoningLoop } from "./reasoning.js";
@@ -39,6 +40,7 @@ export type Runtime = {
   intents: IntentQueue;
   transcript: TranscriptStore;
   events: EventBus;
+  hath: HathGateway;
   browsers: BrowserDriver;
   scheduler: Scheduler;
   enqueueConversation: (agentId: string) => void;
@@ -62,6 +64,7 @@ export function createRuntime(opts: {
   const intents = new IntentQueue();
   const transcript = new TranscriptStore();
   const events = new EventBus();
+  const hath = new HathGateway(events, opts.config.hath.timeout_ms);
   const browsers = new BrowserDriver(opts.nas, opts.config);
   const reasoningScratchpads = new Map<string, DwarMessage[]>();
   const conversationScratchpads = new Map<string, DwarMessage[]>();
@@ -126,6 +129,7 @@ export function createRuntime(opts: {
     intents,
     transcript,
     events,
+    hath,
     browsers,
     scheduler,
     enqueueConversation,
@@ -144,6 +148,7 @@ export function createRuntime(opts: {
       nas: opts.nas,
       dwar: opts.dwar,
       browsers,
+      hath,
       steer,
       intents,
       locks,

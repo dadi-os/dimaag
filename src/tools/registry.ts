@@ -32,6 +32,14 @@ import { pullUpdates } from "./nas/pull-updates.js";
 import { stackUp } from "./nas/stack-up.js";
 import { stackDown } from "./nas/stack-down.js";
 import { provision } from "./nas/provision.js";
+import { listClients } from "./nas/list-clients.js";
+import { getInfo as hathGetInfo } from "./hath/get-info.js";
+import { getBattery as hathGetBattery } from "./hath/get-battery.js";
+import { getLocation as hathGetLocation } from "./hath/get-location.js";
+import { getNetwork as hathGetNetwork } from "./hath/get-network.js";
+import { readClipboard as hathReadClipboard } from "./hath/read-clipboard.js";
+import { writeClipboard as hathWriteClipboard } from "./hath/write-clipboard.js";
+import { sendFile as hathSendFile } from "./hath/send-file.js";
 import { closeTerminal } from "./terminal/close-terminal.js";
 import { editFile } from "./terminal/edit-file.js";
 import { executeShell } from "./terminal/execute-shell.js";
@@ -106,6 +114,14 @@ const definitions = [
   stackUp,
   stackDown,
   provision,
+  listClients,
+  hathGetInfo,
+  hathGetBattery,
+  hathGetLocation,
+  hathGetNetwork,
+  hathReadClipboard,
+  hathWriteClipboard,
+  hathSendFile,
 ] as unknown as ToolDefinition[];
 
 const byName = new Map<string, ToolDefinition>();

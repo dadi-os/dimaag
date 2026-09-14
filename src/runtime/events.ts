@@ -18,7 +18,15 @@ export type RuntimeEvent =
   | { type: "lane_started"; agent_id: string; lane: Lane; at: string }
   | { type: "lane_finished"; agent_id: string; lane: Lane; at: string }
   | { type: "agent_spawned"; agent_id: string; parent_agent_id: string; name: string; at: string }
-  | { type: "agent_modified"; agent_id: string; active: boolean; at: string };
+  | { type: "agent_modified"; agent_id: string; active: boolean; at: string }
+  | {
+      type: "hath_command";
+      command_id: string;
+      node_name: string;
+      tool: string;
+      args: Record<string, unknown>;
+      at: string;
+    };
 
 type Listener = (event: RuntimeEvent) => void;
 

@@ -24,6 +24,10 @@ timeout_ms = 30000
 retry_attempts = 3
 backoff_ms = [500, 1000, 2000]
 
+[hath]
+# How long a hath_* tool waits for the target client to POST a command result.
+timeout_ms = 30000
+
 [browser]
 action_timeout_ms = 5000
 navigation_timeout_ms = 30000
