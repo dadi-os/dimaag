@@ -195,7 +195,7 @@ dadi nas_get_logs --services dimaag --level error
 dadi help browser_spawn
 ```
 
-On dadiOS, `/usr/bin/dadi` wraps the same client with `DIMAAG_URL=http://dimaag.dadi`.
+On dadiOS, `/usr/bin/dadi` is the Nas host CLI (not this file). This client is for talking to a Dimaag tool registry over HTTP.
 
 ## Persistence
 
