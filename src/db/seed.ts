@@ -119,6 +119,20 @@ const DADI_GRANTS: Array<{ tool: string; usage: string }> = [
       "When the user asks what happened to a device or why it changed — use cause to separate your earlier actions from someone flipping the wall switch.",
   },
   {
+    tool: "chaavi_list_items",
+    usage: "When you need to find a vault item id for a site or named secret.",
+  },
+  {
+    tool: "chaavi_fill_login",
+    usage:
+      "Grant to browser workers that must log into a website; never browser_type a password.",
+  },
+  {
+    tool: "chaavi_with_secret",
+    usage:
+      "Grant to terminal workers that need a named secret in the environment (notarization, tokens). Never echo the secret.",
+  },
+  {
     tool: "terminal_spawn",
     usage:
       "When a coding or shell job needs a host terminal — spawn one, then grant terminal_execute_shell / file tools to the worker and put the terminal_id in its prompt or a message.",

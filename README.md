@@ -8,6 +8,7 @@ Agent runtime for dadi. It owns agent identity, transcripts, the dual-lane loop,
 - Dwar at `http://dwar.dadi` for chat and image describe
 - Yaad at `http://yaad.dadi` for memory tools
 - Ghar at `http://ghar.dadi` for home device tools
+- Chaavi at `http://chaavi.dadi` for vault tools (`chaavi_*`); secrets are never returned to the model
 - Nas at `http://nas.dadi` for host terminals, project filesystem, and headed Chromium browsers (also mesh DNS / logging)
 - `playwright-core` (no browser download — Chromium comes from Nas over CDP)
 
@@ -21,10 +22,11 @@ dimaag/
     dwar/         Dwar axios client
     yaad/         Yaad axios client
     ghar/         Ghar axios client
+    chaavi/       Chaavi axios client (vault metadata + inject)
     nas/          Nas axios client (terminals + filesystem + browsers)
     browser/      Playwright CDP driver for Nas Chromium
     runtime/      dual-lane engine, transcript, events, locks
-    tools/        grantable tool registry (dimaag + yaad + ghar + nas + browser)
+    tools/        grantable tool registry (dimaag + yaad + ghar + chaavi + nas + browser)
     routers/      HTTP routes + schemas
     types/        domain types
   test/
@@ -35,7 +37,7 @@ dimaag/
 
 ## Config vs env
 
-`config.toml` (checked in): lane queue timeout, Dwar/Yaad/Ghar/Nas timeout and retry, browser action/navigation/snapshot limits.
+`config.toml` (checked in): lane queue timeout, Dwar/Yaad/Ghar/Chaavi/Nas timeout and retry, browser action/navigation/snapshot limits.
 
 Topology is hardcoded in `src/constants.ts`.
 
@@ -63,7 +65,7 @@ Migrations seed root Dadi and sync the tool registry.
 
 Logs follow the nas JSON contract (`service=dimaag`, request summary, `code` on errors). Default Fastify access logging is off.
 
-HTTP errors: `{ "error": { "type": "<code>", "message": "..." } }`. Shared codes include `invalid_request`, `not_found`, `upstream_unreachable`, `internal_error`. Domain codes include `dwar`, `yaad`, `ghar`, `nas`, `conflict`, `stale_ref`. See nas README for the shared catalog (`busy`, `forbidden`, `binary_file`, …).
+HTTP errors: `{ "error": { "type": "<code>", "message": "..." } }`. Shared codes include `invalid_request`, `not_found`, `upstream_unreachable`, `internal_error`. Domain codes include `dwar`, `yaad`, `ghar`, `chaavi`, `vault_unconfigured`, `vault_unreachable`, `nas`, `conflict`, `stale_ref`. See nas README for the shared catalog (`busy`, `forbidden`, `binary_file`, …).
 
 ## Agents
 
@@ -95,6 +97,16 @@ Transcript is in-process and shared. Conversation starts on inbound message, rea
 | `yaad_search_history` | `POST /history/search` | semantic search over corrections |
 
 `occurred_at` on ingest is stamped by Dimaag from the clock.
+
+### Chaavi (vault)
+
+Grantable inject tools. Metadata may reach the model; passwords and secret values never do.
+
+| tool | Chaavi route | when to use |
+| --- | --- | --- |
+| `chaavi_list_items` | `GET /v1/items` | find a vault item id by name or site uri (no secrets) |
+| `chaavi_fill_login` | `POST /v1/items/:id/login` | type a login into a Nas browser; never `browser_type` a password |
+| `chaavi_with_secret` | `POST /v1/items/:id/secret` | run a host command with the secret in `env_name`; output is redacted |
 
 ### Terminal (shell + files)
 

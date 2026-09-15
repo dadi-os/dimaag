@@ -15,6 +15,7 @@ import {
   insertAgent,
   mockDwar,
   mockGhar,
+  mockChaavi,
   mockNas,
   mockYaad,
   openTestDb,
@@ -85,7 +86,7 @@ test("POST /messages emits a message event", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -100,7 +101,7 @@ test("POST /messages emits a message event", async () => {
     sql: handle.sql,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     runtime,
   });
   const res = await app.inject({
@@ -130,7 +131,7 @@ test("dispatch_message emits message with agent_id set to the recipient", async 
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -223,7 +224,7 @@ test("route_message delivers as from_agent_id null; non-root cannot call it", as
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -271,7 +272,7 @@ test("lane_finished is emitted even when the lane run throws", async () => {
     db: handle.db,
     dwar,
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -297,7 +298,7 @@ test("GET /agents includes running and it flips true while a lane holds the lock
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -306,7 +307,7 @@ test("GET /agents includes running and it flips true while a lane holds the lock
     sql: handle.sql,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     runtime,
   });
 
@@ -343,6 +344,7 @@ test("GET /agents surfaces sessions after worker host tools", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas,
     config,
     log: silentLog,
@@ -353,6 +355,7 @@ test("GET /agents surfaces sessions after worker host tools", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas,
     runtime,
   });
@@ -422,7 +425,7 @@ test("GET /agents/root returns the null-parent agent; 409 when more than one", a
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -431,7 +434,7 @@ test("GET /agents/root returns the null-parent agent; 409 when more than one", a
     sql: handle.sql,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     runtime,
   });
 
@@ -468,7 +471,7 @@ test("GET /agents/:id includes granted tools with usage and excludes embedded to
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -477,7 +480,7 @@ test("GET /agents/:id includes granted tools with usage and excludes embedded to
     sql: handle.sql,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     runtime,
   });
   const res = await app.inject({ method: "GET", url: `/agents/${ROOT_DADI_ID}` });
@@ -530,7 +533,7 @@ test("GET /logs returns across agents; event filters; limit above cap is 422", a
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -539,7 +542,7 @@ test("GET /logs returns across agents; event filters; limit above cap is 422", a
     sql: handle.sql,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     runtime,
   });
 

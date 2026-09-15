@@ -12,6 +12,7 @@ import type { IntentQueue } from "../runtime/intents.js";
 import type { TranscriptStore } from "../runtime/transcript.js";
 import type { BrowserDriver } from "../browser/driver.js";
 import type { DwarClient } from "../dwar/client.js";
+import type { ChaaviClient } from "../chaavi/client.js";
 import type { GharClient } from "../ghar/client.js";
 import type { NasClient } from "../nas/client.js";
 import type { YaadClient } from "../yaad/client.js";
@@ -31,6 +32,7 @@ export type ToolContext = {
   lane: Lane;
   yaad: YaadClient;
   ghar: GharClient;
+  chaavi: ChaaviClient;
   nas: NasClient;
   dwar: DwarClient;
   browsers: BrowserDriver;

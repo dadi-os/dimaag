@@ -17,6 +17,7 @@ import {
   insertAgent,
   mockDwar,
   mockGhar,
+  mockChaavi,
   mockNas,
   mockYaad,
   openTestDb,
@@ -70,7 +71,7 @@ after(async () => {
 });
 
 test("allTools includes the three schedule tools and sync seeds root grants", async () => {
-  assert.equal(allTools().length, 58);
+  assert.equal(allTools().length, 61);
   assert.equal(findTool("dimaag_schedule_message")?.name, "dimaag_schedule_message");
   assert.equal(findTool("dimaag_list_schedules")?.name, "dimaag_list_schedules");
   assert.equal(findTool("dimaag_cancel_schedule")?.name, "dimaag_cancel_schedule");
@@ -116,6 +117,7 @@ test("due one-shot delivers once and deletes the row", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log,
@@ -173,6 +175,7 @@ test("not yet due leaves the row untouched", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log: capturingLog().log,
@@ -212,6 +215,7 @@ test("recurring sub-day advances run_at by exactly the interval", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log: capturingLog().log,
@@ -252,6 +256,7 @@ test("recurring daily preserves wall time across DST transitions", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log: capturingLog().log,
@@ -313,6 +318,7 @@ test("catch-up delivers once, advances past now, and warns schedule_late", async
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log,
@@ -361,6 +367,7 @@ test("inactive target skips delivery and logs schedule_target_unavailable", asyn
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log,
@@ -415,6 +422,7 @@ test("missing target skips delivery with reason missing", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log,
@@ -452,6 +460,7 @@ test("tick error is isolated and a later tick still runs", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log,
@@ -490,6 +499,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log: capturingLog().log,
@@ -614,6 +624,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log: capturingLog().log,

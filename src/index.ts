@@ -6,6 +6,7 @@ import { buildApp } from "./app.js";
 import { createDb } from "./db/client.js";
 import { migrate } from "./db/migrate.js";
 import { createDwarClient } from "./dwar/client.js";
+import { createChaaviClient } from "./chaavi/client.js";
 import { createGharClient } from "./ghar/client.js";
 import { createNasClient } from "./nas/client.js";
 import { createYaadClient } from "./yaad/client.js";
@@ -19,6 +20,7 @@ const app = await buildApp(config, {
   dwar: createDwarClient(config),
   yaad: createYaadClient(config),
   ghar: createGharClient(config),
+  chaavi: createChaaviClient(config),
   nas: createNasClient(config),
 });
 

@@ -19,6 +19,11 @@ timeout_ms = 30000
 retry_attempts = 3
 backoff_ms = [500, 1000, 2000]
 
+[chaavi]
+timeout_ms = 30000
+retry_attempts = 3
+backoff_ms = [500, 1000, 2000]
+
 [nas]
 timeout_ms = 30000
 retry_attempts = 3

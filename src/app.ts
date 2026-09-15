@@ -1,6 +1,7 @@
 import Fastify, { LogController, type FastifyInstance } from "fastify";
 import type { Config } from "./config.js";
 import type { Db, Sql } from "./db/client.js";
+import type { ChaaviClient } from "./chaavi/client.js";
 import type { DwarClient } from "./dwar/client.js";
 import type { GharClient } from "./ghar/client.js";
 import type { NasClient } from "./nas/client.js";
@@ -18,6 +19,7 @@ declare module "fastify" {
     dwar: DwarClient;
     yaad: YaadClient;
     ghar: GharClient;
+    chaavi: ChaaviClient;
     nas: NasClient;
     runtime: Runtime;
   }
@@ -32,6 +34,7 @@ export async function buildApp(
     dwar: DwarClient;
     yaad: YaadClient;
     ghar: GharClient;
+    chaavi: ChaaviClient;
     nas: NasClient;
     runtime?: Runtime;
   },
@@ -58,6 +61,7 @@ export async function buildApp(
       dwar: deps.dwar,
       yaad: deps.yaad,
       ghar: deps.ghar,
+      chaavi: deps.chaavi,
       nas: deps.nas,
       config,
       log: app.log,
@@ -68,6 +72,7 @@ export async function buildApp(
   app.decorate("dwar", deps.dwar);
   app.decorate("yaad", deps.yaad);
   app.decorate("ghar", deps.ghar);
+  app.decorate("chaavi", deps.chaavi);
   app.decorate("nas", deps.nas);
   app.decorate("runtime", runtime);
   runtime.scheduler.start();

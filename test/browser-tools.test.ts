@@ -10,6 +10,7 @@ import { agentTools } from "../src/db/schema.js";
 import {
   mockDwar,
   mockGhar,
+  mockChaavi,
   mockNas,
   mockYaad,
   openTestDb,
@@ -52,7 +53,7 @@ test("syncTools registers browser tools and root Dadi holds them", async () => {
   for (const name of BROWSER_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 58);
+  assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
@@ -83,6 +84,7 @@ test("spawn_browser and list_browsers call Nas", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas,
     config,
     log: silentLog,
@@ -118,6 +120,7 @@ test("close_browser calls Nas and drops the local connection entry", async () =>
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas,
     config,
     log: silentLog,

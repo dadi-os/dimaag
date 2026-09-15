@@ -11,6 +11,7 @@ import type { Db } from "../db/client.js";
 import { writeAgentLog } from "../db/logs.js";
 import { agents } from "../db/schema.js";
 import { BrowserDriver } from "../browser/driver.js";
+import type { ChaaviClient } from "../chaavi/client.js";
 import type { DwarClient } from "../dwar/client.js";
 import type { GharClient } from "../ghar/client.js";
 import type { NasClient } from "../nas/client.js";
@@ -57,6 +58,7 @@ export function createRuntime(opts: {
   dwar: DwarClient;
   yaad: YaadClient;
   ghar: GharClient;
+  chaavi: ChaaviClient;
   nas: NasClient;
   config: Config;
   log: RuntimeLog;
@@ -149,6 +151,7 @@ export function createRuntime(opts: {
       lane,
       yaad: opts.yaad,
       ghar: opts.ghar,
+      chaavi: opts.chaavi,
       nas: opts.nas,
       dwar: opts.dwar,
       browsers,

@@ -6,6 +6,13 @@ import { seed } from "../src/db/seed.js";
 import type { DwarChatRequest, DwarChatResponse } from "../src/types/domain.js";
 import type { DwarClient } from "../src/dwar/client.js";
 import type {
+  ChaaviClient,
+  ChaaviItem,
+  ChaaviLogin,
+  ChaaviSecret,
+  ListItemsRequest,
+} from "../src/chaavi/client.js";
+import type {
   CommandRequest,
   GharAttributeState,
   GharClient,
@@ -266,6 +273,51 @@ export function mockGhar(opts: {
         return opts.listEvents(query);
       }
       return { events: [] };
+    },
+  };
+}
+
+/** Test double for ChaaviClient. Unstubbed getLogin/getSecret throw `not_found`. */
+export function mockChaavi(
+  opts: {
+    listItems?: (
+      query?: ListItemsRequest,
+    ) => Promise<{ items: ChaaviItem[] }> | { items: ChaaviItem[] };
+    getLogin?: (itemId: string) => Promise<ChaaviLogin> | ChaaviLogin;
+    getSecret?: (itemId: string) => Promise<ChaaviSecret> | ChaaviSecret;
+  } = {},
+): ChaaviClient & {
+  listItemsCalls: Array<ListItemsRequest | undefined>;
+  getLoginCalls: string[];
+  getSecretCalls: string[];
+} {
+  const listItemsCalls: Array<ListItemsRequest | undefined> = [];
+  const getLoginCalls: string[] = [];
+  const getSecretCalls: string[] = [];
+  return {
+    listItemsCalls,
+    getLoginCalls,
+    getSecretCalls,
+    async listItems(query) {
+      listItemsCalls.push(query);
+      if (opts.listItems) {
+        return opts.listItems(query);
+      }
+      return { items: [] };
+    },
+    async getLogin(itemId) {
+      getLoginCalls.push(itemId);
+      if (opts.getLogin) {
+        return opts.getLogin(itemId);
+      }
+      throw new DimaagError(404, "not_found", `item ${itemId} not found`);
+    },
+    async getSecret(itemId) {
+      getSecretCalls.push(itemId);
+      if (opts.getSecret) {
+        return opts.getSecret(itemId);
+      }
+      throw new DimaagError(404, "not_found", `item ${itemId} not found`);
     },
   };
 }

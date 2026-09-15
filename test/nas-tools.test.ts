@@ -14,6 +14,7 @@ import {
   insertAgent,
   mockDwar,
   mockGhar,
+  mockChaavi,
   mockNas,
   mockYaad,
   openTestDb,
@@ -53,7 +54,7 @@ test("syncTools registers Nas tools and root Dadi holds them", async () => {
   for (const name of NAS_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 58);
+  assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
@@ -77,6 +78,7 @@ test("execute_shell passes through exit code, output, and timed_out", async () =
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas,
     config,
     log: silentLog,
@@ -110,6 +112,7 @@ test("Nas 404 becomes not_found tool error without killing the lane", async () =
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas,
     config,
     log: silentLog,
@@ -137,6 +140,7 @@ test("Nas 409 on execute_shell becomes busy tool error", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas,
     config,
     log: silentLog,
@@ -163,6 +167,7 @@ test("edit_file 409 surfaces the match count", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas,
     config,
     log: silentLog,
@@ -189,6 +194,7 @@ test("worker granted execute_shell and read_file sees those plus send_message an
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log: silentLog,

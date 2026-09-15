@@ -25,6 +25,9 @@ import { listDevices } from "./ghar/list-devices.js";
 import { getState } from "./ghar/get-state.js";
 import { controlDevice } from "./ghar/control-device.js";
 import { getDeviceEvents } from "./ghar/get-device-events.js";
+import { listItems } from "./chaavi/list-items.js";
+import { fillLogin } from "./chaavi/fill-login.js";
+import { withSecret } from "./chaavi/with-secret.js";
 import { getStatus as nasGetStatus } from "./nas/get-status.js";
 import { getLogs as nasGetLogs } from "./nas/get-logs.js";
 import { restartModule } from "./nas/restart-module.js";
@@ -82,6 +85,9 @@ const definitions = [
   getState,
   controlDevice,
   getDeviceEvents,
+  listItems,
+  fillLogin,
+  withSecret,
   spawnTerminal,
   listTerminals,
   closeTerminal,

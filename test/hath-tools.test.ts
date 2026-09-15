@@ -10,6 +10,7 @@ import { agentTools } from "../src/db/schema.js";
 import {
   mockDwar,
   mockGhar,
+  mockChaavi,
   mockNas,
   mockYaad,
   openTestDb,
@@ -46,7 +47,7 @@ test("syncTools registers Hath tools and root Dadi holds them", async () => {
   for (const name of HATH_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 58);
+  assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
@@ -73,6 +74,7 @@ test("nas_list_clients returns Nas mesh clients", async () => {
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas,
     config,
     log: silentLog,
@@ -95,6 +97,7 @@ test("hath_get_battery waits for client result over the command bus", async () =
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log: silentLog,
@@ -135,6 +138,7 @@ test("hath_write_clipboard forwards text args and surfaces client errors", async
     dwar: mockDwar({}),
     yaad: mockYaad(),
     ghar: mockGhar(),
+    chaavi: mockChaavi(),
     nas: mockNas(),
     config,
     log: silentLog,

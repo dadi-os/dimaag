@@ -14,6 +14,7 @@ import {
   insertAgent,
   mockDwar,
   mockGhar,
+  mockChaavi,
   mockNas,
   mockYaad,
   openTestDb,
@@ -49,13 +50,13 @@ test("two concurrent messages to one agent serialize on its conversation lock", 
       return endTurn();
     },
   });
-  const runtime = createRuntime({ db: handle.db, dwar, ghar: mockGhar(), nas: mockNas(), yaad: mockYaad(), config, log: silentLog });
+  const runtime = createRuntime({ db: handle.db, dwar, ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(), yaad: mockYaad(), config, log: silentLog });
   const app = await buildApp(config, {
     db: handle.db,
     sql: handle.sql,
     dwar,
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     runtime,
   });
   const body = {
@@ -88,7 +89,7 @@ test("modify_agent on a non-child is rejected", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -117,7 +118,7 @@ test("modify_agent on a direct child is allowed", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -156,7 +157,7 @@ test("reasoning cannot write another agent's mailbox", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -179,7 +180,7 @@ test("a steer with reasoning idle starts a Dwar reasoning call", async () => {
     reason: async () => endTurn("steered"),
     converse: async () => endTurn(),
   });
-  const runtime = createRuntime({ db: handle.db, dwar, ghar: mockGhar(), nas: mockNas(), yaad: mockYaad(), config, log: silentLog });
+  const runtime = createRuntime({ db: handle.db, dwar, ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(), yaad: mockYaad(), config, log: silentLog });
   await executeTool(runtime.toolContext(ROOT_DADI_ID, "conversation"), {
     type: "tool_use",
     id: "s1",
@@ -233,7 +234,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -271,7 +272,7 @@ test("grant_tool on a direct child succeeds and appears in assembleContext", asy
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -312,7 +313,7 @@ test("grant_tool on a non-child fails", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -341,7 +342,7 @@ test("grant_tool naming an unknown tool fails", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -365,7 +366,7 @@ test("revoke_tool removes a grant and fails when the child does not hold it", as
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });
@@ -432,7 +433,7 @@ test("an agent can grant a tool it does not itself hold", async () => {
     db: handle.db,
     dwar: mockDwar({}),
     yaad: mockYaad(),
-    ghar: mockGhar(), nas: mockNas(),
+    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     config,
     log: silentLog,
   });

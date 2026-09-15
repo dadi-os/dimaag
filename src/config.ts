@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
 import {
+  CHAAVI_BASE_URL,
   DWAR_BASE_URL,
   GHAR_BASE_URL,
   HOST,
@@ -37,6 +38,11 @@ const fileSchema = z.object({
     retry_attempts: z.number().int().positive(),
     backoff_ms: z.array(z.number().min(0)).nonempty(),
   }),
+  chaavi: z.object({
+    timeout_ms: z.number().int().positive(),
+    retry_attempts: z.number().int().positive(),
+    backoff_ms: z.array(z.number().min(0)).nonempty(),
+  }),
   nas: z.object({
     timeout_ms: z.number().int().positive(),
     retry_attempts: z.number().int().positive(),
@@ -64,6 +70,7 @@ export type Config = {
     dwarBaseUrl: string;
     yaadBaseUrl: string;
     gharBaseUrl: string;
+    chaaviBaseUrl: string;
     nasBaseUrl: string;
     host: string;
     port: number;
@@ -73,6 +80,7 @@ export type Config = {
   dwar: FileConfig["dwar"];
   yaad: FileConfig["yaad"];
   ghar: FileConfig["ghar"];
+  chaavi: FileConfig["chaavi"];
   nas: FileConfig["nas"];
   hath: FileConfig["hath"];
   browser: FileConfig["browser"];
@@ -120,6 +128,7 @@ export function loadConfig(): Config {
       dwarBaseUrl: DWAR_BASE_URL,
       yaadBaseUrl: YAAD_BASE_URL,
       gharBaseUrl: GHAR_BASE_URL,
+      chaaviBaseUrl: CHAAVI_BASE_URL,
       nasBaseUrl: NAS,
       host: HOST,
       port: PORT,
@@ -129,6 +138,7 @@ export function loadConfig(): Config {
     dwar: file.dwar,
     yaad: file.yaad,
     ghar: file.ghar,
+    chaavi: file.chaavi,
     nas: file.nas,
     hath: file.hath,
     browser: file.browser,
