@@ -17,6 +17,13 @@ export type RuntimeEvent =
     }
   | { type: "lane_started"; agent_id: string; lane: Lane; at: string }
   | { type: "lane_finished"; agent_id: string; lane: Lane; at: string }
+  | {
+      type: "lane_failed";
+      agent_id: string;
+      lane: Lane;
+      message: string;
+      at: string;
+    }
   | { type: "agent_spawned"; agent_id: string; parent_agent_id: string; name: string; at: string }
   | { type: "agent_modified"; agent_id: string; active: boolean; at: string }
   | {

@@ -208,7 +208,15 @@ export function createRuntime(opts: {
         });
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       opts.log.error({ err, agentId, lane }, `${lane} lane failed`);
+      events.emit({
+        type: "lane_failed",
+        agent_id: agentId,
+        lane,
+        message,
+        at: new Date().toISOString(),
+      });
     } finally {
       release?.();
       if (lane === "reasoning") {
