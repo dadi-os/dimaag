@@ -4,11 +4,17 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { DimaagError } from "../errors.js";
 import { executeTool } from "../runtime/tools.js";
-import { ROOT_DADI_ID } from "../types/domain.js";
+import { requireAgent } from "../tools/shared.js";
 import { allTools, findTool } from "../tools/registry.js";
 import { parse } from "./schemas.js";
 
 const nameParam = z.object({ name: z.string().min(1) }).strict();
+
+const executeBody = z
+  .object({
+    as_agent_id: z.string().uuid(),
+  })
+  .passthrough();
 
 /** Register GET /tools, GET /tools/:name, POST /tools/:name/execute. */
 export async function registerTools(app: FastifyInstance): Promise<void> {
@@ -39,11 +45,14 @@ export async function registerTools(app: FastifyInstance): Promise<void> {
     if (!tool) {
       throw new DimaagError(404, "not_found", `tool ${name} not found`);
     }
-    const input =
+    const raw =
       request.body === undefined || request.body === null || request.body === ""
         ? {}
         : request.body;
-    const result = await executeTool(app.runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    const parsed = parse(executeBody, raw);
+    const { as_agent_id: asAgentId, ...input } = parsed;
+    await requireAgent(app.db, asAgentId);
+    const result = await executeTool(app.runtime.toolContext(asAgentId, "reasoning"), {
       type: "tool_use",
       id: "cli",
       name,

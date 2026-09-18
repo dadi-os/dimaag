@@ -12,7 +12,7 @@ type DeliverDeps = {
 
 /**
  * Persist a human → agent message (from_agent_id null) and wake the recipient's
- * conversation lane. Shared by POST /messages and root's route_message tool.
+ * conversation lane. Shared by POST /messages and POST /dadi.
  */
 export async function deliverUserMessage(
   deps: DeliverDeps,

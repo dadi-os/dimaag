@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { ROOT_DADI_ID } from "../src/types/domain.js";
 import type { BrowserDriver } from "../src/browser/driver.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
@@ -10,6 +9,7 @@ import { syncTools, toolId } from "../src/tools/sync.js";
 import { agentTools } from "../src/db/schema.js";
 import { DimaagError } from "../src/errors.js";
 import {
+  insertWorker,
   mockChaavi,
   mockDwar,
   mockGhar,
@@ -35,22 +35,31 @@ after(async () => {
 
 const CHAAVI_TOOLS = ["chaavi_list_items", "chaavi_fill_login", "chaavi_with_secret"] as const;
 
-test("syncTools registers Chaavi tools and root Dadi holds them", async () => {
+test("syncTools registers Chaavi tools and a worker holds them", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of CHAAVI_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
   for (const name of CHAAVI_TOOLS) {
-    assert.ok(grantToolIds.has(toolId(name)), `missing root grant for ${name}`);
+    assert.ok(grantToolIds.has(toolId(name)), `missing worker grant for ${name}`);
   }
+  assert.ok(grants.every((row) => row.agentId === workerId));
 });
 
 test("list_items shapes items without a password field", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const itemId = "item-login-1";
   const chaavi = mockChaavi({
     listItems: () => ({
@@ -75,7 +84,7 @@ test("list_items shapes items without a password field", async () => {
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "li1",
     name: "chaavi_list_items",
@@ -98,6 +107,10 @@ test("list_items shapes items without a password field", async () => {
 
 test("fill_login types username then password and never returns the password", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const itemId = "item-login-1";
   const password = "s3cret-pass";
   const chaavi = mockChaavi({
@@ -121,7 +134,7 @@ test("fill_login types username then password and never returns the password", a
     log: silentLog,
   });
   const ctx = {
-    ...runtime.toolContext(ROOT_DADI_ID, "reasoning"),
+    ...runtime.toolContext(workerId, "reasoning"),
     browsers: {
       type: async (
         browserId: number,
@@ -167,6 +180,10 @@ test("fill_login types username then password and never returns the password", a
 
 test("with_secret redacts the value from exec output and omits it from the payload", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const itemId = "item-secret-1";
   const secret = "tok_live_abc";
   const chaavi = mockChaavi({
@@ -190,7 +207,7 @@ test("with_secret redacts the value from exec output and omits it from the paylo
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "ws1",
     name: "chaavi_with_secret",
@@ -219,6 +236,10 @@ test("with_secret redacts the value from exec output and omits it from the paylo
 
 test("Chaavi unreachable fails with chaavi code, not an empty success", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const chaavi = mockChaavi({
     listItems: () => {
       throw new DimaagError(502, "chaavi", "Chaavi is unreachable");
@@ -234,7 +255,7 @@ test("Chaavi unreachable fails with chaavi code, not an empty success", async ()
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "li2",
     name: "chaavi_list_items",
@@ -255,6 +276,10 @@ test("Chaavi unreachable fails with chaavi code, not an empty success", async ()
 
 test("vault_unconfigured maps through", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const chaavi = mockChaavi({
     listItems: () => {
       throw new DimaagError(503, "vault_unconfigured", "vault is not configured");
@@ -270,7 +295,7 @@ test("vault_unconfigured maps through", async () => {
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "li3",
     name: "chaavi_list_items",

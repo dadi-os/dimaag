@@ -1,18 +1,12 @@
 /**
- * Built-in lane tools (send/dispatch/route/steer/yield) and the executeTool dispatcher.
+ * Built-in lane tools (send/dispatch/steer/yield) and the executeTool dispatcher.
  * Registry tools are resolved for the reasoning lane; conversation uses the switch below.
  */
 
 import { z, ZodError } from "zod";
 import { DimaagError } from "../errors.js";
 import type { DwarTool, DwarToolUseBlock } from "../types/domain.js";
-import {
-  DISPATCH_MESSAGE,
-  ROUTE_MESSAGE,
-  SEND_MESSAGE,
-  STEER_REASONING,
-  YIELD,
-} from "../types/domain.js";
+import { DISPATCH_MESSAGE, SEND_MESSAGE, STEER_REASONING, YIELD } from "../types/domain.js";
 import { findTool } from "../tools/registry.js";
 import {
   fail,
@@ -21,7 +15,7 @@ import {
   type ToolContext,
   type ToolExecResult,
 } from "../tools/shared.js";
-import { deliverAgentMessage, deliverUserMessage } from "./deliver.js";
+import { deliverAgentMessage } from "./deliver.js";
 
 export type { ToolContext, ToolExecResult } from "../tools/shared.js";
 export { requireAgent } from "../tools/shared.js";
@@ -49,21 +43,6 @@ export const dispatchMessageInputSchema: Record<string, unknown> = {
       description: "Recipient agent id, or null for the user",
     },
     content: { type: "string", description: "The message to persist and deliver" },
-  },
-  required: ["to_agent_id", "content"],
-};
-
-export const routeMessageInputSchema: Record<string, unknown> = {
-  type: "object",
-  properties: {
-    to_agent_id: {
-      type: "string",
-      description: "Thread agent that should receive the user's message",
-    },
-    content: {
-      type: "string",
-      description: "The user's message, copied verbatim",
-    },
   },
   required: ["to_agent_id", "content"],
 };
@@ -98,14 +77,6 @@ export const dispatchMessageTool: DwarTool = {
   input_schema: dispatchMessageInputSchema,
 };
 
-/** Root-only: copy the user's message onto a thread agent verbatim. */
-export const routeMessageTool: DwarTool = {
-  name: ROUTE_MESSAGE,
-  description:
-    "Copy the user's message onto a thread agent as if the user sent it there (from_agent_id null). Root-only. Use after spawning or picking a thread; do not rephrase — pass the user's content verbatim. Does not end the turn — call yield when done.",
-  input_schema: routeMessageInputSchema,
-};
-
 /** Queue an instruction for the caller's reasoning lane. */
 export const steerReasoningTool: DwarTool = {
   name: STEER_REASONING,
@@ -129,11 +100,6 @@ const sendInput = z.object({
 
 const dispatchInput = z.object({
   to_agent_id: z.string().uuid().nullable(),
-  content: z.string().min(1),
-});
-
-const routeInput = z.object({
-  to_agent_id: z.string().uuid(),
   content: z.string().min(1),
 });
 
@@ -177,8 +143,6 @@ async function dispatchTool(
     switch (call.name) {
       case DISPATCH_MESSAGE:
         return await runDispatchMessage(ctx, call.input);
-      case ROUTE_MESSAGE:
-        return await runRouteMessage(ctx, call.input);
       case STEER_REASONING:
         return await runSteerReasoning(ctx, call.input);
       default:
@@ -224,36 +188,6 @@ async function runDispatchMessage(ctx: ToolContext, raw: unknown): Promise<ToolE
     },
   );
   return ok({ to_agent_id: row.toAgentId, content: row.content, seq: row.seq });
-}
-
-async function runRouteMessage(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {
-  const input = routeInput.parse(raw);
-  const caller = await requireAgent(ctx.db, ctx.callerId);
-  if (caller.parentAgentId !== null) {
-    return fail("only the root agent may route_message");
-  }
-  await requireAgent(ctx.db, input.to_agent_id);
-  const row = await deliverUserMessage(
-    {
-      db: ctx.db,
-      transcript: ctx.transcript,
-      events: ctx.events,
-      enqueueConversation: ctx.enqueueConversation,
-    },
-    input.to_agent_id,
-    input.content,
-  );
-  const routedSeq = ctx.transcript.markUserMessageRouted(
-    ctx.callerId,
-    input.content,
-    input.to_agent_id,
-  );
-  return ok({
-    to_agent_id: row.toAgentId,
-    content: row.content,
-    seq: row.seq,
-    routed_source_seq: routedSeq,
-  });
 }
 
 async function runSteerReasoning(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {

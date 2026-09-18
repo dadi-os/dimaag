@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { ROOT_DADI_ID } from "../src/types/domain.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
 import { migrate } from "../src/db/migrate.js";
@@ -8,6 +7,7 @@ import { allTools, findTool } from "../src/tools/registry.js";
 import { syncTools, toolId } from "../src/tools/sync.js";
 import { agentTools } from "../src/db/schema.js";
 import {
+  insertWorker,
   mockDwar,
   mockGhar,
   mockChaavi,
@@ -48,22 +48,31 @@ const BROWSER_TOOLS = [
   "browser_extract_text",
 ] as const;
 
-test("syncTools registers browser tools and root Dadi holds them", async () => {
+test("syncTools registers browser tools and a worker holds them", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of BROWSER_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
   for (const name of BROWSER_TOOLS) {
-    assert.ok(grantToolIds.has(toolId(name)), `missing root grant for ${name}`);
+    assert.ok(grantToolIds.has(toolId(name)), `missing worker grant for ${name}`);
   }
+  assert.ok(grants.every((row) => row.agentId === workerId));
 });
 
 test("spawn_browser and list_browsers call Nas", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const nas = mockNas({
     createBrowser: () => ({
       id: 10,
@@ -89,7 +98,7 @@ test("spawn_browser and list_browsers call Nas", async () => {
     config,
     log: silentLog,
   });
-  const spawned = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const spawned = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "sb1",
     name: "browser_spawn",
@@ -101,7 +110,7 @@ test("spawn_browser and list_browsers call Nas", async () => {
   assert.equal(body.browser_id, 10);
   assert.match(body.cdp_url, /browsers\/10/);
 
-  const listed = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const listed = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "lb1",
     name: "browser_list",
@@ -114,6 +123,10 @@ test("spawn_browser and list_browsers call Nas", async () => {
 
 test("close_browser calls Nas and drops the local connection entry", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const nas = mockNas({});
   const runtime = createRuntime({
     db: handle.db,
@@ -126,7 +139,7 @@ test("close_browser calls Nas and drops the local connection entry", async () =>
     log: silentLog,
   });
   runtime.browsers.remember(10, "ws://example/devtools/browser/x");
-  const closed = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const closed = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "cb1",
     name: "browser_close",

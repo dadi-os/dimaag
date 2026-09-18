@@ -24,7 +24,19 @@ export type RuntimeEvent =
       message: string;
       at: string;
     }
-  | { type: "agent_spawned"; agent_id: string; parent_agent_id: string; name: string; at: string }
+  | {
+      type: "dadi_started";
+      at: string;
+    }
+  | { type: "dadi_finished"; at: string }
+  | { type: "dadi_failed"; message: string; at: string }
+  | {
+      type: "agent_spawned";
+      agent_id: string;
+      parent_agent_id: string | null;
+      name: string;
+      at: string;
+    }
   | { type: "agent_modified"; agent_id: string; active: boolean; at: string }
   | {
       type: "hath_command";

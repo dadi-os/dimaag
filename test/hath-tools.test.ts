@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { ROOT_DADI_ID } from "../src/types/domain.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
 import { migrate } from "../src/db/migrate.js";
@@ -8,6 +7,7 @@ import { allTools, findTool } from "../src/tools/registry.js";
 import { syncTools, toolId } from "../src/tools/sync.js";
 import { agentTools } from "../src/db/schema.js";
 import {
+  insertWorker,
   mockDwar,
   mockGhar,
   mockChaavi,
@@ -42,22 +42,31 @@ const HATH_TOOLS = [
   "hath_send_file",
 ] as const;
 
-test("syncTools registers Hath tools and root Dadi holds them", async () => {
+test("syncTools registers Hath tools and a worker holds them", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of HATH_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
   for (const name of HATH_TOOLS) {
-    assert.ok(grantToolIds.has(toolId(name)), `missing root grant for ${name}`);
+    assert.ok(grantToolIds.has(toolId(name)), `missing worker grant for ${name}`);
   }
+  assert.ok(grants.every((row) => row.agentId === workerId));
 });
 
 test("nas_list_clients returns Nas mesh clients", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const nas = mockNas();
   nas.listClients = async () => ({
     clients: [
@@ -79,7 +88,7 @@ test("nas_list_clients returns Nas mesh clients", async () => {
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "lc1",
     name: "nas_list_clients",
@@ -92,6 +101,10 @@ test("nas_list_clients returns Nas mesh clients", async () => {
 
 test("hath_get_battery waits for client result over the command bus", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const runtime = createRuntime({
     db: handle.db,
     dwar: mockDwar({}),
@@ -117,7 +130,7 @@ test("hath_get_battery waits for client result over the command bus", async () =
   });
 
   try {
-    const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
       type: "tool_use",
       id: "bat1",
       name: "hath_get_battery",
@@ -133,6 +146,10 @@ test("hath_get_battery waits for client result over the command bus", async () =
 
 test("hath_write_clipboard forwards text args and surfaces client errors", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const runtime = createRuntime({
     db: handle.db,
     dwar: mockDwar({}),
@@ -157,7 +174,7 @@ test("hath_write_clipboard forwards text args and surfaces client errors", async
   });
 
   try {
-    const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
       type: "tool_use",
       id: "clip1",
       name: "hath_write_clipboard",

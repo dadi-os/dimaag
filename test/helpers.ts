@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import type { Config } from "../src/config.js";
 import { loadConfig } from "../src/config.js";
 import { createDb, type Db, type Sql } from "../src/db/client.js";
-import { seed } from "../src/db/seed.js";
+import { applyWorkerCatalog } from "../src/db/seed.js";
+import { agentTools, agents } from "../src/db/schema.js";
+import { toolId } from "../src/tools/sync.js";
 import type { DwarChatRequest, DwarChatResponse } from "../src/types/domain.js";
 import type { DwarClient } from "../src/dwar/client.js";
 import type {
@@ -47,7 +49,6 @@ import type {
   RecallResponse,
   YaadClient,
 } from "../src/yaad/client.js";
-import { agents } from "../src/db/schema.js";
 import { syncTools } from "../src/tools/sync.js";
 import { DimaagError } from "../src/errors.js";
 
@@ -89,6 +90,9 @@ export function mockDwar(opts: {
   converse?: (
     request: DwarChatRequest,
   ) => DwarChatResponse | Promise<DwarChatResponse>;
+  complete?: (
+    request: DwarChatRequest,
+  ) => DwarChatResponse | Promise<DwarChatResponse>;
   describeImage?: (request: {
     image: { media_type: string; data: string };
     prompt?: string;
@@ -101,6 +105,7 @@ export function mockDwar(opts: {
 }): DwarClient & {
   reasoningCalls: DwarChatRequest[];
   conversationCalls: DwarChatRequest[];
+  completeCalls: DwarChatRequest[];
   describeCalls: Array<{
     image: { media_type: string; data: string };
     prompt?: string;
@@ -108,6 +113,7 @@ export function mockDwar(opts: {
 } {
   const reasoningCalls: DwarChatRequest[] = [];
   const conversationCalls: DwarChatRequest[] = [];
+  const completeCalls: DwarChatRequest[] = [];
   const describeCalls: Array<{
     image: { media_type: string; data: string };
     prompt?: string;
@@ -115,6 +121,7 @@ export function mockDwar(opts: {
   return {
     reasoningCalls,
     conversationCalls,
+    completeCalls,
     describeCalls,
     async reason(request) {
       reasoningCalls.push(request);
@@ -129,6 +136,24 @@ export function mockDwar(opts: {
         return opts.converse(request);
       }
       return yieldTurn("converse-yield");
+    },
+    async complete(request) {
+      completeCalls.push(request);
+      if (opts.complete) {
+        return opts.complete(request);
+      }
+      return {
+        content: [
+          {
+            type: "tool_use",
+            id: "decide-1",
+            name: "decide",
+            input: { action: "spawn", name: "thread", system_prompt: "do the job" },
+          },
+        ],
+        stop_reason: "tool_use",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      };
     },
     async describeImage(request) {
       describeCalls.push(request);
@@ -567,10 +592,45 @@ export async function openTestDb(): Promise<{ db: Db; sql: Sql; close: () => Pro
   };
 }
 
-export async function resetRuntime(sql: Sql, db: Db, config: Config): Promise<void> {
+export async function resetRuntime(sql: Sql, db: Db, _config: Config): Promise<void> {
   await sql`TRUNCATE scheduled_messages, agent_logs, agent_tools, tools, agents CASCADE`;
   await syncTools(db);
-  await seed(db, config);
+}
+
+/** Top-level thread with the worker catalog. */
+export async function insertWorker(
+  db: Db,
+  args: { name: string; systemPrompt: string; parentAgentId?: string | null },
+): Promise<string> {
+  const id = await insertAgent(db, args);
+  await applyWorkerCatalog(db, id);
+  return id;
+}
+
+const MANAGER_TOOLS = [
+  "dimaag_spawn_agent",
+  "dimaag_modify_agent",
+  "dimaag_grant_tool",
+  "dimaag_revoke_tool",
+] as const;
+
+/** Agent that can spawn/grant/revoke/modify children. */
+export async function insertManager(
+  db: Db,
+  args: { name: string; systemPrompt: string } = {
+    name: "manager",
+    systemPrompt: "manage children",
+  },
+): Promise<string> {
+  const id = await insertAgent(db, args);
+  for (const tool of MANAGER_TOOLS) {
+    await db.insert(agentTools).values({
+      agentId: id,
+      toolId: toolId(tool),
+      usage: "manage children",
+    });
+  }
+  return id;
 }
 
 export async function insertAgent(

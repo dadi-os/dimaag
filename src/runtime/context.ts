@@ -3,16 +3,9 @@ import type { Db } from "../db/client.js";
 import { agentTools, agents, tools } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
 import type { DwarChatRequest, DwarMessage, DwarTool, Lane } from "../types/domain.js";
-import {
-  DISPATCH_MESSAGE,
-  ROUTE_MESSAGE,
-  SEND_MESSAGE,
-  STEER_REASONING,
-  YIELD,
-} from "../types/domain.js";
+import { DISPATCH_MESSAGE, SEND_MESSAGE, STEER_REASONING, YIELD } from "../types/domain.js";
 import {
   dispatchMessageTool,
-  routeMessageTool,
   sendMessageTool,
   steerReasoningTool,
   yieldTool,
@@ -21,7 +14,7 @@ import type { TranscriptStore } from "./transcript.js";
 
 /**
  * One assembler for both lanes. The transcript is identical; only the tool set differs.
- * Active direct children are appended to the system prompt so a router can reuse threads.
+ * Active direct children are appended so a parent can address workers it spawned.
  */
 export async function assembleContext(opts: {
   db: Db;
@@ -50,27 +43,10 @@ export async function assembleContext(opts: {
   if (activeChildren.length > 0) {
     const lines = activeChildren.map((c) => {
       const purpose = c.systemPrompt.trim().split(/\n/)[0] ?? "";
-      const brief =
-        purpose.length > 120 ? `${purpose.slice(0, 117)}…` : purpose;
-      return brief
-        ? `- ${c.name} (${c.id}): ${brief}`
-        : `- ${c.name} (${c.id})`;
+      const brief = purpose.length > 120 ? `${purpose.slice(0, 117)}…` : purpose;
+      return brief ? `- ${c.name} (${c.id}): ${brief}` : `- ${c.name} (${c.id})`;
     });
-    system = `${system}\n\nYour active direct child threads:\n${lines.join("\n")}`;
-  } else if (agent.parentAgentId === null) {
-    system = `${system}\n\nYou have no active child threads yet. Spawn one when a user message needs work.`;
-  }
-
-  if (agent.parentAgentId === null) {
-    const routed = opts.transcript.routedUserMessages(opts.agentId);
-    if (routed.length > 0) {
-      const lines = routed.map((r) => {
-        const preview =
-          r.content.length > 80 ? `${r.content.slice(0, 77)}…` : r.content;
-        return `- seq ${r.seq} → ${r.toAgentId}: ${preview}`;
-      });
-      system = `${system}\n\nAlready routed to a thread (do not route_message or re-steer these again):\n${lines.join("\n")}`;
-    }
+    system = `${system}\n\nYour active direct children:\n${lines.join("\n")}`;
   }
 
   const entries = opts.transcript.transcriptFor(opts.agentId);
@@ -82,21 +58,13 @@ export async function assembleContext(opts: {
   return {
     system,
     messages: dwarMessages,
-    tools: await toolsForLane(opts.db, opts.agentId, opts.lane, agent.parentAgentId === null),
+    tools: await toolsForLane(opts.db, opts.agentId, opts.lane),
   };
 }
 
-async function toolsForLane(
-  db: Db,
-  agentId: string,
-  lane: Lane,
-  isRoot: boolean,
-): Promise<DwarTool[]> {
+async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTool[]> {
   if (lane === "conversation") {
-    const embedded: DwarTool[] = isRoot
-      ? [routeMessageTool, dispatchMessageTool, steerReasoningTool, yieldTool]
-      : [dispatchMessageTool, steerReasoningTool, yieldTool];
-    return embedded;
+    return [dispatchMessageTool, steerReasoningTool, yieldTool];
   }
   const grants = await db
     .select({
@@ -118,7 +86,6 @@ async function toolsForLane(
 
 export const embeddedReasoningTools = [SEND_MESSAGE, YIELD] as const;
 export const embeddedConversationTools = [
-  ROUTE_MESSAGE,
   DISPATCH_MESSAGE,
   STEER_REASONING,
   YIELD,

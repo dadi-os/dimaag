@@ -4,8 +4,7 @@ import { after, before, test } from "node:test";
 import { migrate } from "../src/db/migrate.js";
 import { scheduledMessages, type ScheduledMessageRow } from "../src/db/schema.js";
 import { toScheduledMessageRecord } from "../src/serialize.js";
-import { ROOT_DADI_ID } from "../src/types/domain.js";
-import { insertAgent, openTestDb, resetRuntime, testConfig } from "./helpers.js";
+import { insertAgent, insertWorker, openTestDb, resetRuntime, testConfig } from "./helpers.js";
 
 const config = testConfig();
 const handle = await openTestDb();
@@ -51,13 +50,17 @@ test("scheduled_messages exists with check constraints and run_at index", async 
 
 test("from_agent_id = to_agent_id is rejected", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const fromId = await insertWorker(handle.db, {
+    name: "scheduler",
+    systemPrompt: "schedule work",
+  });
 
   await assert.rejects(
     () =>
       handle.db.insert(scheduledMessages).values({
         id: randomUUID(),
-        fromAgentId: ROOT_DADI_ID,
-        toAgentId: ROOT_DADI_ID,
+        fromAgentId: fromId,
+        toAgentId: fromId,
         content: "self",
         runAt: new Date(),
         intervalMinutes: null,
@@ -71,17 +74,20 @@ test("from_agent_id = to_agent_id is rejected", async () => {
 
 test("interval_minutes 0 is rejected; 1 and null are accepted", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const fromId = await insertWorker(handle.db, {
+    name: "scheduler",
+    systemPrompt: "schedule work",
+  });
   const toId = await insertAgent(handle.db, {
     name: "scheduled-target",
     systemPrompt: "prompt",
-    parentAgentId: ROOT_DADI_ID,
   });
 
   await assert.rejects(
     () =>
       handle.db.insert(scheduledMessages).values({
         id: randomUUID(),
-        fromAgentId: ROOT_DADI_ID,
+        fromAgentId: fromId,
         toAgentId: toId,
         content: "bad interval",
         runAt: new Date(),
@@ -98,7 +104,7 @@ test("interval_minutes 0 is rejected; 1 and null are accepted", async () => {
 
   await handle.db.insert(scheduledMessages).values({
     id: randomUUID(),
-    fromAgentId: ROOT_DADI_ID,
+    fromAgentId: fromId,
     toAgentId: toId,
     content: "one-shot",
     runAt: new Date(),
@@ -107,7 +113,7 @@ test("interval_minutes 0 is rejected; 1 and null are accepted", async () => {
 
   await handle.db.insert(scheduledMessages).values({
     id: randomUUID(),
-    fromAgentId: ROOT_DADI_ID,
+    fromAgentId: fromId,
     toAgentId: toId,
     content: "recurring",
     runAt: new Date(),

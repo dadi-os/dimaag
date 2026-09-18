@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { ROOT_DADI_ID, SEND_MESSAGE } from "../src/types/domain.js";
+import { SEND_MESSAGE } from "../src/types/domain.js";
 import { assembleContext } from "../src/runtime/context.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
@@ -12,6 +12,8 @@ import { agentTools } from "../src/db/schema.js";
 import { DimaagError } from "../src/errors.js";
 import {
   insertAgent,
+  insertManager,
+  insertWorker,
   mockDwar,
   mockGhar,
   mockChaavi,
@@ -49,22 +51,42 @@ const NAS_TOOLS = [
   "terminal_grep",
 ] as const;
 
-test("syncTools registers Nas tools and root Dadi holds them", async () => {
+const NAS_DESTRUCTIVE = [
+  "nas_restart_module",
+  "nas_stack_up",
+  "nas_stack_down",
+  "nas_provision",
+  "nas_pull_updates",
+] as const;
+
+test("syncTools registers Nas tools and a worker holds them — not destructive ops", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of NAS_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
   for (const name of NAS_TOOLS) {
-    assert.ok(grantToolIds.has(toolId(name)), `missing root grant for ${name}`);
+    assert.ok(grantToolIds.has(toolId(name)), `missing worker grant for ${name}`);
   }
+  for (const name of NAS_DESTRUCTIVE) {
+    assert.equal(grantToolIds.has(toolId(name)), false, `worker must not hold ${name}`);
+  }
+  assert.ok(grants.every((row) => row.agentId === workerId));
 });
 
 test("execute_shell passes through exit code, output, and timed_out", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const nas = mockNas({
     exec: () => ({
       exit_code: 7,
@@ -83,7 +105,7 @@ test("execute_shell passes through exit code, output, and timed_out", async () =
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "ex1",
     name: "terminal_execute_shell",
@@ -102,6 +124,10 @@ test("execute_shell passes through exit code, output, and timed_out", async () =
 
 test("Nas 404 becomes not_found tool error without killing the lane", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const nas = mockNas({
     exec: () => {
       throw new DimaagError(404, "not_found", "not_found");
@@ -117,7 +143,7 @@ test("Nas 404 becomes not_found tool error without killing the lane", async () =
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "ex2",
     name: "terminal_execute_shell",
@@ -130,6 +156,10 @@ test("Nas 404 becomes not_found tool error without killing the lane", async () =
 
 test("Nas 409 on execute_shell becomes busy tool error", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const nas = mockNas({
     exec: () => {
       throw new DimaagError(409, "busy", "terminal is busy");
@@ -145,7 +175,7 @@ test("Nas 409 on execute_shell becomes busy tool error", async () => {
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "ex3",
     name: "terminal_execute_shell",
@@ -157,6 +187,10 @@ test("Nas 409 on execute_shell becomes busy tool error", async () => {
 
 test("edit_file 409 surfaces the match count", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const nas = mockNas({
     editFile: () => {
       throw new DimaagError(409, "conflict", "matches: 3");
@@ -172,7 +206,7 @@ test("edit_file 409 surfaces the match count", async () => {
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "ed1",
     name: "terminal_edit_file",
@@ -189,6 +223,7 @@ test("edit_file 409 surfaces the match count", async () => {
 
 test("worker granted execute_shell and read_file sees those plus send_message and yield", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const managerId = await insertManager(handle.db);
   const runtime = createRuntime({
     db: handle.db,
     dwar: mockDwar({}),
@@ -202,10 +237,10 @@ test("worker granted execute_shell and read_file sees those plus send_message an
   const childId = await insertAgent(handle.db, {
     name: "coder",
     systemPrompt: "use terminal t1",
-    parentAgentId: ROOT_DADI_ID,
+    parentAgentId: managerId,
   });
   for (const toolName of ["terminal_execute_shell", "terminal_read_file"] as const) {
-    const granted = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+    const granted = await executeTool(runtime.toolContext(managerId, "reasoning"), {
       type: "tool_use",
       id: `g-${toolName}`,
       name: "dimaag_grant_tool",

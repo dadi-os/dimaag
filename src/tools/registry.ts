@@ -63,8 +63,8 @@ import { searchHistory } from "./yaad/search-history.js";
 
 /**
  * Every non-embedded tool. Embedded lane plumbing (send_message, dispatch_message,
- * route_message, steer_reasoning, yield) is deliberately NOT here — those are not
- * grantable and never appear in the tools table.
+ * steer_reasoning, yield) is deliberately NOT here — those are not grantable and
+ * never appear in the tools table.
  */
 const definitions = [
   spawnAgent,

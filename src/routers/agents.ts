@@ -1,10 +1,9 @@
-/** Agent list/detail/log routes, including `/agents/root` (registered before `:id`). */
+/** Agent list/detail/log routes. */
 
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { agentLogs, agents, agentTools, tools } from "../db/schema.js";
 import type { AgentRow } from "../db/schema.js";
-import { DimaagError } from "../errors.js";
 import { requireAgent } from "../runtime/tools.js";
 import { toAgentRecord, toLogRecord } from "../serialize.js";
 import type { AgentRecord } from "../types/domain.js";
@@ -47,43 +46,13 @@ async function agentDetail(app: FastifyInstance, agentRow: AgentRow) {
   };
 }
 
-/**
- * Register agent list/detail/log routes.
- * `/agents/root` is registered before `/agents/:id` because "root" is not a UUID.
- */
+/** Register agent list/detail/log routes. */
 export async function registerAgents(app: FastifyInstance): Promise<void> {
   app.get("/agents", async () => {
     const rows = await app.db.select().from(agents);
     return {
       agents: rows.map((row) => withLive(row, app.runtime)),
     };
-  });
-
-  app.get("/agents/root", async () => {
-    const rows = await app.db.select().from(agents).where(isNull(agents.parentAgentId));
-    if (rows.length === 0) {
-      throw new DimaagError(
-        404,
-        "not_found",
-        "no root agent (parent_agent_id is null); seedRootDadi may not have run",
-      );
-    }
-    if (rows.length > 1) {
-      throw new DimaagError(
-        409,
-        "conflict",
-        `data corruption: ${rows.length} agents with parent_agent_id null; expected exactly one`,
-      );
-    }
-    const root = rows[0];
-    if (!root) {
-      throw new DimaagError(
-        404,
-        "not_found",
-        "no root agent (parent_agent_id is null); seedRootDadi may not have run",
-      );
-    }
-    return agentDetail(app, root);
   });
 
   app.get("/agents/:id", async (request) => {

@@ -1,4 +1,4 @@
-/** HTTP client for Dwar chat (reasoning / conversation) and image describe. */
+/** HTTP client for Dwar chat (reasoning / conversation / complete) and image describe. */
 
 import axios, { type AxiosInstance } from "axios";
 import { z } from "zod";
@@ -45,10 +45,11 @@ export type DwarDescribeImageResponse = {
   usage: { input_tokens: number; output_tokens: number };
 };
 
-/** Dwar surface used by Dimaag: reasoning/conversation chat and image captioning. */
+/** Dwar surface used by Dimaag: lane chat, promptless complete, and image captioning. */
 export type DwarClient = {
   reason: (request: DwarChatRequest) => Promise<DwarChatResponse>;
   converse: (request: DwarChatRequest) => Promise<DwarChatResponse>;
+  complete: (request: DwarChatRequest) => Promise<DwarChatResponse>;
   describeImage: (
     request: DwarDescribeImageRequest,
   ) => Promise<DwarDescribeImageResponse>;
@@ -117,6 +118,7 @@ export function createDwarClient(config: Config): DwarClient {
   return {
     reason: (request) => postChat("/chat/reasoning", request),
     converse: (request) => postChat("/chat/conversation", request),
+    complete: (request) => postChat("/chat/complete", request),
     describeImage,
   };
 }

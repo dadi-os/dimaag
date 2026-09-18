@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { ROOT_DADI_ID } from "../src/types/domain.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
 import { migrate } from "../src/db/migrate.js";
@@ -11,6 +10,7 @@ import { agentTools } from "../src/db/schema.js";
 import { DimaagError } from "../src/errors.js";
 import {
   insertAgent,
+  insertWorker,
   mockDwar,
   mockGhar,
   mockChaavi,
@@ -36,22 +36,31 @@ after(async () => {
 
 const GHAR_TOOLS = ["ghar_list_devices", "ghar_get_state", "ghar_control_device", "ghar_get_device_events"] as const;
 
-test("syncTools registers Ghar tools and root Dadi holds them", async () => {
+test("syncTools registers Ghar tools and a worker holds them", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of GHAR_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
   for (const name of GHAR_TOOLS) {
-    assert.ok(grantToolIds.has(toolId(name)), `missing root grant for ${name}`);
+    assert.ok(grantToolIds.has(toolId(name)), `missing worker grant for ${name}`);
   }
+  assert.ok(grants.every((row) => row.agentId === workerId));
 });
 
 test("list_devices passes filters through to the Ghar client", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const deviceId = randomUUID();
   const ghar = mockGhar({
     listDevices: () => ({
@@ -83,7 +92,7 @@ test("list_devices passes filters through to the Ghar client", async () => {
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "ld1",
     name: "ghar_list_devices",
@@ -98,12 +107,16 @@ test("list_devices passes filters through to the Ghar client", async () => {
   assert.equal(body.devices[0].capabilities[0].capability, "dimmable");
 });
 
-test("control_device attributes cause to the calling agent, not root", async () => {
+test("control_device attributes cause to the calling agent, not the parent", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertWorker(handle.db, {
+    name: "parent",
+    systemPrompt: "parent",
+  });
   const childId = await insertAgent(handle.db, {
     name: "house-thread",
     systemPrompt: "control lights",
-    parentAgentId: ROOT_DADI_ID,
+    parentAgentId: parentId,
   });
   await handle.db.insert(agentTools).values({
     agentId: childId,
@@ -140,11 +153,15 @@ test("control_device attributes cause to the calling agent, not root", async () 
   assert.deepEqual(call.body.params, { level: 40 });
   assert.equal(call.body.cause, "agent");
   assert.equal(call.body.cause_ref, childId);
-  assert.notEqual(call.body.cause_ref, ROOT_DADI_ID);
+  assert.notEqual(call.body.cause_ref, parentId);
 });
 
 test("Ghar unreachable fails with ghar code, not an empty success", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const ghar = mockGhar({
     listDevices: () => {
       throw new DimaagError(502, "ghar", "Ghar is unreachable");
@@ -160,7 +177,7 @@ test("Ghar unreachable fails with ghar code, not an empty success", async () => 
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "ld2",
     name: "ghar_list_devices",
@@ -181,6 +198,10 @@ test("Ghar unreachable fails with ghar code, not an empty success", async () => 
 
 test("capability_unsupported and device_unreachable stay distinguishable", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const deviceId = randomUUID();
   let mode: "capability" | "unreachable" = "capability";
   const ghar = mockGhar({
@@ -205,7 +226,7 @@ test("capability_unsupported and device_unreachable stay distinguishable", async
     config,
     log: silentLog,
   });
-  const unsupported = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const unsupported = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "cd2",
     name: "ghar_control_device",
@@ -215,7 +236,7 @@ test("capability_unsupported and device_unreachable stay distinguishable", async
   assert.match(unsupported.content, /^capability_unsupported:/);
 
   mode = "unreachable";
-  const unreachable = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const unreachable = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "cd3",
     name: "ghar_control_device",
@@ -228,6 +249,10 @@ test("capability_unsupported and device_unreachable stay distinguishable", async
 
 test("get_device_events passes filters through and bounds the default limit", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const deviceId = randomUUID();
   const ghar = mockGhar({
     listEvents: () => ({
@@ -255,7 +280,7 @@ test("get_device_events passes filters through and bounds the default limit", as
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "ev1",
     name: "ghar_get_device_events",
@@ -285,6 +310,10 @@ test("get_device_events passes filters through and bounds the default limit", as
 
 test("get_state returns only requested devices with changed_at", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const a = randomUUID();
   const b = randomUUID();
   const ghar = mockGhar({
@@ -305,7 +334,7 @@ test("get_state returns only requested devices with changed_at", async () => {
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "gs1",
     name: "ghar_get_state",

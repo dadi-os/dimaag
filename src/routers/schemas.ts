@@ -30,6 +30,23 @@ const messageAttachment = z
   })
   .strict();
 
+export const postDadiBody = z
+  .object({
+    /** May be empty when attachments are present; patched server-side. */
+    content: z.string(),
+    attachments: z.array(messageAttachment).max(8).optional(),
+  })
+  .strict()
+  .superRefine((body, ctx) => {
+    if (body.content.trim().length === 0 && (body.attachments?.length ?? 0) === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "content or attachments required",
+        path: ["content"],
+      });
+    }
+  });
+
 export const postMessageBody = z
   .object({
     to_agent_id: z.string().uuid(),

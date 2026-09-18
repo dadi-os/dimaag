@@ -52,7 +52,7 @@ docker compose run --rm dimaag npm run db:migrate
 docker compose run --rm dimaag npm test
 ```
 
-Migrations seed root Dadi and sync the tool registry.
+Migrations sync the tool registry and apply the worker catalog to every top-level agent (`parent_agent_id` null). Dadi is `POST /dadi`, not an agents row.
 
 ## CI / CD
 
@@ -69,7 +69,13 @@ HTTP errors: `{ "error": { "type": "<code>", "message": "..." } }`. Shared codes
 
 ## Agents
 
-Every agent is a row, including root Dadi (seeded at migration). Clients discover root via `GET /agents/root`. `parent_agent_id` is modification authority only. There is no thread table — a "Dadi thread" is a child of root. `GET /agents` also includes ephemeral `running` (lane locks) and `sessions` (Nas browsers and terminals the agent recently drove). Spawn/list do not attach; worker tools that take `browser_id` or `terminal_id` do. Both maps die with the process.
+Every `agents` row is an agent. Dadi is not a row — it is `POST /dadi`. Top-level threads have `parent_agent_id` null (god-owned). Nested workers point at a real parent. `GET /agents` includes ephemeral `running` (lane locks) and `sessions` (Nas browsers and terminals the agent recently drove). Spawn/list do not attach; worker tools that take `browser_id` or `terminal_id` do. Both maps die with the process.
+
+## Dadi
+
+`POST /dadi` is the router. Policy lives in `prompts/dadi.md`. Dimaag sends that prompt (plus the top-level roster) as `system` to Dwar `POST /chat/complete` — a promptless inference call — with one `decide` tool (`reuse` | `spawn` | `modify`). Code applies the decision. Spawn creates a top-level thread with the worker catalog. Modify can change any agent's prompt or `active`. Routed utterances are delivered once onto the thread as `from_agent_id` null. Dadi does not speak and does not hold worker tools.
+
+SSE: `dadi_started` / `dadi_finished` / `dadi_failed`. After a route, the thread's `lane_*` and `message` events take over.
 
 ## The user is null
 
@@ -77,7 +83,7 @@ No user table. Human messages use `from_agent_id = null` / `to_agent_id = null`.
 
 ## Dual lanes
 
-Every agent has both lanes. **Reasoning** is the executor (tool-calling against `agent_tools` plus embedded `send_message` / `yield`). **Conversation** is the control surface (`dispatch_message`, `steer_reasoning`, `yield`; root also gets `route_message`). Speech is only via those message tools — model text is thought, never speech. A turn ends only on `yield`.
+Every agent has both lanes. **Reasoning** is the executor (tool-calling against `agent_tools` plus embedded `send_message` / `yield`). **Conversation** is the control surface (`dispatch_message`, `steer_reasoning`, `yield`). Speech is only via those message tools — model text is thought, never speech. A turn ends only on `yield`.
 
 Transcript is in-process and shared. Conversation starts on inbound message, reasoning finish, or `send_message`. `steer_reasoning` queues instructions for the next reasoning step.
 
@@ -186,16 +192,7 @@ Reverse RPC over SSE `hath_command` + `POST /hath/commands/:id/result`. Discover
 
 ## CLI
 
-`cli/dadi.mjs` invokes registry tools over HTTP. Requires `DIMAAG_URL` (no default).
-
-```sh
-export DIMAAG_URL=http://dimaag.dadi
-dadi help
-dadi nas_get_logs --services dimaag --level error
-dadi help browser_spawn
-```
-
-On dadiOS, `/usr/bin/dadi` is the Nas host CLI (not this file). This client is for talking to a Dimaag tool registry over HTTP.
+The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the appliance). It invokes this registry over HTTP (`GET /tools`, `POST /tools/:name/execute`). Requires `DIMAAG_URL` (no default) and `--as-agent-id <uuid>` on every execute.
 
 ## Persistence
 
@@ -208,15 +205,15 @@ Schedule tools (`dimaag_schedule_message`, `dimaag_list_schedules`, `dimaag_canc
 | Method | Path | Notes |
 | --- | --- | --- |
 | `GET` | `/health` | `{ "status": "ok" }` |
+| `POST` | `/dadi` | router: classify once, then spawn/reuse/modify |
 | `POST` | `/messages` | user → agent; images described via Dwar |
 | `GET` | `/events` | SSE live events; no replay |
 | `GET` | `/agents` | all agents + `running` + `sessions` |
-| `GET` | `/agents/root` | sole root agent |
 | `GET` | `/agents/:id` | agent, children, grants |
 | `GET` | `/agents/:id/logs` | per-agent audit trail |
 | `GET` | `/logs` | cross-agent audit trail |
 | `GET` | `/tools` | grantable tool catalog |
 | `GET` | `/tools/:name` | one tool schema |
-| `POST` | `/tools/:name/execute` | run tool as root Dadi |
+| `POST` | `/tools/:name/execute` | run tool as `as_agent_id` |
 
 Unknown request fields are a 422. No CORS — clients use Tauri HTTP (or equivalent) outside the browser sandbox.

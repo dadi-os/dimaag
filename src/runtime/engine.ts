@@ -1,8 +1,7 @@
 /**
  * Agent runtime: lane locks, steer/intent queues, transcript, and lane runners.
  * Conversation enqueue always schedules a run — the lane lock serializes concurrent
- * wakes so a second user message is not dropped while conversation is busy. Root's
- * empty-work early-return absorbs duplicate wakes once there is nothing left to route.
+ * wakes so a second user message is not dropped while conversation is busy.
  */
 
 import { eq } from "drizzle-orm";
@@ -167,10 +166,7 @@ export function createRuntime(opts: {
     };
   }
 
-  /**
-   * Acquire the lane lock and run reasoning or conversation.
-   * Root conversation skips the LLM when a wake arrives after route_message with no work left.
-   */
+  /** Acquire the lane lock and run reasoning or conversation. */
   async function runLane(agentId: string, lane: Lane): Promise<void> {
     let release: (() => void) | undefined;
     try {
@@ -190,13 +186,6 @@ export function createRuntime(opts: {
         if (lane === "reasoning") {
           await runReasoningLoop(reasoningDeps(agentId));
         } else {
-          if (
-            agent.parentAgentId === null &&
-            !intents.hasItems(agentId) &&
-            transcript.unroutedUserMessages(agentId).length === 0
-          ) {
-            return;
-          }
           await runConversationLoop(conversationDeps(agentId));
         }
       } finally {

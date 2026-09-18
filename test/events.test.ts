@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { and, eq } from "drizzle-orm";
 import { buildApp } from "../src/app.js";
@@ -10,9 +11,10 @@ import { createRuntime } from "../src/runtime/engine.js";
 import { EventBus, type RuntimeEvent } from "../src/runtime/events.js";
 import { executeTool } from "../src/runtime/tools.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
-import { DISPATCH_MESSAGE, ROOT_DADI_ID, SEND_MESSAGE, YIELD } from "../src/types/domain.js";
+import { DISPATCH_MESSAGE, SEND_MESSAGE, YIELD } from "../src/types/domain.js";
 import {
   insertAgent,
+  insertWorker,
   mockDwar,
   mockGhar,
   mockChaavi,
@@ -38,13 +40,14 @@ after(async () => {
 
 test("EventBus.subscribe receives emitted events; unsubscribe stops delivery", () => {
   const bus = new EventBus();
+  const agentId = randomUUID();
   const seen: RuntimeEvent[] = [];
   const unsubscribe = bus.subscribe((event) => {
     seen.push(event);
   });
   bus.emit({
     type: "agent_modified",
-    agent_id: ROOT_DADI_ID,
+    agent_id: agentId,
     active: true,
     at: new Date().toISOString(),
   });
@@ -52,7 +55,7 @@ test("EventBus.subscribe receives emitted events; unsubscribe stops delivery", (
   unsubscribe();
   bus.emit({
     type: "agent_modified",
-    agent_id: ROOT_DADI_ID,
+    agent_id: agentId,
     active: false,
     at: new Date().toISOString(),
   });
@@ -71,7 +74,7 @@ test("a throwing listener does not block others or the emitter", () => {
   assert.doesNotThrow(() => {
     bus.emit({
       type: "lane_started",
-      agent_id: ROOT_DADI_ID,
+      agent_id: randomUUID(),
       lane: "conversation",
       at: new Date().toISOString(),
     });
@@ -82,6 +85,10 @@ test("a throwing listener does not block others or the emitter", () => {
 
 test("POST /messages emits a message event", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const runtime = createRuntime({
     db: handle.db,
     dwar: mockDwar({}),
@@ -107,15 +114,15 @@ test("POST /messages emits a message event", async () => {
   const res = await app.inject({
     method: "POST",
     url: "/messages",
-    payload: { to_agent_id: ROOT_DADI_ID, content: "hello events" },
+    payload: { to_agent_id: workerId, content: "hello events" },
   });
   assert.equal(res.statusCode, 201);
   assert.equal(seen.length, 1);
   const event = seen[0];
   assert.ok(event && event.type === "message");
-  assert.equal(event.agent_id, ROOT_DADI_ID);
+  assert.equal(event.agent_id, workerId);
   assert.equal(event.from_agent_id, null);
-  assert.equal(event.to_agent_id, ROOT_DADI_ID);
+  assert.equal(event.to_agent_id, workerId);
   assert.equal(event.content, "hello events");
   await runtime.waitUntilIdle();
   await app.close();
@@ -123,6 +130,10 @@ test("POST /messages emits a message event", async () => {
 
 test("dispatch_message emits message with agent_id set to the recipient", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const callerId = await insertWorker(handle.db, {
+    name: "dispatcher",
+    systemPrompt: "dispatch",
+  });
   const targetId = await insertAgent(handle.db, {
     name: "dispatch-target",
     systemPrompt: "target",
@@ -141,7 +152,7 @@ test("dispatch_message emits message with agent_id set to the recipient", async 
       seen.push(event);
     }
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "conversation"), {
+  const result = await executeTool(runtime.toolContext(callerId, "conversation"), {
     type: "tool_use",
     id: "d-evt",
     name: DISPATCH_MESSAGE,
@@ -152,13 +163,17 @@ test("dispatch_message emits message with agent_id set to the recipient", async 
   const event = seen[0];
   assert.ok(event && event.type === "message");
   assert.equal(event.agent_id, targetId);
-  assert.equal(event.from_agent_id, ROOT_DADI_ID);
+  assert.equal(event.from_agent_id, callerId);
   assert.equal(event.to_agent_id, targetId);
   await runtime.waitUntilIdle();
 });
 
 test("deliverAgentMessage merges extraPayload into both message log rows", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const fromId = await insertWorker(handle.db, {
+    name: "from",
+    systemPrompt: "from",
+  });
   const toId = await insertAgent(handle.db, {
     name: "deliver-extra-target",
     systemPrompt: "target",
@@ -184,7 +199,7 @@ test("deliverAgentMessage merges extraPayload into both message log rows", async
       },
     },
     {
-      fromAgentId: ROOT_DADI_ID,
+      fromAgentId: fromId,
       toAgentId: toId,
       content: "scheduled ping",
       extraPayload: { schedule_id: "x" },
@@ -202,67 +217,19 @@ test("deliverAgentMessage merges extraPayload into both message log rows", async
   const messageLogs = logs.filter(
     (row) =>
       row.payload.schedule_id === "x" &&
-      (row.agentId === ROOT_DADI_ID || row.agentId === toId),
+      (row.agentId === fromId || row.agentId === toId),
   );
   assert.equal(messageLogs.length, 2);
   const directions = new Set(messageLogs.map((row) => row.payload.direction));
   assert.deepEqual(directions, new Set(["send", "receive"]));
 });
 
-test("route_message delivers as from_agent_id null; non-root cannot call it", async () => {
-  await resetRuntime(handle.sql, handle.db, config);
-  const targetId = await insertAgent(handle.db, {
-    name: "route-target",
-    systemPrompt: "target",
-  });
-  const childId = await insertAgent(handle.db, {
-    name: "not-root",
-    systemPrompt: "child",
-    parentAgentId: ROOT_DADI_ID,
-  });
-  const runtime = createRuntime({
-    db: handle.db,
-    dwar: mockDwar({}),
-    yaad: mockYaad(),
-    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
-    config,
-    log: silentLog,
-  });
-  const seen: RuntimeEvent[] = [];
-  runtime.events.subscribe((event) => {
-    if (event.type === "message") {
-      seen.push(event);
-    }
-  });
-
-  const denied = await executeTool(runtime.toolContext(childId, "conversation"), {
-    type: "tool_use",
-    id: "r-deny",
-    name: "route_message",
-    input: { to_agent_id: targetId, content: "hello" },
-  });
-  assert.equal(denied.isError, true);
-  assert.equal(seen.length, 0);
-
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "conversation"), {
-    type: "tool_use",
-    id: "r-ok",
-    name: "route_message",
-    input: { to_agent_id: targetId, content: "hello from user" },
-  });
-  assert.equal(result.isError, false);
-  assert.equal(seen.length, 1);
-  const event = seen[0];
-  assert.ok(event && event.type === "message");
-  assert.equal(event.agent_id, targetId);
-  assert.equal(event.from_agent_id, null);
-  assert.equal(event.to_agent_id, targetId);
-  assert.equal(event.content, "hello from user");
-  await runtime.waitUntilIdle();
-});
-
 test("lane_finished is emitted even when the lane run throws", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const dwar = mockDwar({
     converse: async () => {
       throw new Error("dwar exploded");
@@ -282,18 +249,22 @@ test("lane_finished is emitted even when the lane run throws", async () => {
       finished.push(event);
     }
   });
-  runtime.enqueueConversation(ROOT_DADI_ID);
+  runtime.enqueueConversation(workerId);
   await runtime.waitUntilIdle();
   assert.equal(finished.length, 1);
   assert.equal(finished[0]?.type, "lane_finished");
   if (finished[0]?.type === "lane_finished") {
-    assert.equal(finished[0].agent_id, ROOT_DADI_ID);
+    assert.equal(finished[0].agent_id, workerId);
     assert.equal(finished[0].lane, "conversation");
   }
 });
 
 test("GET /agents includes running and it flips true while a lane holds the lock", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const runtime = createRuntime({
     db: handle.db,
     dwar: mockDwar({}),
@@ -316,17 +287,17 @@ test("GET /agents includes running and it flips true while a lane holds the lock
   const idleBody = idle.json() as {
     agents: Array<{ id: string; running: { reasoning: boolean; conversation: boolean } }>;
   };
-  const idleAgent = idleBody.agents.find((agent) => agent.id === ROOT_DADI_ID);
+  const idleAgent = idleBody.agents.find((agent) => agent.id === workerId);
   assert.ok(idleAgent);
   assert.deepEqual(idleAgent.running, { reasoning: false, conversation: false });
 
-  const release = await runtime.locks.acquire(ROOT_DADI_ID, "conversation", 1000);
+  const release = await runtime.locks.acquire(workerId, "conversation", 1000);
   const held = await app.inject({ method: "GET", url: "/agents" });
   assert.equal(held.statusCode, 200);
   const heldBody = held.json() as {
     agents: Array<{ id: string; running: { reasoning: boolean; conversation: boolean } }>;
   };
-  const heldAgent = heldBody.agents.find((agent) => agent.id === ROOT_DADI_ID);
+  const heldAgent = heldBody.agents.find((agent) => agent.id === workerId);
   assert.ok(heldAgent);
   assert.deepEqual(heldAgent.running, { reasoning: false, conversation: true });
   release();
@@ -336,6 +307,10 @@ test("GET /agents includes running and it flips true while a lane holds the lock
 
 test("GET /agents surfaces sessions after worker host tools", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const nas = mockNas({
     browserScreenshot: () => Buffer.from("png"),
   });
@@ -362,15 +337,15 @@ test("GET /agents surfaces sessions after worker host tools", async () => {
 
   const idle = await app.inject({ method: "GET", url: "/agents" });
   assert.equal(idle.statusCode, 200);
-  const idleRoot = (
+  const idleWorker = (
     idle.json() as {
       agents: Array<{ id: string; sessions: { browsers: number[]; terminals: unknown[] } }>;
     }
-  ).agents.find((agent) => agent.id === ROOT_DADI_ID);
-  assert.ok(idleRoot);
-  assert.deepEqual(idleRoot.sessions, { browsers: [], terminals: [] });
+  ).agents.find((agent) => agent.id === workerId);
+  assert.ok(idleWorker);
+  assert.deepEqual(idleWorker.sessions, { browsers: [], terminals: [] });
 
-  const shot = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const shot = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "shot1",
     name: "browser_screenshot",
@@ -378,7 +353,7 @@ test("GET /agents surfaces sessions after worker host tools", async () => {
   });
   assert.equal(shot.isError, false, shot.content);
 
-  const exec = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const exec = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "ex1",
     name: "terminal_execute_shell",
@@ -387,19 +362,19 @@ test("GET /agents surfaces sessions after worker host tools", async () => {
   assert.equal(exec.isError, false, exec.content);
 
   const live = await app.inject({ method: "GET", url: "/agents" });
-  const liveRoot = (
+  const liveWorker = (
     live.json() as {
       agents: Array<{
         id: string;
         sessions: { browsers: number[]; terminals: Array<{ id: string; last_command: string | null }> };
       }>;
     }
-  ).agents.find((agent) => agent.id === ROOT_DADI_ID);
-  assert.ok(liveRoot);
-  assert.deepEqual(liveRoot.sessions.browsers, [10]);
-  assert.deepEqual(liveRoot.sessions.terminals, [{ id: "t1", last_command: "git status" }]);
+  ).agents.find((agent) => agent.id === workerId);
+  assert.ok(liveWorker);
+  assert.deepEqual(liveWorker.sessions.browsers, [10]);
+  assert.deepEqual(liveWorker.sessions.terminals, [{ id: "t1", last_command: "git status" }]);
 
-  const closed = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const closed = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "cb1",
     name: "browser_close",
@@ -408,19 +383,27 @@ test("GET /agents surfaces sessions after worker host tools", async () => {
   assert.equal(closed.isError, false, closed.content);
 
   const afterClose = await app.inject({ method: "GET", url: "/agents" });
-  const afterRoot = (
+  const afterWorker = (
     afterClose.json() as {
       agents: Array<{ id: string; sessions: { browsers: number[] } }>;
     }
-  ).agents.find((agent) => agent.id === ROOT_DADI_ID);
-  assert.ok(afterRoot);
-  assert.deepEqual(afterRoot.sessions.browsers, []);
+  ).agents.find((agent) => agent.id === workerId);
+  assert.ok(afterWorker);
+  assert.deepEqual(afterWorker.sessions.browsers, []);
 
   await app.close();
 });
 
-test("GET /agents/root returns the null-parent agent; 409 when more than one", async () => {
+test("GET /agents lists multiple top-level workers without conflict", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const firstId = await insertWorker(handle.db, {
+    name: "first",
+    systemPrompt: "first job",
+  });
+  const secondId = await insertWorker(handle.db, {
+    name: "second",
+    systemPrompt: "second job",
+  });
   const runtime = createRuntime({
     db: handle.db,
     dwar: mockDwar({}),
@@ -438,35 +421,27 @@ test("GET /agents/root returns the null-parent agent; 409 when more than one", a
     runtime,
   });
 
-  const ok = await app.inject({ method: "GET", url: "/agents/root" });
-  assert.equal(ok.statusCode, 200);
-  const body = ok.json() as {
-    id: string;
-    parent_agent_id: string | null;
-    tools: unknown[];
-    children: unknown[];
+  const res = await app.inject({ method: "GET", url: "/agents" });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as {
+    agents: Array<{ id: string; parent_agent_id: string | null }>;
   };
-  assert.equal(body.id, ROOT_DADI_ID);
-  assert.equal(body.parent_agent_id, null);
-  assert.ok(Array.isArray(body.tools));
-  assert.ok(Array.isArray(body.children));
-
-  await insertAgent(handle.db, {
-    name: "second-root",
-    systemPrompt: "corrupt",
-    parentAgentId: null,
-  });
-  const conflict = await app.inject({ method: "GET", url: "/agents/root" });
-  assert.equal(conflict.statusCode, 409);
-  const err = conflict.json() as { error: { type: string; message: string } };
-  assert.equal(err.error.type, "conflict");
-  assert.match(err.error.message, /data corruption/i);
+  const ids = new Set(body.agents.map((agent) => agent.id));
+  assert.ok(ids.has(firstId));
+  assert.ok(ids.has(secondId));
+  const listed = body.agents.filter((agent) => agent.id === firstId || agent.id === secondId);
+  assert.equal(listed.length, 2);
+  assert.ok(listed.every((agent) => agent.parent_agent_id === null));
 
   await app.close();
 });
 
 test("GET /agents/:id includes granted tools with usage and excludes embedded tools", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const runtime = createRuntime({
     db: handle.db,
     dwar: mockDwar({}),
@@ -483,7 +458,7 @@ test("GET /agents/:id includes granted tools with usage and excludes embedded to
     ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
     runtime,
   });
-  const res = await app.inject({ method: "GET", url: `/agents/${ROOT_DADI_ID}` });
+  const res = await app.inject({ method: "GET", url: `/agents/${workerId}` });
   assert.equal(res.statusCode, 200);
   const body = res.json() as {
     tools: Array<{ name: string; description: string; usage: string }>;
@@ -497,6 +472,8 @@ test("GET /agents/:id includes granted tools with usage and excludes embedded to
     assert.ok(typeof tool.usage === "string" && tool.usage.length > 0);
   }
   const names = body.tools.map((tool) => tool.name);
+  assert.ok(names.includes("yaad_recall"));
+  assert.ok(names.includes("terminal_execute_shell"));
   assert.equal(names.includes(SEND_MESSAGE), false);
   assert.equal(names.includes(DISPATCH_MESSAGE), false);
   assert.equal(names.includes("steer_reasoning"), false);
@@ -506,15 +483,19 @@ test("GET /agents/:id includes granted tools with usage and excludes embedded to
 
 test("GET /logs returns across agents; event filters; limit above cap is 422", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "log-worker",
+    systemPrompt: "logs",
+  });
   const otherId = await insertAgent(handle.db, {
     name: "log-other",
     systemPrompt: "other",
   });
   await writeAgentLog(handle.db, {
-    agentId: ROOT_DADI_ID,
+    agentId: workerId,
     lane: "conversation",
     event: "message",
-    payload: { note: "from-dadi" },
+    payload: { note: "from-worker" },
   });
   await writeAgentLog(handle.db, {
     agentId: otherId,
@@ -550,7 +531,7 @@ test("GET /logs returns across agents; event filters; limit above cap is 422", a
   assert.equal(all.statusCode, 200);
   const allBody = all.json() as { logs: Array<{ agent_id: string; event: string }> };
   const agentIds = new Set(allBody.logs.map((log) => log.agent_id));
-  assert.ok(agentIds.has(ROOT_DADI_ID));
+  assert.ok(agentIds.has(workerId));
   assert.ok(agentIds.has(otherId));
 
   const filtered = await app.inject({ method: "GET", url: "/logs?event=message" });

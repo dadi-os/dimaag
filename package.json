@@ -11,11 +11,7 @@
     "start": "node dist/index.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "test": "tsx --test --test-concurrency=1 test/**/*.test.ts",
-    "dadi": "node ./cli/dadi.mjs"
-  },
-  "bin": {
-    "dadi": "./cli/dadi.mjs"
+    "test": "tsx --test --test-concurrency=1 test/**/*.test.ts"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",

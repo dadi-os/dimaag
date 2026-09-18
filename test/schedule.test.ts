@@ -12,9 +12,9 @@ import { advanceRunAt } from "../src/runtime/scheduler.js";
 import { executeTool } from "../src/runtime/tools.js";
 import { allTools, findTool } from "../src/tools/registry.js";
 import { syncTools, toolId } from "../src/tools/sync.js";
-import { ROOT_DADI_ID } from "../src/types/domain.js";
 import {
   insertAgent,
+  insertWorker,
   mockDwar,
   mockGhar,
   mockChaavi,
@@ -70,7 +70,7 @@ after(async () => {
   await handle.close();
 });
 
-test("allTools includes the three schedule tools and sync seeds root grants", async () => {
+test("allTools includes the three schedule tools and a worker holds them", async () => {
   assert.equal(allTools().length, 61);
   assert.equal(findTool("dimaag_schedule_message")?.name, "dimaag_schedule_message");
   assert.equal(findTool("dimaag_list_schedules")?.name, "dimaag_list_schedules");
@@ -78,10 +78,14 @@ test("allTools includes the three schedule tools and sync seeds root grants", as
 
   await resetRuntime(handle.sql, handle.db, config);
   await syncTools(handle.db);
+  const fromId = await insertWorker(handle.db, {
+    name: "scheduler",
+    systemPrompt: "schedule work",
+  });
   const grants = await handle.db
     .select()
     .from(agentTools)
-    .where(eq(agentTools.agentId, ROOT_DADI_ID));
+    .where(eq(agentTools.agentId, fromId));
   const names = new Set(
     grants.map((row) => {
       const match = allTools().find((tool) => toolId(tool.name) === row.toolId);
@@ -95,16 +99,19 @@ test("allTools includes the three schedule tools and sync seeds root grants", as
 
 test("due one-shot delivers once and deletes the row", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const fromId = await insertWorker(handle.db, {
+    name: "scheduler",
+    systemPrompt: "schedule work",
+  });
   const toId = await insertAgent(handle.db, {
     name: "one-shot-target",
     systemPrompt: "target",
-    parentAgentId: ROOT_DADI_ID,
   });
   const scheduleId = randomUUID();
   const runAt = new Date(Date.now() - 60_000);
   await handle.db.insert(scheduledMessages).values({
     id: scheduleId,
-    fromAgentId: ROOT_DADI_ID,
+    fromAgentId: fromId,
     toAgentId: toId,
     content: "do it",
     runAt,
@@ -134,7 +141,7 @@ test("due one-shot delivers once and deletes the row", async () => {
 
   const transcript = runtime.transcript.transcriptFor(toId);
   assert.equal(transcript.length, 1);
-  assert.equal(transcript[0]?.fromAgentId, ROOT_DADI_ID);
+  assert.equal(transcript[0]?.fromAgentId, fromId);
   assert.equal(transcript[0]?.content, "do it");
   assert.equal(seen.length, 1);
 
@@ -154,16 +161,19 @@ test("due one-shot delivers once and deletes the row", async () => {
 
 test("not yet due leaves the row untouched", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const fromId = await insertWorker(handle.db, {
+    name: "scheduler",
+    systemPrompt: "schedule work",
+  });
   const toId = await insertAgent(handle.db, {
     name: "future-target",
     systemPrompt: "target",
-    parentAgentId: ROOT_DADI_ID,
   });
   const scheduleId = randomUUID();
   const runAt = new Date(Date.now() + 3600_000);
   await handle.db.insert(scheduledMessages).values({
     id: scheduleId,
-    fromAgentId: ROOT_DADI_ID,
+    fromAgentId: fromId,
     toAgentId: toId,
     content: "later",
     runAt,
@@ -194,16 +204,19 @@ test("not yet due leaves the row untouched", async () => {
 
 test("recurring sub-day advances run_at by exactly the interval", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const fromId = await insertWorker(handle.db, {
+    name: "scheduler",
+    systemPrompt: "schedule work",
+  });
   const toId = await insertAgent(handle.db, {
     name: "ten-min-target",
     systemPrompt: "target",
-    parentAgentId: ROOT_DADI_ID,
   });
   const scheduleId = randomUUID();
   const runAt = new Date("2026-06-01T12:00:00.000Z");
   await handle.db.insert(scheduledMessages).values({
     id: scheduleId,
-    fromAgentId: ROOT_DADI_ID,
+    fromAgentId: fromId,
     toAgentId: toId,
     content: "tick",
     runAt,
@@ -234,17 +247,20 @@ test("recurring sub-day advances run_at by exactly the interval", async () => {
 
 test("recurring daily preserves wall time across DST transitions", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const fromId = await insertWorker(handle.db, {
+    name: "scheduler",
+    systemPrompt: "schedule work",
+  });
   const toId = await insertAgent(handle.db, {
     name: "dst-target",
     systemPrompt: "target",
-    parentAgentId: ROOT_DADI_ID,
   });
 
   const fallId = randomUUID();
   const fallRunAt = new TZDate(2026, 9, 31, 17, 0, 0, 0, TIMEZONE);
   await handle.db.insert(scheduledMessages).values({
     id: fallId,
-    fromAgentId: ROOT_DADI_ID,
+    fromAgentId: fromId,
     toAgentId: toId,
     content: "fall",
     runAt: new Date(fallRunAt.getTime()),
@@ -277,7 +293,7 @@ test("recurring daily preserves wall time across DST transitions", async () => {
   const springRunAt = new TZDate(2027, 2, 13, 17, 0, 0, 0, TIMEZONE);
   await handle.db.insert(scheduledMessages).values({
     id: springId,
-    fromAgentId: ROOT_DADI_ID,
+    fromAgentId: fromId,
     toAgentId: toId,
     content: "spring",
     runAt: new Date(springRunAt.getTime()),
@@ -296,16 +312,19 @@ test("recurring daily preserves wall time across DST transitions", async () => {
 
 test("catch-up delivers once, advances past now, and warns schedule_late", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const fromId = await insertWorker(handle.db, {
+    name: "scheduler",
+    systemPrompt: "schedule work",
+  });
   const toId = await insertAgent(handle.db, {
     name: "catchup-target",
     systemPrompt: "target",
-    parentAgentId: ROOT_DADI_ID,
   });
   const scheduleId = randomUUID();
   const runAt = new Date("2026-06-01T12:00:00.000Z");
   await handle.db.insert(scheduledMessages).values({
     id: scheduleId,
-    fromAgentId: ROOT_DADI_ID,
+    fromAgentId: fromId,
     toAgentId: toId,
     content: "catch up",
     runAt,
@@ -344,17 +363,20 @@ test("catch-up delivers once, advances past now, and warns schedule_late", async
 
 test("inactive target skips delivery and logs schedule_target_unavailable", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const fromId = await insertWorker(handle.db, {
+    name: "scheduler",
+    systemPrompt: "schedule work",
+  });
   const toId = await insertAgent(handle.db, {
     name: "inactive-target",
     systemPrompt: "target",
-    parentAgentId: ROOT_DADI_ID,
   });
   await handle.db.update(agents).set({ active: false }).where(eq(agents.id, toId));
   const scheduleId = randomUUID();
   const runAt = new Date(Date.now() - 1000);
   await handle.db.insert(scheduledMessages).values({
     id: scheduleId,
-    fromAgentId: ROOT_DADI_ID,
+    fromAgentId: fromId,
     toAgentId: toId,
     content: "nope",
     runAt,
@@ -397,15 +419,18 @@ test("inactive target skips delivery and logs schedule_target_unavailable", asyn
 
 test("missing target skips delivery with reason missing", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const fromId = await insertWorker(handle.db, {
+    name: "scheduler",
+    systemPrompt: "schedule work",
+  });
   const toId = await insertAgent(handle.db, {
     name: "soon-missing",
     systemPrompt: "target",
-    parentAgentId: ROOT_DADI_ID,
   });
   const scheduleId = randomUUID();
   await handle.db.insert(scheduledMessages).values({
     id: scheduleId,
-    fromAgentId: ROOT_DADI_ID,
+    fromAgentId: fromId,
     toAgentId: toId,
     content: "ghost",
     runAt: new Date(Date.now() - 1000),
@@ -439,15 +464,18 @@ test("missing target skips delivery with reason missing", async () => {
 
 test("tick error is isolated and a later tick still runs", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const fromId = await insertWorker(handle.db, {
+    name: "scheduler",
+    systemPrompt: "schedule work",
+  });
   const toId = await insertAgent(handle.db, {
     name: "throw-target",
     systemPrompt: "target",
-    parentAgentId: ROOT_DADI_ID,
   });
   const firstId = randomUUID();
   await handle.db.insert(scheduledMessages).values({
     id: firstId,
-    fromAgentId: ROOT_DADI_ID,
+    fromAgentId: fromId,
     toAgentId: toId,
     content: "boom",
     runAt: new Date(Date.now() - 2000),
@@ -476,7 +504,7 @@ test("tick error is isolated and a later tick still runs", async () => {
   const secondId = randomUUID();
   await handle.db.insert(scheduledMessages).values({
     id: secondId,
-    fromAgentId: ROOT_DADI_ID,
+    fromAgentId: fromId,
     toAgentId: toId,
     content: "ok",
     runAt: new Date(Date.now() - 1000),
@@ -490,6 +518,10 @@ test("tick error is isolated and a later tick still runs", async () => {
 
 test("schedule_message validates self, missing, past, and interval; allows non-child", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const fromId = await insertWorker(handle.db, {
+    name: "scheduler",
+    systemPrompt: "schedule work",
+  });
   const peerId = await insertAgent(handle.db, {
     name: "peer-agent",
     systemPrompt: "peer",
@@ -504,7 +536,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
     config,
     log: capturingLog().log,
   });
-  const ctx = runtime.toolContext(ROOT_DADI_ID, "reasoning");
+  const ctx = runtime.toolContext(fromId, "reasoning");
   const future = new Date(Date.now() + 60_000).toISOString().replace(/\.\d{3}Z$/, "+00:00");
 
   const self = await executeTool(ctx, {
@@ -512,7 +544,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
     id: "s-self",
     name: "dimaag_schedule_message",
     input: {
-      to_agent_id: ROOT_DADI_ID,
+      to_agent_id: fromId,
       content: "no",
       run_at: future,
     },
@@ -585,17 +617,14 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const creatorId = await insertAgent(handle.db, {
     name: "creator",
     systemPrompt: "creator",
-    parentAgentId: ROOT_DADI_ID,
   });
   const otherId = await insertAgent(handle.db, {
     name: "other",
     systemPrompt: "other",
-    parentAgentId: ROOT_DADI_ID,
   });
   const targetId = await insertAgent(handle.db, {
     name: "list-target",
     systemPrompt: "target",
-    parentAgentId: ROOT_DADI_ID,
   });
   const mine = randomUUID();
   const theirs = randomUUID();

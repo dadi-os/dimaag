@@ -1,0 +1,257 @@
+/** `POST /dadi` — classify once, then spawn/reuse/modify. Not an agent. */
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { eq, isNull } from "drizzle-orm";
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { applyWorkerCatalog } from "../db/seed.js";
+import { agents } from "../db/schema.js";
+import { DimaagError } from "../errors.js";
+import { patchMessageContent } from "../runtime/attachments.js";
+import { deliverUserMessage } from "../runtime/deliver.js";
+import { requireAgent } from "../runtime/tools.js";
+import { isUniqueViolation } from "../tools/shared.js";
+import type { DwarTool, DwarToolUseBlock } from "../types/domain.js";
+import { formatZod, postDadiBody, parse } from "./schemas.js";
+
+const decideTool: DwarTool = {
+  name: "decide",
+  description:
+    "Choose reuse, spawn, or modify. Call exactly once. thread_id must be a listed id when reusing or modifying.",
+  input_schema: {
+    type: "object",
+    properties: {
+      action: {
+        type: "string",
+        enum: ["reuse", "spawn", "modify"],
+      },
+      thread_id: {
+        type: "string",
+        description: "Existing top-level thread to reuse, or any agent to modify",
+      },
+      name: { type: "string", description: "Unique name when spawning" },
+      system_prompt: {
+        type: "string",
+        description: "Job prompt when spawning, or replacement prompt when modifying",
+      },
+      active: {
+        type: "boolean",
+        description: "When modifying, whether the agent stays active",
+      },
+    },
+    required: ["action"],
+  },
+};
+
+const reuseDecision = z.object({
+  action: z.literal("reuse"),
+  thread_id: z.string().uuid(),
+});
+
+const spawnDecision = z.object({
+  action: z.literal("spawn"),
+  name: z.string().min(1),
+  system_prompt: z.string().min(1),
+});
+
+const modifyDecision = z.object({
+  action: z.literal("modify"),
+  thread_id: z.string().uuid(),
+  system_prompt: z.string().min(1).optional(),
+  active: z.boolean().optional(),
+});
+
+const decideInput = z
+  .discriminatedUnion("action", [reuseDecision, spawnDecision, modifyDecision])
+  .superRefine((value, ctx) => {
+    if (
+      value.action === "modify" &&
+      value.system_prompt === undefined &&
+      value.active === undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "system_prompt or active is required",
+      });
+    }
+  });
+
+/** Register the Dadi router endpoint. */
+export async function registerDadi(app: FastifyInstance): Promise<void> {
+  app.post("/dadi", async (request, reply) => {
+    const body = parse(postDadiBody, request.body);
+    const content = await patchMessageContent(
+      app.dwar,
+      body.content,
+      body.attachments,
+    );
+    const startedAt = new Date().toISOString();
+    app.runtime.events.emit({ type: "dadi_started", at: startedAt });
+    try {
+      const result = await routeDadi(app, content);
+      app.runtime.events.emit({
+        type: "dadi_finished",
+        at: new Date().toISOString(),
+      });
+      return reply.status(201).send(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      app.runtime.events.emit({
+        type: "dadi_failed",
+        message,
+        at: new Date().toISOString(),
+      });
+      throw err;
+    }
+  });
+}
+
+/** Classify with Dwar, then spawn, reuse, or modify. */
+async function routeDadi(
+  app: FastifyInstance,
+  content: string,
+): Promise<Record<string, unknown>> {
+  const policy = readFileSync(join(app.config.serviceRoot, "prompts/dadi.md"), "utf8");
+  const roster = await listTopLevelThreads(app);
+  const system =
+    roster.length > 0
+      ? `${policy}\n\nActive top-level threads:\n${roster.join("\n")}`
+      : `${policy}\n\nThere are no active top-level threads yet. Spawn one when the utterance is work.`;
+
+  const response = await app.dwar.complete({
+    system,
+    messages: [{ role: "user", content }],
+    tools: [decideTool],
+  });
+  const call = response.content.find(
+    (block): block is DwarToolUseBlock => block.type === "tool_use" && block.name === "decide",
+  );
+  if (!call) {
+    throw new DimaagError(502, "dwar", "Dadi did not call decide");
+  }
+
+  const parsed = decideInput.safeParse(call.input);
+  if (!parsed.success) {
+    throw new DimaagError(
+      502,
+      "dwar",
+      `Dadi decide input is invalid: ${formatZod(parsed.error)}`,
+    );
+  }
+
+  if (parsed.data.action === "reuse") {
+    const thread = await requireAgent(app.db, parsed.data.thread_id);
+    if (thread.parentAgentId !== null) {
+      throw new DimaagError(422, "invalid_request", "reuse is limited to top-level threads");
+    }
+    if (!thread.active) {
+      throw new DimaagError(422, "invalid_request", "cannot reuse an inactive thread");
+    }
+    return deliverRouted(app, thread.id, content, false);
+  }
+
+  if (parsed.data.action === "spawn") {
+    const id = randomUUID();
+    try {
+      await app.db.insert(agents).values({
+        id,
+        name: parsed.data.name,
+        systemPrompt: parsed.data.system_prompt,
+        parentAgentId: null,
+        active: true,
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new DimaagError(
+          409,
+          "conflict",
+          `an agent named ${parsed.data.name} already exists`,
+        );
+      }
+      throw err;
+    }
+    await applyWorkerCatalog(app.db, id);
+    app.runtime.events.emit({
+      type: "agent_spawned",
+      agent_id: id,
+      parent_agent_id: null,
+      name: parsed.data.name,
+      at: new Date().toISOString(),
+    });
+    return deliverRouted(app, id, content, true);
+  }
+
+  const target = await requireAgent(app.db, parsed.data.thread_id);
+  const now = new Date();
+  const systemPrompt = parsed.data.system_prompt ?? target.systemPrompt;
+  const active = parsed.data.active ?? target.active;
+  await app.db
+    .update(agents)
+    .set({
+      systemPrompt,
+      active,
+      updatedAt: now,
+    })
+    .where(eq(agents.id, target.id));
+  app.runtime.events.emit({
+    type: "agent_modified",
+    agent_id: target.id,
+    active,
+    at: now.toISOString(),
+  });
+  return {
+    action: "modified",
+    agent_id: target.id,
+    active,
+    system_prompt: systemPrompt,
+  };
+}
+
+/** Persist the user utterance onto a thread and wake its conversation lane. */
+async function deliverRouted(
+  app: FastifyInstance,
+  threadId: string,
+  content: string,
+  created: boolean,
+): Promise<Record<string, unknown>> {
+  const row = await deliverUserMessage(
+    {
+      db: app.db,
+      transcript: app.runtime.transcript,
+      events: app.runtime.events,
+      enqueueConversation: app.runtime.enqueueConversation,
+    },
+    threadId,
+    content,
+  );
+  return {
+    action: "routed",
+    thread_id: threadId,
+    created,
+    content: row.content,
+    seq: row.seq,
+    created_at: row.createdAt.toISOString(),
+  };
+}
+
+/** Active god-owned threads for the classification prompt. */
+async function listTopLevelThreads(app: FastifyInstance): Promise<string[]> {
+  const rows = await app.db
+    .select({
+      id: agents.id,
+      name: agents.name,
+      active: agents.active,
+      systemPrompt: agents.systemPrompt,
+    })
+    .from(agents)
+    .where(isNull(agents.parentAgentId));
+  return rows
+    .filter((row) => row.active)
+    .map((row) => {
+      const purpose = row.systemPrompt.trim().split(/\n/)[0] ?? "";
+      const brief = purpose.length > 120 ? `${purpose.slice(0, 117)}…` : purpose;
+      return brief ? `- ${row.name} (${row.id}): ${brief}` : `- ${row.name} (${row.id})`;
+    });
+}

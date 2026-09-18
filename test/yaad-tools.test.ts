@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { ROOT_DADI_ID, SEND_MESSAGE } from "../src/types/domain.js";
+import { SEND_MESSAGE } from "../src/types/domain.js";
 import { assembleContext } from "../src/runtime/context.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
@@ -13,6 +13,7 @@ import { agentTools } from "../src/db/schema.js";
 import { DimaagError } from "../src/errors.js";
 import {
   endTurn,
+  insertWorker,
   mockDwar,
   mockGhar,
   mockChaavi,
@@ -45,48 +46,69 @@ const YAAD_TOOLS = [
   "yaad_get_node_history",
   "yaad_search_history",
 ] as const;
-const PLATFORM_TOOLS = [
+const MANAGER_TOOLS = [
   "dimaag_spawn_agent",
   "dimaag_modify_agent",
   "dimaag_grant_tool",
   "dimaag_revoke_tool",
+] as const;
+const WORKER_PLATFORM_TOOLS = [
   "dimaag_schedule_message",
   "dimaag_list_schedules",
   "dimaag_cancel_schedule",
   "dimaag_get_logs",
 ] as const;
 
-test("syncTools registers Yaad tools and root Dadi grants resolve", async () => {
+test("syncTools registers Yaad tools; worker catalog grants them after applyWorkerCatalog", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of YAAD_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
+  const before = await handle.db.select().from(agentTools);
+  assert.equal(before.length, 0);
+
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const grants = await handle.db.select().from(agentTools);
   const grantToolIds = new Set(grants.map((row) => row.toolId));
-  for (const name of [...PLATFORM_TOOLS, ...YAAD_TOOLS]) {
-    assert.ok(grantToolIds.has(toolId(name)), `missing grant for ${name}`);
+  for (const name of [...YAAD_TOOLS, ...WORKER_PLATFORM_TOOLS]) {
+    assert.ok(grantToolIds.has(toolId(name)), `missing worker grant for ${name}`);
   }
+  for (const name of MANAGER_TOOLS) {
+    assert.equal(grantToolIds.has(toolId(name)), false, `worker must not hold ${name}`);
+  }
+  assert.ok(grants.every((row) => row.agentId === workerId));
 });
 
-test("assembleContext for root Dadi includes Yaad tools, platform tools, and send_message", async () => {
+test("assembleContext for a worker includes Yaad tools, send_message, and yield — not spawn", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const ctx = await assembleContext({
     db: handle.db,
-    agentId: ROOT_DADI_ID,
+    agentId: workerId,
     lane: "reasoning",
     transcript: new TranscriptStore(),
   });
   const names = new Set(ctx.tools.map((tool) => tool.name));
-  for (const name of [...PLATFORM_TOOLS, ...YAAD_TOOLS, SEND_MESSAGE, "yield"]) {
+  for (const name of [...YAAD_TOOLS, SEND_MESSAGE, "yield"]) {
     assert.ok(names.has(name), `missing tool ${name}`);
   }
-  assert.equal(names.size, 63);
+  assert.equal(names.has("dimaag_spawn_agent"), false);
 });
 
 test("recall tool shapes the response and preserves sufficient", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const nodeId = randomUUID();
   const yaad = mockYaad({
     recall: () => ({
@@ -119,7 +141,7 @@ test("recall tool shapes the response and preserves sufficient", async () => {
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "r1",
     name: "yaad_recall",
@@ -142,6 +164,10 @@ test("recall tool shapes the response and preserves sufficient", async () => {
 
 test("query tool passes filters through", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const yaad = mockYaad({
     query: () => ({ nodes: [{ id: randomUUID(), kind: "plan", title: "flight" }], limit: 10, offset: 0 }),
   });
@@ -153,7 +179,7 @@ test("query tool passes filters through", async () => {
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "q1",
     name: "yaad_query",
@@ -174,6 +200,10 @@ test("query tool passes filters through", async () => {
 
 test("get_node tool returns the Yaad node response", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const id = randomUUID();
   const yaad = mockYaad({
     getNode: () => ({
@@ -200,7 +230,7 @@ test("get_node tool returns the Yaad node response", async () => {
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "g1",
     name: "yaad_get_node",
@@ -216,6 +246,10 @@ test("get_node tool returns the Yaad node response", async () => {
 
 test("ingest stamps occurred_at and source; rejects occurred_at in tool input", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const before = Date.now();
   const yaad = mockYaad({
     ingest: () => ({
@@ -232,7 +266,7 @@ test("ingest stamps occurred_at and source; rejects occurred_at in tool input", 
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "i1",
     name: "yaad_ingest",
@@ -251,7 +285,7 @@ test("ingest stamps occurred_at and source; rejects occurred_at in tool input", 
   assert.ok(body.operations);
   assert.equal(body.temp_ids, undefined);
 
-  const rejected = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const rejected = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "i2",
     name: "yaad_ingest",
@@ -266,6 +300,10 @@ test("ingest stamps occurred_at and source; rejects occurred_at in tool input", 
 
 test("Yaad 4xx maps to isError without throwing", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   const yaad = mockYaad({
     query: () => {
       throw new DimaagError(422, "yaad", "at least one filter is required");
@@ -279,7 +317,7 @@ test("Yaad 4xx maps to isError without throwing", async () => {
     config,
     log: silentLog,
   });
-  const result = await executeTool(runtime.toolContext(ROOT_DADI_ID, "reasoning"), {
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "q2",
     name: "yaad_query",
@@ -291,6 +329,10 @@ test("Yaad 4xx maps to isError without throwing", async () => {
 
 test("Yaad unreachable maps to isError and the lane continues", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+  });
   let reasonCalls = 0;
   const dwar = mockDwar({
     reason: async () => {
@@ -315,7 +357,7 @@ test("Yaad unreachable maps to isError and the lane continues", async () => {
     config,
     log: silentLog,
   });
-  runtime.enqueueReasoning(ROOT_DADI_ID);
+  runtime.enqueueReasoning(workerId);
   await runtime.waitUntilIdle();
   assert.ok(reasonCalls >= 2, "lane should continue after a failed tool call");
   assert.equal(yaad.recallCalls.length, 1);
