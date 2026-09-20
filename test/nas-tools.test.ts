@@ -7,8 +7,7 @@ import { executeTool } from "../src/runtime/tools.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import { migrate } from "../src/db/migrate.js";
 import { allTools, findTool } from "../src/tools/registry.js";
-import { syncTools, toolId } from "../src/tools/sync.js";
-import { agentTools } from "../src/db/schema.js";
+import { syncTools } from "../src/tools/sync.js";
 import { DimaagError } from "../src/errors.js";
 import {
   insertAgent,
@@ -59,26 +58,13 @@ const NAS_DESTRUCTIVE = [
   "nas_pull_updates",
 ] as const;
 
-test("syncTools registers Nas tools and a worker holds them — not destructive ops", async () => {
+test("Nas terminal tools and destructive ops are registered", async () => {
   await resetRuntime(handle.sql, handle.db, config);
-  for (const name of NAS_TOOLS) {
+  for (const name of [...NAS_TOOLS, ...NAS_DESTRUCTIVE]) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
-  const workerId = await insertWorker(handle.db, {
-    name: "thread",
-    systemPrompt: "do the job",
-  });
-  const grants = await handle.db.select().from(agentTools);
-  const grantToolIds = new Set(grants.map((row) => row.toolId));
-  for (const name of NAS_TOOLS) {
-    assert.ok(grantToolIds.has(toolId(name)), `missing worker grant for ${name}`);
-  }
-  for (const name of NAS_DESTRUCTIVE) {
-    assert.equal(grantToolIds.has(toolId(name)), false, `worker must not hold ${name}`);
-  }
-  assert.ok(grants.every((row) => row.agentId === workerId));
 });
 
 test("execute_shell passes through exit code, output, and timed_out", async () => {
@@ -86,6 +72,7 @@ test("execute_shell passes through exit code, output, and timed_out", async () =
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["terminal_execute_shell"],
   });
   const nas = mockNas({
     exec: () => ({
@@ -127,6 +114,7 @@ test("Nas 404 becomes not_found tool error without killing the lane", async () =
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["terminal_execute_shell"],
   });
   const nas = mockNas({
     exec: () => {
@@ -159,6 +147,7 @@ test("Nas 409 on execute_shell becomes busy tool error", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["terminal_execute_shell"],
   });
   const nas = mockNas({
     exec: () => {
@@ -190,6 +179,7 @@ test("edit_file 409 surfaces the match count", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["terminal_edit_file"],
   });
   const nas = mockNas({
     editFile: () => {

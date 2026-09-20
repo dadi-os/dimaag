@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
+import { eq } from "drizzle-orm";
 import { DISPATCH_MESSAGE, MODIFY_AGENT, SEND_MESSAGE } from "../src/types/domain.js";
 import { assembleContext } from "../src/runtime/context.js";
 import { createRuntime } from "../src/runtime/engine.js";
@@ -7,7 +8,7 @@ import { executeTool } from "../src/runtime/tools.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import { buildApp } from "../src/app.js";
 import { migrate } from "../src/db/migrate.js";
-import { agentTools } from "../src/db/schema.js";
+import { agents, agentTools } from "../src/db/schema.js";
 import { toolId } from "../src/tools/sync.js";
 import {
   endTurn,
@@ -42,6 +43,7 @@ test("two concurrent messages to one agent serialize on its conversation lock", 
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: [],
   });
   let active = 0;
   let overlap = false;
@@ -139,11 +141,154 @@ test("modify_agent on a direct child is allowed", async () => {
   assert.equal(result.audit.old_system_prompt, "old prompt");
 });
 
+test("modify_agent renames self and a direct child", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertAgent(handle.db, {
+    name: "boss",
+    systemPrompt: "boss prompt",
+  });
+  const childId = await insertAgent(handle.db, {
+    name: "worker",
+    systemPrompt: "child prompt",
+    parentAgentId: parentId,
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+
+  const self = await executeTool(runtime.toolContext(parentId, "reasoning"), {
+    type: "tool_use",
+    id: "rn-self",
+    name: MODIFY_AGENT,
+    input: { agent_id: parentId, name: "Boss Renamed" },
+  });
+  assert.equal(self.isError, false);
+  const selfBody = JSON.parse(self.content);
+  assert.equal(selfBody.old_name, "boss");
+  assert.equal(selfBody.new_name, "Boss Renamed");
+  assert.equal(self.audit.old_name, "boss");
+  assert.equal(self.audit.new_name, "Boss Renamed");
+  const [parent] = await handle.db.select().from(agents).where(eq(agents.id, parentId));
+  assert.equal(parent?.name, "Boss Renamed");
+
+  const child = await executeTool(runtime.toolContext(parentId, "reasoning"), {
+    type: "tool_use",
+    id: "rn-child",
+    name: MODIFY_AGENT,
+    input: { agent_id: childId, name: "Worker Renamed" },
+  });
+  assert.equal(child.isError, false);
+  assert.equal(JSON.parse(child.content).new_name, "Worker Renamed");
+  const [row] = await handle.db.select().from(agents).where(eq(agents.id, childId));
+  assert.equal(row?.name, "Worker Renamed");
+});
+
+test("modify_agent rename of a stranger is rejected", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertAgent(handle.db, {
+    name: "parent",
+    systemPrompt: "parent",
+  });
+  const strangerId = await insertAgent(handle.db, {
+    name: "stranger",
+    systemPrompt: "stranger",
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(parentId, "reasoning"), {
+    type: "tool_use",
+    id: "rn-stranger",
+    name: MODIFY_AGENT,
+    input: { agent_id: strangerId, name: "Hijacked" },
+  });
+  assert.equal(result.isError, true);
+  assert.match(result.content, /direct children/);
+  const [row] = await handle.db.select().from(agents).where(eq(agents.id, strangerId));
+  assert.equal(row?.name, "stranger");
+});
+
+test("modify_agent rename collision is a tool error and leaves the row unchanged", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const selfId = await insertAgent(handle.db, {
+    name: "alpha",
+    systemPrompt: "alpha",
+  });
+  await insertAgent(handle.db, {
+    name: "taken",
+    systemPrompt: "taken",
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(selfId, "reasoning"), {
+    type: "tool_use",
+    id: "rn-collision",
+    name: MODIFY_AGENT,
+    input: { agent_id: selfId, name: "taken" },
+  });
+  assert.equal(result.isError, true);
+  assert.match(result.content, /an agent named taken already exists/);
+  const [row] = await handle.db.select().from(agents).where(eq(agents.id, selfId));
+  assert.equal(row?.name, "alpha");
+});
+
+test("modify_agent accepts name alone", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const selfId = await insertAgent(handle.db, {
+    name: "solo",
+    systemPrompt: "keep me",
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(selfId, "reasoning"), {
+    type: "tool_use",
+    id: "rn-only",
+    name: MODIFY_AGENT,
+    input: { agent_id: selfId, name: "Solo Renamed" },
+  });
+  assert.equal(result.isError, false);
+  const body = JSON.parse(result.content);
+  assert.equal(body.new_name, "Solo Renamed");
+  assert.equal(body.new_system_prompt, "keep me");
+  assert.equal(body.active, true);
+});
+
 test("reasoning context has send_message and no dispatch_message", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: [],
   });
   const ctx = await assembleContext({
     db: handle.db,
@@ -218,6 +363,7 @@ test("conversation tools are dispatch_message, steer_reasoning, yield — never 
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: [],
   });
   const ctx = await assembleContext({
     db: handle.db,

@@ -5,8 +5,7 @@ import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
 import { migrate } from "../src/db/migrate.js";
 import { allTools, findTool } from "../src/tools/registry.js";
-import { syncTools, toolId } from "../src/tools/sync.js";
-import { agentTools } from "../src/db/schema.js";
+import { syncTools } from "../src/tools/sync.js";
 import { DimaagError } from "../src/errors.js";
 import {
   insertWorker,
@@ -35,23 +34,13 @@ after(async () => {
 
 const CHAAVI_TOOLS = ["chaavi_list_items", "chaavi_fill_login", "chaavi_with_secret"] as const;
 
-test("syncTools registers Chaavi tools and a worker holds them", async () => {
+test("Chaavi tools are registered", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of CHAAVI_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
-  const workerId = await insertWorker(handle.db, {
-    name: "thread",
-    systemPrompt: "do the job",
-  });
-  const grants = await handle.db.select().from(agentTools);
-  const grantToolIds = new Set(grants.map((row) => row.toolId));
-  for (const name of CHAAVI_TOOLS) {
-    assert.ok(grantToolIds.has(toolId(name)), `missing worker grant for ${name}`);
-  }
-  assert.ok(grants.every((row) => row.agentId === workerId));
 });
 
 test("list_items shapes items without a password field", async () => {
@@ -59,6 +48,7 @@ test("list_items shapes items without a password field", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["chaavi_list_items"],
   });
   const itemId = "item-login-1";
   const chaavi = mockChaavi({
@@ -110,6 +100,7 @@ test("fill_login types username then password and never returns the password", a
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["chaavi_fill_login"],
   });
   const itemId = "item-login-1";
   const password = "s3cret-pass";
@@ -183,6 +174,7 @@ test("with_secret redacts the value from exec output and omits it from the paylo
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["chaavi_with_secret"],
   });
   const itemId = "item-secret-1";
   const secret = "tok_live_abc";
@@ -239,6 +231,7 @@ test("Chaavi unreachable fails with chaavi code, not an empty success", async ()
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["chaavi_list_items"],
   });
   const chaavi = mockChaavi({
     listItems: () => {
@@ -279,6 +272,7 @@ test("vault_unconfigured maps through", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["chaavi_list_items"],
   });
   const chaavi = mockChaavi({
     listItems: () => {

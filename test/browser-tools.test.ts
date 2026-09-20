@@ -4,8 +4,7 @@ import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
 import { migrate } from "../src/db/migrate.js";
 import { allTools, findTool } from "../src/tools/registry.js";
-import { syncTools, toolId } from "../src/tools/sync.js";
-import { agentTools } from "../src/db/schema.js";
+import { syncTools } from "../src/tools/sync.js";
 import {
   insertWorker,
   mockDwar,
@@ -48,23 +47,13 @@ const BROWSER_TOOLS = [
   "browser_extract_text",
 ] as const;
 
-test("syncTools registers browser tools and a worker holds them", async () => {
+test("browser tools are registered", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of BROWSER_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
-  const workerId = await insertWorker(handle.db, {
-    name: "thread",
-    systemPrompt: "do the job",
-  });
-  const grants = await handle.db.select().from(agentTools);
-  const grantToolIds = new Set(grants.map((row) => row.toolId));
-  for (const name of BROWSER_TOOLS) {
-    assert.ok(grantToolIds.has(toolId(name)), `missing worker grant for ${name}`);
-  }
-  assert.ok(grants.every((row) => row.agentId === workerId));
 });
 
 test("spawn_browser and list_browsers call Nas", async () => {
@@ -72,6 +61,7 @@ test("spawn_browser and list_browsers call Nas", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["browser_spawn", "browser_list"],
   });
   const nas = mockNas({
     createBrowser: () => ({
@@ -126,6 +116,7 @@ test("close_browser calls Nas and drops the local connection entry", async () =>
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["browser_close"],
   });
   const nas = mockNas({});
   const runtime = createRuntime({

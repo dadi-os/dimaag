@@ -48,6 +48,7 @@ test("EventBus.subscribe receives emitted events; unsubscribe stops delivery", (
   bus.emit({
     type: "agent_modified",
     agent_id: agentId,
+    name: "alpha",
     active: true,
     at: new Date().toISOString(),
   });
@@ -56,6 +57,7 @@ test("EventBus.subscribe receives emitted events; unsubscribe stops delivery", (
   bus.emit({
     type: "agent_modified",
     agent_id: agentId,
+    name: "alpha",
     active: false,
     at: new Date().toISOString(),
   });
@@ -88,6 +90,7 @@ test("POST /messages emits a message event", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: [],
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -133,6 +136,7 @@ test("dispatch_message emits message with agent_id set to the recipient", async 
   const callerId = await insertWorker(handle.db, {
     name: "dispatcher",
     systemPrompt: "dispatch",
+    tools: [],
   });
   const targetId = await insertAgent(handle.db, {
     name: "dispatch-target",
@@ -173,6 +177,7 @@ test("deliverAgentMessage merges extraPayload into both message log rows", async
   const fromId = await insertWorker(handle.db, {
     name: "from",
     systemPrompt: "from",
+    tools: [],
   });
   const toId = await insertAgent(handle.db, {
     name: "deliver-extra-target",
@@ -229,6 +234,7 @@ test("lane_finished is emitted even when the lane run throws", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: [],
   });
   const dwar = mockDwar({
     converse: async () => {
@@ -264,6 +270,7 @@ test("GET /agents includes running and it flips true while a lane holds the lock
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: [],
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -310,6 +317,7 @@ test("GET /agents surfaces sessions after worker host tools", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["browser_screenshot", "terminal_execute_shell", "browser_close"],
   });
   const nas = mockNas({
     browserScreenshot: () => Buffer.from("png"),
@@ -399,10 +407,12 @@ test("GET /agents lists multiple top-level workers without conflict", async () =
   const firstId = await insertWorker(handle.db, {
     name: "first",
     systemPrompt: "first job",
+    tools: [],
   });
   const secondId = await insertWorker(handle.db, {
     name: "second",
     systemPrompt: "second job",
+    tools: [],
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -441,6 +451,7 @@ test("GET /agents/:id includes granted tools with usage and excludes embedded to
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["yaad_recall", "terminal_execute_shell"],
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -486,6 +497,7 @@ test("GET /logs returns across agents; event filters; limit above cap is 422", a
   const workerId = await insertWorker(handle.db, {
     name: "log-worker",
     systemPrompt: "logs",
+    tools: [],
   });
   const otherId = await insertAgent(handle.db, {
     name: "log-other",

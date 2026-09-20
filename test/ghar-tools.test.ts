@@ -36,23 +36,13 @@ after(async () => {
 
 const GHAR_TOOLS = ["ghar_list_devices", "ghar_get_state", "ghar_control_device", "ghar_get_device_events"] as const;
 
-test("syncTools registers Ghar tools and a worker holds them", async () => {
+test("Ghar tools are registered", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of GHAR_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
-  const workerId = await insertWorker(handle.db, {
-    name: "thread",
-    systemPrompt: "do the job",
-  });
-  const grants = await handle.db.select().from(agentTools);
-  const grantToolIds = new Set(grants.map((row) => row.toolId));
-  for (const name of GHAR_TOOLS) {
-    assert.ok(grantToolIds.has(toolId(name)), `missing worker grant for ${name}`);
-  }
-  assert.ok(grants.every((row) => row.agentId === workerId));
 });
 
 test("list_devices passes filters through to the Ghar client", async () => {
@@ -60,6 +50,7 @@ test("list_devices passes filters through to the Ghar client", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["ghar_list_devices"],
   });
   const deviceId = randomUUID();
   const ghar = mockGhar({
@@ -112,6 +103,7 @@ test("control_device attributes cause to the calling agent, not the parent", asy
   const parentId = await insertWorker(handle.db, {
     name: "parent",
     systemPrompt: "parent",
+    tools: [],
   });
   const childId = await insertAgent(handle.db, {
     name: "house-thread",
@@ -161,6 +153,7 @@ test("Ghar unreachable fails with ghar code, not an empty success", async () => 
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["ghar_list_devices"],
   });
   const ghar = mockGhar({
     listDevices: () => {
@@ -201,6 +194,7 @@ test("capability_unsupported and device_unreachable stay distinguishable", async
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["ghar_control_device"],
   });
   const deviceId = randomUUID();
   let mode: "capability" | "unreachable" = "capability";
@@ -252,6 +246,7 @@ test("get_device_events passes filters through and bounds the default limit", as
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["ghar_get_device_events"],
   });
   const deviceId = randomUUID();
   const ghar = mockGhar({
@@ -313,6 +308,7 @@ test("get_state returns only requested devices with changed_at", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["ghar_get_state"],
   });
   const a = randomUUID();
   const b = randomUUID();

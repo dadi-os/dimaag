@@ -8,7 +8,7 @@ import { executeTool } from "../src/runtime/tools.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import { migrate } from "../src/db/migrate.js";
 import { allTools, findTool } from "../src/tools/registry.js";
-import { syncTools, toolId } from "../src/tools/sync.js";
+import { syncTools } from "../src/tools/sync.js";
 import { agentTools } from "../src/db/schema.js";
 import { DimaagError } from "../src/errors.js";
 import {
@@ -46,49 +46,25 @@ const YAAD_TOOLS = [
   "yaad_get_node_history",
   "yaad_search_history",
 ] as const;
-const MANAGER_TOOLS = [
-  "dimaag_spawn_agent",
-  "dimaag_modify_agent",
-  "dimaag_grant_tool",
-  "dimaag_revoke_tool",
-] as const;
-const WORKER_PLATFORM_TOOLS = [
-  "dimaag_schedule_message",
-  "dimaag_list_schedules",
-  "dimaag_cancel_schedule",
-  "dimaag_get_logs",
-] as const;
 
-test("syncTools registers Yaad tools; worker catalog grants them after applyWorkerCatalog", async () => {
+test("Yaad tools are registered and syncTools does not auto-grant", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of YAAD_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
-  const before = await handle.db.select().from(agentTools);
-  assert.equal(before.length, 0);
-
-  const workerId = await insertWorker(handle.db, {
-    name: "thread",
-    systemPrompt: "do the job",
-  });
   const grants = await handle.db.select().from(agentTools);
-  const grantToolIds = new Set(grants.map((row) => row.toolId));
-  for (const name of [...YAAD_TOOLS, ...WORKER_PLATFORM_TOOLS]) {
-    assert.ok(grantToolIds.has(toolId(name)), `missing worker grant for ${name}`);
-  }
-  for (const name of MANAGER_TOOLS) {
-    assert.equal(grantToolIds.has(toolId(name)), false, `worker must not hold ${name}`);
-  }
-  assert.ok(grants.every((row) => row.agentId === workerId));
+  assert.equal(grants.length, 0);
 });
 
 test("assembleContext for a worker includes Yaad tools, send_message, and yield — not spawn", async () => {
   await resetRuntime(handle.sql, handle.db, config);
+  const granted = [...YAAD_TOOLS];
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: granted,
   });
   const ctx = await assembleContext({
     db: handle.db,
@@ -97,7 +73,7 @@ test("assembleContext for a worker includes Yaad tools, send_message, and yield 
     transcript: new TranscriptStore(),
   });
   const names = new Set(ctx.tools.map((tool) => tool.name));
-  for (const name of [...YAAD_TOOLS, SEND_MESSAGE, "yield"]) {
+  for (const name of [...granted, SEND_MESSAGE, "yield"]) {
     assert.ok(names.has(name), `missing tool ${name}`);
   }
   assert.equal(names.has("dimaag_spawn_agent"), false);
@@ -108,6 +84,7 @@ test("recall tool shapes the response and preserves sufficient", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["yaad_recall"],
   });
   const nodeId = randomUUID();
   const yaad = mockYaad({
@@ -167,6 +144,7 @@ test("query tool passes filters through", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["yaad_query"],
   });
   const yaad = mockYaad({
     query: () => ({ nodes: [{ id: randomUUID(), kind: "plan", title: "flight" }], limit: 10, offset: 0 }),
@@ -203,6 +181,7 @@ test("get_node tool returns the Yaad node response", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["yaad_get_node"],
   });
   const id = randomUUID();
   const yaad = mockYaad({
@@ -249,6 +228,7 @@ test("ingest stamps occurred_at and source; rejects occurred_at in tool input", 
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["yaad_ingest"],
   });
   const before = Date.now();
   const yaad = mockYaad({
@@ -303,6 +283,7 @@ test("Yaad 4xx maps to isError without throwing", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["yaad_query"],
   });
   const yaad = mockYaad({
     query: () => {
@@ -332,6 +313,7 @@ test("Yaad unreachable maps to isError and the lane continues", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["yaad_recall"],
   });
   let reasonCalls = 0;
   const dwar = mockDwar({

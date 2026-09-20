@@ -53,6 +53,7 @@ test("from_agent_id = to_agent_id is rejected", async () => {
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
+    tools: [],
   });
 
   await assert.rejects(
@@ -77,6 +78,7 @@ test("interval_minutes 0 is rejected; 1 and null are accepted", async () => {
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
+    tools: [],
   });
   const toId = await insertAgent(handle.db, {
     name: "scheduled-target",

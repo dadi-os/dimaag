@@ -5,13 +5,12 @@ import { TZDate } from "@date-fns/tz";
 import { and, eq } from "drizzle-orm";
 import { TIMEZONE } from "../src/constants.js";
 import { migrate } from "../src/db/migrate.js";
-import { agentLogs, agents, agentTools, scheduledMessages } from "../src/db/schema.js";
+import { agentLogs, agents, scheduledMessages } from "../src/db/schema.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import type { RuntimeEvent } from "../src/runtime/events.js";
 import { advanceRunAt } from "../src/runtime/scheduler.js";
 import { executeTool } from "../src/runtime/tools.js";
 import { allTools, findTool } from "../src/tools/registry.js";
-import { syncTools, toolId } from "../src/tools/sync.js";
 import {
   insertAgent,
   insertWorker,
@@ -70,31 +69,11 @@ after(async () => {
   await handle.close();
 });
 
-test("allTools includes the three schedule tools and a worker holds them", async () => {
+test("allTools includes the three schedule tools", async () => {
   assert.equal(allTools().length, 61);
   assert.equal(findTool("dimaag_schedule_message")?.name, "dimaag_schedule_message");
   assert.equal(findTool("dimaag_list_schedules")?.name, "dimaag_list_schedules");
   assert.equal(findTool("dimaag_cancel_schedule")?.name, "dimaag_cancel_schedule");
-
-  await resetRuntime(handle.sql, handle.db, config);
-  await syncTools(handle.db);
-  const fromId = await insertWorker(handle.db, {
-    name: "scheduler",
-    systemPrompt: "schedule work",
-  });
-  const grants = await handle.db
-    .select()
-    .from(agentTools)
-    .where(eq(agentTools.agentId, fromId));
-  const names = new Set(
-    grants.map((row) => {
-      const match = allTools().find((tool) => toolId(tool.name) === row.toolId);
-      return match?.name;
-    }),
-  );
-  assert.ok(names.has("dimaag_schedule_message"));
-  assert.ok(names.has("dimaag_list_schedules"));
-  assert.ok(names.has("dimaag_cancel_schedule"));
 });
 
 test("due one-shot delivers once and deletes the row", async () => {
@@ -102,6 +81,7 @@ test("due one-shot delivers once and deletes the row", async () => {
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
+    tools: [],
   });
   const toId = await insertAgent(handle.db, {
     name: "one-shot-target",
@@ -164,6 +144,7 @@ test("not yet due leaves the row untouched", async () => {
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
+    tools: [],
   });
   const toId = await insertAgent(handle.db, {
     name: "future-target",
@@ -207,6 +188,7 @@ test("recurring sub-day advances run_at by exactly the interval", async () => {
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
+    tools: [],
   });
   const toId = await insertAgent(handle.db, {
     name: "ten-min-target",
@@ -250,6 +232,7 @@ test("recurring daily preserves wall time across DST transitions", async () => {
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
+    tools: [],
   });
   const toId = await insertAgent(handle.db, {
     name: "dst-target",
@@ -315,6 +298,7 @@ test("catch-up delivers once, advances past now, and warns schedule_late", async
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
+    tools: [],
   });
   const toId = await insertAgent(handle.db, {
     name: "catchup-target",
@@ -366,6 +350,7 @@ test("inactive target skips delivery and logs schedule_target_unavailable", asyn
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
+    tools: [],
   });
   const toId = await insertAgent(handle.db, {
     name: "inactive-target",
@@ -422,6 +407,7 @@ test("missing target skips delivery with reason missing", async () => {
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
+    tools: [],
   });
   const toId = await insertAgent(handle.db, {
     name: "soon-missing",
@@ -467,6 +453,7 @@ test("tick error is isolated and a later tick still runs", async () => {
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
+    tools: [],
   });
   const toId = await insertAgent(handle.db, {
     name: "throw-target",
@@ -521,6 +508,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
+    tools: ["dimaag_schedule_message"],
   });
   const peerId = await insertAgent(handle.db, {
     name: "peer-agent",

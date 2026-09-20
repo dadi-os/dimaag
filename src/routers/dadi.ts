@@ -6,13 +6,14 @@ import { randomUUID } from "node:crypto";
 import { eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { applyWorkerCatalog } from "../db/seed.js";
-import { agents } from "../db/schema.js";
+import { agentTools, agents } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
 import { patchMessageContent } from "../runtime/attachments.js";
 import { deliverUserMessage } from "../runtime/deliver.js";
 import { requireAgent } from "../runtime/tools.js";
+import { findTool } from "../tools/registry.js";
 import { isUniqueViolation } from "../tools/shared.js";
+import { toolId } from "../tools/sync.js";
 import type { DwarTool, DwarToolUseBlock } from "../types/domain.js";
 import { formatZod, postDadiBody, parse } from "./schemas.js";
 
@@ -31,7 +32,7 @@ const decideTool: DwarTool = {
         type: "string",
         description: "Existing top-level thread to reuse, or any agent to modify",
       },
-      name: { type: "string", description: "Unique name when spawning" },
+      name: { type: "string", description: "Unique name when spawning or renaming" },
       system_prompt: {
         type: "string",
         description: "Job prompt when spawning, or replacement prompt when modifying",
@@ -40,10 +41,31 @@ const decideTool: DwarTool = {
         type: "boolean",
         description: "When modifying, whether the agent stays active",
       },
+      grants: {
+        type: "array",
+        description:
+          "Tools to grant on spawn. Each entry is a registry tool_name plus usage for this agent.",
+        items: {
+          type: "object",
+          properties: {
+            tool_name: { type: "string", description: "Registry tool name" },
+            usage: {
+              type: "string",
+              description: "When and why this agent should use this tool",
+            },
+          },
+          required: ["tool_name", "usage"],
+        },
+      },
     },
     required: ["action"],
   },
 };
+
+const grantEntry = z.object({
+  tool_name: z.string().min(1),
+  usage: z.string().min(1),
+});
 
 const reuseDecision = z.object({
   action: z.literal("reuse"),
@@ -54,11 +76,13 @@ const spawnDecision = z.object({
   action: z.literal("spawn"),
   name: z.string().min(1),
   system_prompt: z.string().min(1),
+  grants: z.array(grantEntry).optional(),
 });
 
 const modifyDecision = z.object({
   action: z.literal("modify"),
   thread_id: z.string().uuid(),
+  name: z.string().min(1).optional(),
   system_prompt: z.string().min(1).optional(),
   active: z.boolean().optional(),
 });
@@ -68,12 +92,13 @@ const decideInput = z
   .superRefine((value, ctx) => {
     if (
       value.action === "modify" &&
+      value.name === undefined &&
       value.system_prompt === undefined &&
       value.active === undefined
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "system_prompt or active is required",
+        message: "name, system_prompt, or active is required",
       });
     }
   });
@@ -117,8 +142,8 @@ async function routeDadi(
   const roster = await listTopLevelThreads(app);
   const system =
     roster.length > 0
-      ? `${policy}\n\nActive top-level threads:\n${roster.join("\n")}`
-      : `${policy}\n\nThere are no active top-level threads yet. Spawn one when the utterance is work.`;
+      ? `${policy}\n\nTop-level threads:\n${roster.join("\n")}`
+      : `${policy}\n\nThere are no top-level threads yet. Spawn one when the utterance is work.`;
 
   const response = await app.dwar.complete({
     system,
@@ -153,31 +178,56 @@ async function routeDadi(
   }
 
   if (parsed.data.action === "spawn") {
+    const grants = parsed.data.grants ?? [];
+    const spawnName = parsed.data.name;
+    const spawnPrompt = parsed.data.system_prompt;
+    const seenTools = new Set<string>();
+    for (const grant of grants) {
+      if (seenTools.has(grant.tool_name)) {
+        throw new DimaagError(
+          422,
+          "invalid_request",
+          `duplicate grant for tool ${grant.tool_name}`,
+        );
+      }
+      seenTools.add(grant.tool_name);
+      if (!findTool(grant.tool_name)) {
+        throw new DimaagError(422, "invalid_request", `no tool named ${grant.tool_name}`);
+      }
+    }
     const id = randomUUID();
     try {
-      await app.db.insert(agents).values({
-        id,
-        name: parsed.data.name,
-        systemPrompt: parsed.data.system_prompt,
-        parentAgentId: null,
-        active: true,
+      await app.db.transaction(async (tx) => {
+        await tx.insert(agents).values({
+          id,
+          name: spawnName,
+          systemPrompt: spawnPrompt,
+          parentAgentId: null,
+          active: true,
+        });
+        for (const grant of grants) {
+          await tx.insert(agentTools).values({
+            agentId: id,
+            toolId: toolId(grant.tool_name),
+            usage: grant.usage,
+          });
+        }
       });
     } catch (err) {
       if (isUniqueViolation(err)) {
         throw new DimaagError(
           409,
           "conflict",
-          `an agent named ${parsed.data.name} already exists`,
+          `an agent named ${spawnName} already exists`,
         );
       }
       throw err;
     }
-    await applyWorkerCatalog(app.db, id);
     app.runtime.events.emit({
       type: "agent_spawned",
       agent_id: id,
       parent_agent_id: null,
-      name: parsed.data.name,
+      name: spawnName,
       at: new Date().toISOString(),
     });
     return deliverRouted(app, id, content, true);
@@ -185,25 +235,36 @@ async function routeDadi(
 
   const target = await requireAgent(app.db, parsed.data.thread_id);
   const now = new Date();
+  const name = parsed.data.name ?? target.name;
   const systemPrompt = parsed.data.system_prompt ?? target.systemPrompt;
   const active = parsed.data.active ?? target.active;
-  await app.db
-    .update(agents)
-    .set({
-      systemPrompt,
-      active,
-      updatedAt: now,
-    })
-    .where(eq(agents.id, target.id));
+  try {
+    await app.db
+      .update(agents)
+      .set({
+        name,
+        systemPrompt,
+        active,
+        updatedAt: now,
+      })
+      .where(eq(agents.id, target.id));
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      throw new DimaagError(409, "conflict", `an agent named ${name} already exists`);
+    }
+    throw err;
+  }
   app.runtime.events.emit({
     type: "agent_modified",
     agent_id: target.id,
+    name,
     active,
     at: now.toISOString(),
   });
   return {
     action: "modified",
     agent_id: target.id,
+    name,
     active,
     system_prompt: systemPrompt,
   };
@@ -236,7 +297,7 @@ async function deliverRouted(
   };
 }
 
-/** Active god-owned threads for the classification prompt. */
+/** God-owned threads for the classification prompt (active and inactive). */
 async function listTopLevelThreads(app: FastifyInstance): Promise<string[]> {
   const rows = await app.db
     .select({
@@ -247,11 +308,11 @@ async function listTopLevelThreads(app: FastifyInstance): Promise<string[]> {
     })
     .from(agents)
     .where(isNull(agents.parentAgentId));
-  return rows
-    .filter((row) => row.active)
-    .map((row) => {
-      const purpose = row.systemPrompt.trim().split(/\n/)[0] ?? "";
-      const brief = purpose.length > 120 ? `${purpose.slice(0, 117)}…` : purpose;
-      return brief ? `- ${row.name} (${row.id}): ${brief}` : `- ${row.name} (${row.id})`;
-    });
+  return rows.map((row) => {
+    const purpose = row.systemPrompt.trim().split(/\n/)[0] ?? "";
+    const brief = purpose.length > 120 ? `${purpose.slice(0, 117)}…` : purpose;
+    const status = row.active ? "active" : "inactive";
+    const head = `- ${row.name} (${row.id}) [${status}]`;
+    return brief ? `${head}: ${brief}` : head;
+  });
 }

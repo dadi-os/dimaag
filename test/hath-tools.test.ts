@@ -4,8 +4,7 @@ import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
 import { migrate } from "../src/db/migrate.js";
 import { allTools, findTool } from "../src/tools/registry.js";
-import { syncTools, toolId } from "../src/tools/sync.js";
-import { agentTools } from "../src/db/schema.js";
+import { syncTools } from "../src/tools/sync.js";
 import {
   insertWorker,
   mockDwar,
@@ -42,23 +41,13 @@ const HATH_TOOLS = [
   "hath_send_file",
 ] as const;
 
-test("syncTools registers Hath tools and a worker holds them", async () => {
+test("Hath tools are registered", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of HATH_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 61);
   await assert.doesNotReject(() => syncTools(handle.db));
-  const workerId = await insertWorker(handle.db, {
-    name: "thread",
-    systemPrompt: "do the job",
-  });
-  const grants = await handle.db.select().from(agentTools);
-  const grantToolIds = new Set(grants.map((row) => row.toolId));
-  for (const name of HATH_TOOLS) {
-    assert.ok(grantToolIds.has(toolId(name)), `missing worker grant for ${name}`);
-  }
-  assert.ok(grants.every((row) => row.agentId === workerId));
 });
 
 test("nas_list_clients returns Nas mesh clients", async () => {
@@ -66,6 +55,7 @@ test("nas_list_clients returns Nas mesh clients", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["nas_list_clients"],
   });
   const nas = mockNas();
   nas.listClients = async () => ({
@@ -104,6 +94,7 @@ test("hath_get_battery waits for client result over the command bus", async () =
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["hath_get_battery"],
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -149,6 +140,7 @@ test("hath_write_clipboard forwards text args and surfaces client errors", async
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
+    tools: ["hath_write_clipboard"],
   });
   const runtime = createRuntime({
     db: handle.db,

@@ -18,7 +18,7 @@ Agent runtime for dadi. It owns agent identity, transcripts, the dual-lane loop,
 dimaag/
   src/
     app.ts, config.ts, logging.ts, errors.ts, constants.ts
-    db/           Drizzle, migrate, seed, agent logs
+    db/           Drizzle, migrate, agent logs
     dwar/         Dwar axios client
     yaad/         Yaad axios client
     ghar/         Ghar axios client
@@ -52,7 +52,7 @@ docker compose run --rm dimaag npm run db:migrate
 docker compose run --rm dimaag npm test
 ```
 
-Migrations sync the tool registry and apply the worker catalog to every top-level agent (`parent_agent_id` null). Dadi is `POST /dadi`, not an agents row.
+Migrations run schema SQL and sync the tool registry. They do not grant tools. Dadi is `POST /dadi`, not an agents row.
 
 ## CI / CD
 
@@ -73,7 +73,7 @@ Every `agents` row is an agent. Dadi is not a row — it is `POST /dadi`. Top-le
 
 ## Dadi
 
-`POST /dadi` is the router. Policy lives in `prompts/dadi.md`. Dimaag sends that prompt (plus the top-level roster) as `system` to Dwar `POST /chat/complete` — a promptless inference call — with one `decide` tool (`reuse` | `spawn` | `modify`). Code applies the decision. Spawn creates a top-level thread with the worker catalog. Modify can change any agent's prompt or `active`. Routed utterances are delivered once onto the thread as `from_agent_id` null. Dadi does not speak and does not hold worker tools.
+`POST /dadi` is the router. Policy lives in `prompts/dadi.md`. Dimaag sends that prompt (plus the top-level roster, active and inactive) as `system` to Dwar `POST /chat/complete` — a promptless inference call — with one `decide` tool (`reuse` | `spawn` | `modify`). Code applies the decision. Spawn creates a top-level agent with only the tools in `decide.grants` (omitted or empty = none). Modify can change any agent's `name`, `system_prompt`, and/or `active`. Routed utterances are delivered once onto the thread as `from_agent_id` null. Dadi does not speak and does not hold worker tools.
 
 SSE: `dadi_started` / `dadi_finished` / `dadi_failed`. After a route, the thread's `lane_*` and `message` events take over.
 

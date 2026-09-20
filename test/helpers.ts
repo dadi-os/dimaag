@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import type { Config } from "../src/config.js";
 import { loadConfig } from "../src/config.js";
 import { createDb, type Db, type Sql } from "../src/db/client.js";
-import { applyWorkerCatalog } from "../src/db/seed.js";
 import { agentTools, agents } from "../src/db/schema.js";
 import { toolId } from "../src/tools/sync.js";
 import type { DwarChatRequest, DwarChatResponse } from "../src/types/domain.js";
@@ -597,13 +596,24 @@ export async function resetRuntime(sql: Sql, db: Db, _config: Config): Promise<v
   await syncTools(db);
 }
 
-/** Top-level thread with the worker catalog. */
+/** Agent with an explicit grant list (tests state the capability under test). */
 export async function insertWorker(
   db: Db,
-  args: { name: string; systemPrompt: string; parentAgentId?: string | null },
+  args: {
+    name: string;
+    systemPrompt: string;
+    parentAgentId?: string | null;
+    tools: readonly string[];
+  },
 ): Promise<string> {
   const id = await insertAgent(db, args);
-  await applyWorkerCatalog(db, id);
+  for (const tool of args.tools) {
+    await db.insert(agentTools).values({
+      agentId: id,
+      toolId: toolId(tool),
+      usage: "test",
+    });
+  }
   return id;
 }
 

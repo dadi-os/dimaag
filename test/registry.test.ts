@@ -73,3 +73,35 @@ test("syncTools with no grants resolves", async () => {
   await handle.sql`TRUNCATE scheduled_messages, agent_logs, agent_tools, tools, agents CASCADE`;
   await assert.doesNotReject(() => syncTools(handle.db));
 });
+
+test("migrate does not backfill grants onto existing roots", async () => {
+  await handle.sql`TRUNCATE scheduled_messages, agent_logs, agent_tools, tools, agents CASCADE`;
+  await syncTools(handle.db);
+
+  const agentId = await insertAgent(handle.db, {
+    name: "narrow-root",
+    systemPrompt: "deliberate grants only",
+  });
+  const granted = ["yaad_recall", "yaad_query"] as const;
+  for (const name of granted) {
+    await handle.db.insert(agentTools).values({
+      agentId,
+      toolId: toolId(name),
+      usage: `use ${name}`,
+    });
+  }
+
+  await migrate(config);
+  await migrate(config);
+
+  const rows = await handle.db.select().from(agentTools);
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every((row) => row.agentId === agentId));
+  const ids = new Set(rows.map((row) => row.toolId));
+  assert.deepEqual(ids, new Set(granted.map((name) => toolId(name))));
+  for (const row of rows) {
+    const name = granted.find((tool) => toolId(tool) === row.toolId);
+    assert.ok(name);
+    assert.equal(row.usage, `use ${name}`);
+  }
+});
