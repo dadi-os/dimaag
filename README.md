@@ -83,7 +83,7 @@ No user table. Human messages use `from_agent_id = null` / `to_agent_id = null`.
 
 ## Dual lanes
 
-Every agent has both lanes. **Reasoning** is the executor (tool-calling against `agent_tools` plus embedded `send_message` / `yield`). **Conversation** is the control surface (`dispatch_message`, `steer_reasoning`, `yield`). Speech is only via those message tools — model text is thought, never speech. A turn ends only on `yield`.
+Every agent has both lanes. **Reasoning** is the executor (tool-calling against `agent_tools` plus embedded `send_message` / `list_agents` / `yield`). **Conversation** is the control surface (`dispatch_message`, `steer_reasoning`, `list_agents`, `yield`). Speech is only via those message tools — model text is thought, never speech. A turn ends only on `yield`. `list_agents` is how agents resolve names to ids; it is not grantable.
 
 Transcript is in-process and shared. Conversation starts on inbound message, reasoning finish, or `send_message`. `steer_reasoning` queues instructions for the next reasoning step.
 

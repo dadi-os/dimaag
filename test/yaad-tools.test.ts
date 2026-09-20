@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { SEND_MESSAGE } from "../src/types/domain.js";
+import { LIST_AGENTS, SEND_MESSAGE } from "../src/types/domain.js";
 import { assembleContext } from "../src/runtime/context.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
@@ -73,7 +73,7 @@ test("assembleContext for a worker includes Yaad tools, send_message, and yield 
     transcript: new TranscriptStore(),
   });
   const names = new Set(ctx.tools.map((tool) => tool.name));
-  for (const name of [...granted, SEND_MESSAGE, "yield"]) {
+  for (const name of [...granted, SEND_MESSAGE, LIST_AGENTS, "yield"]) {
     assert.ok(names.has(name), `missing tool ${name}`);
   }
   assert.equal(names.has("dimaag_spawn_agent"), false);

@@ -11,7 +11,7 @@ import { createRuntime } from "../src/runtime/engine.js";
 import { EventBus, type RuntimeEvent } from "../src/runtime/events.js";
 import { executeTool } from "../src/runtime/tools.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
-import { DISPATCH_MESSAGE, SEND_MESSAGE, YIELD } from "../src/types/domain.js";
+import { DISPATCH_MESSAGE, LIST_AGENTS, SEND_MESSAGE, YIELD } from "../src/types/domain.js";
 import {
   insertAgent,
   insertWorker,
@@ -489,6 +489,7 @@ test("GET /agents/:id includes granted tools with usage and excludes embedded to
   assert.equal(names.includes(DISPATCH_MESSAGE), false);
   assert.equal(names.includes("steer_reasoning"), false);
   assert.equal(names.includes(YIELD), false);
+  assert.equal(names.includes(LIST_AGENTS), false);
   await app.close();
 });
 

@@ -1,15 +1,21 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { eq } from "drizzle-orm";
-import { DISPATCH_MESSAGE, MODIFY_AGENT, SEND_MESSAGE } from "../src/types/domain.js";
+import {
+  DISPATCH_MESSAGE,
+  LIST_AGENTS,
+  MODIFY_AGENT,
+  SEND_MESSAGE,
+} from "../src/types/domain.js";
 import { assembleContext } from "../src/runtime/context.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import { buildApp } from "../src/app.js";
 import { migrate } from "../src/db/migrate.js";
-import { agents, agentTools, scheduledMessages } from "../src/db/schema.js";
+import { agents, agentTools, scheduledMessages, tools } from "../src/db/schema.js";
 import { toolId } from "../src/tools/sync.js";
+import { allTools, findTool } from "../src/tools/registry.js";
 import {
   endTurn,
   insertAgent,
@@ -283,7 +289,7 @@ test("modify_agent accepts name alone", async () => {
   assert.equal(body.active, true);
 });
 
-test("reasoning context has send_message and no dispatch_message", async () => {
+test("reasoning context has send_message, list_agents, and no dispatch_message", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
     name: "thread",
@@ -298,6 +304,7 @@ test("reasoning context has send_message and no dispatch_message", async () => {
   });
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes(SEND_MESSAGE));
+  assert.ok(names.includes(LIST_AGENTS));
   assert.ok(names.includes("yield"));
   assert.equal(names.includes(DISPATCH_MESSAGE), false);
 });
@@ -358,7 +365,7 @@ test("a steer with reasoning idle starts a Dwar reasoning call", async () => {
   assert.match(blob, /wake up/);
 });
 
-test("conversation tools are dispatch_message, steer_reasoning, yield — never route_message", async () => {
+test("conversation tools are dispatch_message, steer_reasoning, list_agents, yield — never route_message", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
     name: "thread",
@@ -374,6 +381,7 @@ test("conversation tools are dispatch_message, steer_reasoning, yield — never 
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes(DISPATCH_MESSAGE));
   assert.ok(names.includes("steer_reasoning"));
+  assert.ok(names.includes(LIST_AGENTS));
   assert.ok(names.includes("yield"));
   assert.equal(names.includes(SEND_MESSAGE), false);
   assert.equal(names.includes("route_message"), false);
@@ -414,7 +422,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
   });
   assert.deepEqual(
     childCtx.tools.map((tool) => tool.name),
-    [SEND_MESSAGE, "yield"],
+    [SEND_MESSAGE, LIST_AGENTS, "yield"],
   );
 });
 
@@ -837,4 +845,294 @@ test("an agent can grant a tool it does not itself hold", async () => {
     transcript: new TranscriptStore(),
   });
   assert.ok(childCtx.tools.map((tool) => tool.name).includes("dimaag_modify_agent"));
+});
+
+test("list_agents is in both lanes for an agent with no grants", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const agentId = await insertAgent(handle.db, {
+    name: "No Grants",
+    systemPrompt: "empty",
+  });
+  const reasoning = await assembleContext({
+    db: handle.db,
+    agentId,
+    lane: "reasoning",
+    transcript: new TranscriptStore(),
+  });
+  const conversation = await assembleContext({
+    db: handle.db,
+    agentId,
+    lane: "conversation",
+    transcript: new TranscriptStore(),
+  });
+  assert.deepEqual(reasoning.tools.map((tool) => tool.name), [
+    SEND_MESSAGE,
+    LIST_AGENTS,
+    "yield",
+  ]);
+  assert.ok(conversation.tools.map((tool) => tool.name).includes(LIST_AGENTS));
+});
+
+test("list_agents is absent from GET /tools, the tools table, and grant_tool", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  assert.equal(findTool(LIST_AGENTS), undefined);
+  assert.equal(
+    allTools().some((tool) => tool.name === LIST_AGENTS),
+    false,
+  );
+  const rows = await handle.db.select().from(tools).where(eq(tools.name, LIST_AGENTS));
+  assert.equal(rows.length, 0);
+
+  const app = await buildApp(config, {
+    db: handle.db,
+    sql: handle.sql,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+  });
+  const res = await app.inject({ method: "GET", url: "/tools" });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { tools: { name: string }[] };
+  assert.equal(
+    body.tools.some((tool) => tool.name === LIST_AGENTS),
+    false,
+  );
+  await app.close();
+
+  const managerId = await insertManager(handle.db);
+  const childId = await insertAgent(handle.db, {
+    name: "grant-list-child",
+    systemPrompt: "child",
+    parentAgentId: managerId,
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const granted = await executeTool(runtime.toolContext(managerId, "reasoning"), {
+    type: "tool_use",
+    id: "g-list",
+    name: "dimaag_grant_tool",
+    input: {
+      agent_id: childId,
+      tool_name: LIST_AGENTS,
+      usage: "should fail",
+    },
+  });
+  assert.equal(granted.isError, true);
+  assert.match(granted.content, /no tool named list_agents/);
+});
+
+test("list_agents exact name is case-sensitive and empty on miss", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const codingId = await insertAgent(handle.db, {
+    name: "Coding Manager",
+    systemPrompt: "terminals",
+  });
+  const callerId = await insertAgent(handle.db, {
+    name: "Caller",
+    systemPrompt: "look up",
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const hit = await executeTool(runtime.toolContext(callerId, "reasoning"), {
+    type: "tool_use",
+    id: "la1",
+    name: LIST_AGENTS,
+    input: { name: "Coding Manager" },
+  });
+  assert.equal(hit.isError, false);
+  const hitBody = JSON.parse(hit.content) as {
+    agents: { id: string; name: string; parent_agent_id: string | null; parent_name: string | null; active: boolean }[];
+  };
+  assert.equal(hitBody.agents.length, 1);
+  assert.equal(hitBody.agents[0]?.id, codingId);
+  assert.equal(hitBody.agents[0]?.name, "Coding Manager");
+  assert.equal(hitBody.agents[0]?.parent_agent_id, null);
+  assert.equal(hitBody.agents[0]?.parent_name, null);
+  assert.equal(hitBody.agents[0]?.active, true);
+
+  const missCase = await executeTool(runtime.toolContext(callerId, "reasoning"), {
+    type: "tool_use",
+    id: "la2",
+    name: LIST_AGENTS,
+    input: { name: "coding manager" },
+  });
+  assert.equal(missCase.isError, false);
+  assert.deepEqual(JSON.parse(missCase.content).agents, []);
+
+  const missName = await executeTool(runtime.toolContext(callerId, "reasoning"), {
+    type: "tool_use",
+    id: "la3",
+    name: LIST_AGENTS,
+    input: { name: "Does Not Exist" },
+  });
+  assert.equal(missName.isError, false);
+  assert.deepEqual(JSON.parse(missName.content).agents, []);
+});
+
+test("list_agents omits dormant agents unless include_inactive", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const activeId = await insertAgent(handle.db, {
+    name: "Active Root",
+    systemPrompt: "active",
+  });
+  const dormantId = await insertAgent(handle.db, {
+    name: "Dormant Root",
+    systemPrompt: "asleep",
+  });
+  await handle.db.update(agents).set({ active: false }).where(eq(agents.id, dormantId));
+  const callerId = await insertAgent(handle.db, {
+    name: "Lister",
+    systemPrompt: "list",
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+
+  const activeOnly = await executeTool(runtime.toolContext(callerId, "reasoning"), {
+    type: "tool_use",
+    id: "la4",
+    name: LIST_AGENTS,
+    input: {},
+  });
+  assert.equal(activeOnly.isError, false);
+  const activeBody = JSON.parse(activeOnly.content) as {
+    agents: { id: string; name: string; active: boolean }[];
+  };
+  const activeIds = new Set(activeBody.agents.map((row) => row.id));
+  assert.ok(activeIds.has(activeId));
+  assert.ok(activeIds.has(callerId));
+  assert.equal(activeIds.has(dormantId), false);
+
+  const withInactive = await executeTool(runtime.toolContext(callerId, "reasoning"), {
+    type: "tool_use",
+    id: "la5",
+    name: LIST_AGENTS,
+    input: { include_inactive: true },
+  });
+  assert.equal(withInactive.isError, false);
+  const inactiveBody = JSON.parse(withInactive.content) as {
+    agents: { id: string; name: string; active: boolean }[];
+  };
+  const dormant = inactiveBody.agents.find((row) => row.id === dormantId);
+  assert.ok(dormant);
+  assert.equal(dormant.active, false);
+  assert.equal(dormant.name, "Dormant Root");
+});
+
+test("list_agents resolves parent_name when the parent is dormant", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertAgent(handle.db, {
+    name: "Dormant Parent",
+    systemPrompt: "asleep",
+  });
+  await handle.db.update(agents).set({ active: false }).where(eq(agents.id, parentId));
+  const childId = await insertAgent(handle.db, {
+    name: "Awake Child",
+    systemPrompt: "nested",
+    parentAgentId: parentId,
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const listed = await executeTool(runtime.toolContext(childId, "reasoning"), {
+    type: "tool_use",
+    id: "la7",
+    name: LIST_AGENTS,
+    input: { name: "Awake Child" },
+  });
+  assert.equal(listed.isError, false);
+  const body = JSON.parse(listed.content) as {
+    agents: { id: string; parent_agent_id: string | null; parent_name: string | null }[];
+  };
+  assert.equal(body.agents.length, 1);
+  assert.equal(body.agents[0]?.parent_agent_id, parentId);
+  assert.equal(body.agents[0]?.parent_name, "Dormant Parent");
+});
+
+test("list_agents visibility is global across parents", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const rootA = await insertAgent(handle.db, {
+    name: "Root A",
+    systemPrompt: "a",
+  });
+  const rootB = await insertAgent(handle.db, {
+    name: "Root B",
+    systemPrompt: "b",
+  });
+  const childOfB = await insertAgent(handle.db, {
+    name: "Child Of B",
+    systemPrompt: "nested",
+    parentAgentId: rootB,
+  });
+  const nestedCaller = await insertAgent(handle.db, {
+    name: "Nested Caller",
+    systemPrompt: "under a",
+    parentAgentId: rootA,
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+
+  const listed = await executeTool(runtime.toolContext(nestedCaller, "conversation"), {
+    type: "tool_use",
+    id: "la6",
+    name: LIST_AGENTS,
+    input: {},
+  });
+  assert.equal(listed.isError, false);
+  const body = JSON.parse(listed.content) as {
+    agents: {
+      id: string;
+      name: string;
+      parent_agent_id: string | null;
+      parent_name: string | null;
+    }[];
+  };
+  const byId = new Map(body.agents.map((row) => [row.id, row]));
+  assert.ok(byId.has(rootA));
+  assert.ok(byId.has(rootB));
+  assert.ok(byId.has(childOfB));
+  assert.ok(byId.has(nestedCaller));
+  assert.equal(byId.get(childOfB)?.parent_agent_id, rootB);
+  assert.equal(byId.get(childOfB)?.parent_name, "Root B");
+  assert.equal(byId.get(nestedCaller)?.parent_name, "Root A");
 });

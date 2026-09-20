@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { SEND_MESSAGE } from "../src/types/domain.js";
+import { LIST_AGENTS, SEND_MESSAGE } from "../src/types/domain.js";
 import { assembleContext } from "../src/runtime/context.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
@@ -250,6 +250,6 @@ test("worker granted execute_shell and read_file sees those plus send_message an
   });
   assert.deepEqual(
     ctx.tools.map((tool) => tool.name).sort(),
-    ["terminal_execute_shell", "terminal_read_file", SEND_MESSAGE, "yield"].sort(),
+    ["terminal_execute_shell", "terminal_read_file", SEND_MESSAGE, LIST_AGENTS, "yield"].sort(),
   );
 });

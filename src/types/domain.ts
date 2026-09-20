@@ -99,5 +99,6 @@ export const SEND_MESSAGE = "send_message";
 export const DISPATCH_MESSAGE = "dispatch_message";
 export const STEER_REASONING = "steer_reasoning";
 export const YIELD = "yield";
+export const LIST_AGENTS = "list_agents";
 export const SPAWN_AGENT = "dimaag_spawn_agent";
 export const MODIFY_AGENT = "dimaag_modify_agent";
