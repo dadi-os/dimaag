@@ -8,7 +8,7 @@ import { executeTool } from "../src/runtime/tools.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import { buildApp } from "../src/app.js";
 import { migrate } from "../src/db/migrate.js";
-import { agents, agentTools } from "../src/db/schema.js";
+import { agents, agentTools, scheduledMessages } from "../src/db/schema.js";
 import { toolId } from "../src/tools/sync.js";
 import {
   endTurn,
@@ -483,6 +483,223 @@ test("grant_tool on a non-child fails", async () => {
   });
   assert.equal(result.isError, true);
   assert.match(result.content, /direct children/);
+});
+
+test("grant_tool and modify_agent reject a grandchild for a normal agent", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertManager(handle.db, {
+    name: "grandparent",
+    systemPrompt: "top",
+  });
+  const childId = await insertAgent(handle.db, {
+    name: "child",
+    systemPrompt: "mid",
+    parentAgentId: parentId,
+  });
+  const grandchildId = await insertAgent(handle.db, {
+    name: "grandchild",
+    systemPrompt: "leaf",
+    parentAgentId: childId,
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const grant = await executeTool(runtime.toolContext(parentId, "reasoning"), {
+    type: "tool_use",
+    id: "g-gc",
+    name: "dimaag_grant_tool",
+    input: {
+      agent_id: grandchildId,
+      tool_name: "yaad_recall",
+      usage: "nope",
+    },
+  });
+  assert.equal(grant.isError, true);
+  assert.match(grant.content, /direct children/);
+
+  const modify = await executeTool(runtime.toolContext(parentId, "reasoning"), {
+    type: "tool_use",
+    id: "m-gc",
+    name: MODIFY_AGENT,
+    input: { agent_id: grandchildId, active: false },
+  });
+  assert.equal(modify.isError, true);
+  assert.match(modify.content, /direct children/);
+});
+
+test("as Dadi, grant_tool reaches a root and a nested agent under another parent", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const rootId = await insertAgent(handle.db, {
+    name: "root-for-dadi",
+    systemPrompt: "root",
+  });
+  const parentId = await insertAgent(handle.db, {
+    name: "other-parent",
+    systemPrompt: "parent",
+  });
+  const nestedId = await insertAgent(handle.db, {
+    name: "nested-under-other",
+    systemPrompt: "nested",
+    parentAgentId: parentId,
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const dadi = runtime.toolContext(null, "reasoning");
+
+  const rootGrant = await executeTool(dadi, {
+    type: "tool_use",
+    id: "dadi-root",
+    name: "dimaag_grant_tool",
+    input: {
+      agent_id: rootId,
+      tool_name: "yaad_recall",
+      usage: "remember for the root",
+    },
+  });
+  assert.equal(rootGrant.isError, false, rootGrant.content);
+
+  const nestedGrant = await executeTool(dadi, {
+    type: "tool_use",
+    id: "dadi-nested",
+    name: "dimaag_grant_tool",
+    input: {
+      agent_id: nestedId,
+      tool_name: "yaad_query",
+      usage: "query for the nested agent",
+    },
+  });
+  assert.equal(nestedGrant.isError, false, nestedGrant.content);
+
+  const grants = await handle.db.select().from(agentTools);
+  const byAgent = new Map(grants.map((row) => [row.agentId, row.toolId]));
+  assert.equal(byAgent.get(rootId), toolId("yaad_recall"));
+  assert.equal(byAgent.get(nestedId), toolId("yaad_query"));
+});
+
+test("as Dadi, modify_agent can change any agent", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertAgent(handle.db, {
+    name: "parent-mod",
+    systemPrompt: "parent",
+  });
+  const nestedId = await insertAgent(handle.db, {
+    name: "nested-mod",
+    systemPrompt: "old",
+    parentAgentId: parentId,
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(null, "reasoning"), {
+    type: "tool_use",
+    id: "dadi-mod",
+    name: MODIFY_AGENT,
+    input: {
+      agent_id: nestedId,
+      name: "Nested Renamed",
+      system_prompt: "new",
+      active: false,
+    },
+  });
+  assert.equal(result.isError, false, result.content);
+  const [row] = await handle.db.select().from(agents).where(eq(agents.id, nestedId));
+  assert.equal(row?.name, "Nested Renamed");
+  assert.equal(row?.systemPrompt, "new");
+  assert.equal(row?.active, false);
+});
+
+test("as Dadi, schedule_message fails without writing a row", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const targetId = await insertAgent(handle.db, {
+    name: "sched-target",
+    systemPrompt: "target",
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const before = await handle.db.select().from(scheduledMessages);
+  const result = await executeTool(runtime.toolContext(null, "reasoning"), {
+    type: "tool_use",
+    id: "dadi-sched",
+    name: "dimaag_schedule_message",
+    input: {
+      to_agent_id: targetId,
+      content: "later",
+      run_at: new Date(Date.now() + 60_000).toISOString().replace(/\.\d{3}Z$/, "+00:00"),
+    },
+  });
+  assert.equal(result.isError, true);
+  assert.match(result.content, /agent identity/);
+  const after = await handle.db.select().from(scheduledMessages);
+  assert.equal(after.length, before.length);
+});
+
+test("as Dadi, send_message and dispatch_message fail and deliver nothing", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const targetId = await insertAgent(handle.db, {
+    name: "msg-target",
+    systemPrompt: "target",
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const before = runtime.transcript.transcriptFor(targetId).length;
+
+  const send = await executeTool(runtime.toolContext(null, "reasoning"), {
+    type: "tool_use",
+    id: "dadi-send",
+    name: SEND_MESSAGE,
+    input: { to_agent_id: targetId, intent: "say hi" },
+  });
+  assert.equal(send.isError, true);
+  assert.match(send.content, /agent identity/);
+
+  const dispatch = await executeTool(runtime.toolContext(null, "conversation"), {
+    type: "tool_use",
+    id: "dadi-dispatch",
+    name: DISPATCH_MESSAGE,
+    input: { to_agent_id: targetId, content: "hi" },
+  });
+  assert.equal(dispatch.isError, true);
+  assert.match(dispatch.content, /agent identity/);
+
+  assert.equal(runtime.transcript.transcriptFor(targetId).length, before);
 });
 
 test("grant_tool naming an unknown tool fails", async () => {

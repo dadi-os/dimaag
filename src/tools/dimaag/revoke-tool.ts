@@ -11,22 +11,23 @@ const input = z.object({
   tool_name: z.string().min(1),
 });
 
-/** Revoke a previously granted tool from a direct child. */
+/** Revoke a previously granted tool from a child (or any agent when the caller is Dadi). */
 export const revokeTool = defineTool({
   name: "dimaag_revoke_tool",
-  description: "Take a tool back from one of your direct children. Fails if the child does not hold that tool.",
+  description:
+    "Take a tool back from one of your direct children. As Dadi, any agent is allowed. Fails if the agent does not hold that tool.",
   input,
   inputSchema: {
     type: "object",
     properties: {
-      agent_id: { type: "string", description: "A direct child of yours" },
+      agent_id: { type: "string", description: "A direct child of yours (any agent as Dadi)" },
       tool_name: { type: "string", description: "Registry tool name to revoke" },
     },
     required: ["agent_id", "tool_name"],
   },
   async handler(ctx, parsed) {
     const target = await requireAgent(ctx.db, parsed.agent_id);
-    if (target.parentAgentId !== ctx.callerId) {
+    if (ctx.callerId !== null && target.parentAgentId !== ctx.callerId) {
       return fail("revoke_tool is limited to your direct children");
     }
     if (!findTool(parsed.tool_name)) {

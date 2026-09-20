@@ -172,7 +172,21 @@ async function routeDadi(
       throw new DimaagError(422, "invalid_request", "reuse is limited to top-level threads");
     }
     if (!thread.active) {
-      throw new DimaagError(422, "invalid_request", "cannot reuse an inactive thread");
+      const now = new Date();
+      await app.db
+        .update(agents)
+        .set({
+          active: true,
+          updatedAt: now,
+        })
+        .where(eq(agents.id, thread.id));
+      app.runtime.events.emit({
+        type: "agent_modified",
+        agent_id: thread.id,
+        name: thread.name,
+        active: true,
+        at: now.toISOString(),
+      });
     }
     return deliverRouted(app, thread.id, content, false);
   }
@@ -297,7 +311,7 @@ async function deliverRouted(
   };
 }
 
-/** God-owned threads for the classification prompt (active and inactive). */
+/** listTopLevelThreads returns root agents for the classification prompt (active and dormant). */
 async function listTopLevelThreads(app: FastifyInstance): Promise<string[]> {
   const rows = await app.db
     .select({
@@ -311,7 +325,7 @@ async function listTopLevelThreads(app: FastifyInstance): Promise<string[]> {
   return rows.map((row) => {
     const purpose = row.systemPrompt.trim().split(/\n/)[0] ?? "";
     const brief = purpose.length > 120 ? `${purpose.slice(0, 117)}…` : purpose;
-    const status = row.active ? "active" : "inactive";
+    const status = row.active ? "active" : "dormant";
     const head = `- ${row.name} (${row.id}) [${status}]`;
     return brief ? `${head}: ${brief}` : head;
   });

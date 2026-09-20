@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { scheduledMessages } from "../../db/schema.js";
 import { defineTool } from "../types.js";
-import { ok, fail, requireAgent } from "../shared.js";
+import { ok, fail, requireAgent, failWithoutAgentIdentity } from "../shared.js";
 
 const input = z.object({
   to_agent_id: z.string().uuid(),
@@ -40,6 +40,9 @@ export const scheduleMessage = defineTool({
     required: ["to_agent_id", "content", "run_at"],
   },
   async handler(ctx, parsed) {
+    if (ctx.callerId === null) {
+      return failWithoutAgentIdentity();
+    }
     if (parsed.to_agent_id === ctx.callerId) {
       return fail("an agent cannot schedule a message to itself");
     }

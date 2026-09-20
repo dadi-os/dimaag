@@ -28,7 +28,8 @@ export type ToolExecResult = {
 
 export type ToolContext = {
   db: Db;
-  callerId: string;
+  /** Null means Dadi (router authority), not an agents row. */
+  callerId: string | null;
   lane: Lane;
   yaad: YaadClient;
   ghar: GharClient;
@@ -53,6 +54,11 @@ export function fail(message: string): ToolExecResult {
 
 export function ok(value: unknown, audit: Record<string, unknown> = {}): ToolExecResult {
   return { content: JSON.stringify(value), isError: false, audit };
+}
+
+/** Fail when a tool needs a real agent and the caller is Dadi (`callerId` null). */
+export function failWithoutAgentIdentity(): ToolExecResult {
+  return fail("this tool needs an agent identity");
 }
 
 /** Load an agent row or throw `404 not_found`. */

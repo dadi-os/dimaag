@@ -48,7 +48,7 @@ export type Runtime = {
   enqueueConversation: (agentId: string) => void;
   enqueueReasoning: (agentId: string) => void;
   waitUntilIdle: () => Promise<void>;
-  toolContext: (callerId: string, lane: Lane) => ToolContext;
+  toolContext: (callerId: string | null, lane: Lane) => ToolContext;
 };
 
 /** Wire locks, queues, and lane runners for one process. */
@@ -143,7 +143,7 @@ export function createRuntime(opts: {
     toolContext,
   };
 
-  function toolContext(callerId: string, lane: Lane): ToolContext {
+  function toolContext(callerId: string | null, lane: Lane): ToolContext {
     return {
       db: opts.db,
       callerId,

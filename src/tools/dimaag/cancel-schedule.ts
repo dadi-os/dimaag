@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { scheduledMessages } from "../../db/schema.js";
 import { defineTool } from "../types.js";
-import { ok, fail } from "../shared.js";
+import { ok, fail, failWithoutAgentIdentity } from "../shared.js";
 
 const input = z.object({
   schedule_id: z.string().uuid(),
@@ -21,6 +21,9 @@ export const cancelSchedule = defineTool({
     required: ["schedule_id"],
   },
   async handler(ctx, parsed) {
+    if (ctx.callerId === null) {
+      return failWithoutAgentIdentity();
+    }
     const rows = await ctx.db
       .select()
       .from(scheduledMessages)

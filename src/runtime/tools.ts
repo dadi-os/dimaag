@@ -12,6 +12,7 @@ import {
   fail,
   ok,
   requireAgent,
+  failWithoutAgentIdentity,
   type ToolContext,
   type ToolExecResult,
 } from "../tools/shared.js";
@@ -115,7 +116,9 @@ export async function executeTool(
   call: DwarToolUseBlock,
 ): Promise<ToolExecResult> {
   const result = await dispatchTool(ctx, call);
-  ctx.sessions.observe(ctx.callerId, call.name, call.input, result.isError);
+  if (ctx.callerId !== null) {
+    ctx.sessions.observe(ctx.callerId, call.name, call.input, result.isError);
+  }
   return result;
 }
 
@@ -160,6 +163,9 @@ async function dispatchTool(
 }
 
 async function runSendMessage(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {
+  if (ctx.callerId === null) {
+    return failWithoutAgentIdentity();
+  }
   const input = sendInput.parse(raw);
   if (input.to_agent_id !== null) {
     await requireAgent(ctx.db, input.to_agent_id);
@@ -170,6 +176,9 @@ async function runSendMessage(ctx: ToolContext, raw: unknown): Promise<ToolExecR
 }
 
 async function runDispatchMessage(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {
+  if (ctx.callerId === null) {
+    return failWithoutAgentIdentity();
+  }
   const input = dispatchInput.parse(raw);
   if (input.to_agent_id !== null) {
     await requireAgent(ctx.db, input.to_agent_id);
@@ -191,6 +200,9 @@ async function runDispatchMessage(ctx: ToolContext, raw: unknown): Promise<ToolE
 }
 
 async function runSteerReasoning(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {
+  if (ctx.callerId === null) {
+    return failWithoutAgentIdentity();
+  }
   const input = steerInput.parse(raw);
   ctx.steer.append(ctx.callerId, input.instruction);
   if (!ctx.locks.isBusy(ctx.callerId, "reasoning")) {

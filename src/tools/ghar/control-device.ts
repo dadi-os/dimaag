@@ -58,7 +58,7 @@ export const controlDevice = defineTool({
           capability: parsed.capability,
           params: parsed.params,
           cause: "agent",
-          cause_ref: ctx.callerId,
+          cause_ref: ctx.callerId === null ? "dadi" : ctx.callerId,
         }),
       (response) => response,
     );

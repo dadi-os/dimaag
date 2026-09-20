@@ -73,7 +73,7 @@ Every `agents` row is an agent. Dadi is not a row — it is `POST /dadi`. Top-le
 
 ## Dadi
 
-`POST /dadi` is the router. Policy lives in `prompts/dadi.md`. Dimaag sends that prompt (plus the top-level roster, active and inactive) as `system` to Dwar `POST /chat/complete` — a promptless inference call — with one `decide` tool (`reuse` | `spawn` | `modify`). Code applies the decision. Spawn creates a top-level agent with only the tools in `decide.grants` (omitted or empty = none). Modify can change any agent's `name`, `system_prompt`, and/or `active`. Routed utterances are delivered once onto the thread as `from_agent_id` null. Dadi does not speak and does not hold worker tools.
+`POST /dadi` is the router. Policy lives in `prompts/dadi.md`. Dimaag sends that prompt (plus the top-level roster, active and dormant) as `system` to Dwar `POST /chat/complete` — a promptless inference call — with one `decide` tool (`reuse` | `spawn` | `modify`). Code applies the decision. Spawn creates a top-level agent with only the tools in `decide.grants` (omitted or empty = none). Reuse of a dormant root wakes it and delivers. Modify can change any agent's `name`, `system_prompt`, and/or `active`. Routed utterances are delivered once onto the thread as `from_agent_id` null. Dadi does not speak and does not hold worker tools.
 
 SSE: `dadi_started` / `dadi_finished` / `dadi_failed`. After a route, the thread's `lane_*` and `message` events take over.
 
@@ -192,7 +192,7 @@ Reverse RPC over SSE `hath_command` + `POST /hath/commands/:id/result`. Discover
 
 ## CLI
 
-The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the appliance). It invokes this registry over HTTP (`GET /tools`, `POST /tools/:name/execute`). Requires `DIMAAG_URL` (no default) and `--as-agent-id <uuid>` on every execute.
+The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the appliance). It invokes this registry over HTTP (`GET /tools`, `POST /tools/:name/execute`). Requires `DIMAAG_URL` (no default) and exactly one caller identity on execute: `--as-agent-id <uuid>`, `--as <name>`, or `--as-dadi`. `as_agent_id: "dadi"` is limited to router authority tools (`dimaag_spawn_agent`, `dimaag_grant_tool`, `dimaag_revoke_tool`, `dimaag_modify_agent`).
 
 ## Persistence
 
@@ -214,6 +214,6 @@ Schedule tools (`dimaag_schedule_message`, `dimaag_list_schedules`, `dimaag_canc
 | `GET` | `/logs` | cross-agent audit trail |
 | `GET` | `/tools` | grantable tool catalog |
 | `GET` | `/tools/:name` | one tool schema |
-| `POST` | `/tools/:name/execute` | run tool as `as_agent_id` |
+| `POST` | `/tools/:name/execute` | run tool as `as_agent_id` (`uuid` or `"dadi"`) |
 
 Unknown request fields are a 422. No CORS — clients use Tauri HTTP (or equivalent) outside the browser sandbox.

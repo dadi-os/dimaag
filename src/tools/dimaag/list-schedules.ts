@@ -3,7 +3,7 @@ import { z } from "zod";
 import { scheduledMessages } from "../../db/schema.js";
 import { toScheduledMessageRecord } from "../../serialize.js";
 import { defineTool } from "../types.js";
-import { ok } from "../shared.js";
+import { ok, failWithoutAgentIdentity } from "../shared.js";
 
 const input = z.object({}).default({});
 
@@ -18,6 +18,9 @@ export const listSchedules = defineTool({
     additionalProperties: false,
   },
   async handler(ctx) {
+    if (ctx.callerId === null) {
+      return failWithoutAgentIdentity();
+    }
     const rows = await ctx.db
       .select()
       .from(scheduledMessages)

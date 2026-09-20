@@ -11,15 +11,16 @@ const input = z.object({
   usage: z.string().min(1),
 });
 
-/** Grant a registry tool to a direct child, with a usage hint. */
+/** Grant a registry tool to a child (or any agent when the caller is Dadi). */
 export const grantTool = defineTool({
   name: "dimaag_grant_tool",
-  description: "Give one of your direct children a tool. usage explains when and why that specific agent should reach for it, which the child sees alongside the tool's own description.",
+  description:
+    "Give one of your direct children a tool. As Dadi, any agent is allowed. usage explains when and why that specific agent should reach for it, which the child sees alongside the tool's own description.",
   input,
   inputSchema: {
     type: "object",
     properties: {
-      agent_id: { type: "string", description: "A direct child of yours" },
+      agent_id: { type: "string", description: "A direct child of yours (any agent as Dadi)" },
       tool_name: { type: "string", description: "Registry tool name" },
       usage: {
         type: "string",
@@ -30,7 +31,7 @@ export const grantTool = defineTool({
   },
   async handler(ctx, parsed) {
     const target = await requireAgent(ctx.db, parsed.agent_id);
-    if (target.parentAgentId !== ctx.callerId) {
+    if (ctx.callerId !== null && target.parentAgentId !== ctx.callerId) {
       return fail("grant_tool is limited to your direct children");
     }
     if (!findTool(parsed.tool_name)) {

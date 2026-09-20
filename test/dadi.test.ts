@@ -130,6 +130,10 @@ test("POST /dadi reuse delivers to an existing top-level thread", async () => {
     }),
   });
   const { app, runtime } = await appWith(dwar);
+  const seen: RuntimeEvent[] = [];
+  runtime.events.subscribe((event) => {
+    seen.push(event);
+  });
 
   const res = await app.inject({
     method: "POST",
@@ -146,6 +150,106 @@ test("POST /dadi reuse delivers to an existing top-level thread", async () => {
   assert.equal(delivered.length, 1);
   assert.equal(delivered[0]?.fromAgentId, null);
   assert.equal(delivered[0]?.content, "continue the job");
+  assert.equal(
+    seen.some((event) => event.type === "agent_modified"),
+    false,
+    "active reuse must not emit agent_modified",
+  );
+
+  await runtime.waitUntilIdle();
+  await app.close();
+});
+
+test("POST /dadi roster marks a dormant root as dormant", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const dormantId = await insertWorker(handle.db, {
+    name: "Finance Specialist",
+    systemPrompt: "own the money",
+    tools: [],
+  });
+  await handle.db.update(agents).set({ active: false }).where(eq(agents.id, dormantId));
+  const dwar = mockDwar({
+    complete: () => ({
+      content: [
+        {
+          type: "tool_use",
+          id: "decide-1",
+          name: "decide",
+          input: { action: "reuse", thread_id: dormantId },
+        },
+      ],
+      stop_reason: "tool_use",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    }),
+  });
+  const { app, runtime, dwar: captured } = await appWith(dwar);
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/dadi",
+    payload: { content: "budget question" },
+  });
+  assert.equal(res.statusCode, 201);
+  const system = captured.completeCalls[0]?.system ?? "";
+  assert.match(system, new RegExp(`Finance Specialist \\(${dormantId}\\) \\[dormant\\]`));
+  assert.match(system, /own the money/);
+
+  await runtime.waitUntilIdle();
+  await app.close();
+});
+
+test("POST /dadi reuse of a dormant root wakes it, emits agent_modified, and delivers", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "Finance Specialist",
+    systemPrompt: "own the money",
+    tools: [],
+  });
+  await handle.db.update(agents).set({ active: false }).where(eq(agents.id, workerId));
+  const dwar = mockDwar({
+    complete: () => ({
+      content: [
+        {
+          type: "tool_use",
+          id: "decide-1",
+          name: "decide",
+          input: { action: "reuse", thread_id: workerId },
+        },
+      ],
+      stop_reason: "tool_use",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    }),
+  });
+  const { app, runtime } = await appWith(dwar);
+  const seen: RuntimeEvent[] = [];
+  runtime.events.subscribe((event) => {
+    seen.push(event);
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/dadi",
+    payload: { content: "how is the budget" },
+  });
+  assert.equal(res.statusCode, 201);
+  const body = res.json() as { action: string; thread_id: string; created: boolean };
+  assert.equal(body.action, "routed");
+  assert.equal(body.created, false);
+  assert.equal(body.thread_id, workerId);
+
+  const [agent] = await handle.db.select().from(agents).where(eq(agents.id, workerId));
+  assert.equal(agent?.active, true);
+
+  const modified = seen.filter((event) => event.type === "agent_modified");
+  assert.equal(modified.length, 1);
+  assert.ok(modified[0] && modified[0].type === "agent_modified");
+  assert.equal(modified[0].agent_id, workerId);
+  assert.equal(modified[0].active, true);
+  assert.equal(modified[0].name, "Finance Specialist");
+
+  const delivered = runtime.transcript.transcriptFor(workerId);
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0]?.content, "how is the budget");
 
   await runtime.waitUntilIdle();
   await app.close();
@@ -304,6 +408,52 @@ test("POST /dadi reuse of a nested agent is 422", async () => {
   await app.close();
 });
 
+test("POST /dadi reuse of a dormant nested agent is still 422", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertWorker(handle.db, {
+    name: "parent",
+    systemPrompt: "owns children",
+    tools: [],
+  });
+  const childId = await insertWorker(handle.db, {
+    name: "child",
+    systemPrompt: "nested",
+    parentAgentId: parentId,
+    tools: [],
+  });
+  await handle.db.update(agents).set({ active: false }).where(eq(agents.id, childId));
+  const dwar = mockDwar({
+    complete: () => ({
+      content: [
+        {
+          type: "tool_use",
+          id: "decide-1",
+          name: "decide",
+          input: { action: "reuse", thread_id: childId },
+        },
+      ],
+      stop_reason: "tool_use",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    }),
+  });
+  const { app, runtime } = await appWith(dwar);
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/dadi",
+    payload: { content: "reuse dormant nested" },
+  });
+  assert.equal(res.statusCode, 422);
+  const body = res.json() as { error: { type: string; message: string } };
+  assert.equal(body.error.type, "invalid_request");
+  assert.match(body.error.message, /top-level/);
+  const [child] = await handle.db.select().from(agents).where(eq(agents.id, childId));
+  assert.equal(child?.active, false);
+
+  await runtime.waitUntilIdle();
+  await app.close();
+});
+
 test("POST /dadi spawn name conflict is 409", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   await insertWorker(handle.db, {
@@ -410,6 +560,71 @@ test("POST /tools/:name/execute with as_agent_id runs a worker tool", async () =
   assert.equal(body.ok, true);
   assert.equal(body.is_error, false);
   assert.deepEqual(yaad.recallCalls, [{ query: "Vedant lunch" }]);
+
+  await runtime.waitUntilIdle();
+  await app.close();
+});
+
+test("POST /tools/:name/execute as dadi spawn_agent creates a root", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const { app, runtime } = await appWith();
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/tools/dimaag_spawn_agent/execute",
+    payload: {
+      as_agent_id: "dadi",
+      name: "Finance Specialist",
+      system_prompt: "own the money",
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { ok: boolean; is_error: boolean; content: string };
+  assert.equal(body.ok, true);
+  assert.equal(body.is_error, false);
+  const content = JSON.parse(body.content) as { agent_id: string; name: string };
+  assert.equal(content.name, "Finance Specialist");
+
+  const [agent] = await handle.db.select().from(agents).where(eq(agents.id, content.agent_id));
+  assert.ok(agent);
+  assert.equal(agent.parentAgentId, null);
+
+  await runtime.waitUntilIdle();
+  await app.close();
+});
+
+test("POST /tools/:name/execute as dadi rejects worker tools", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const { app, runtime } = await appWith();
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/tools/yaad_recall/execute",
+    payload: { as_agent_id: "dadi", query: "anything" },
+  });
+  assert.equal(res.statusCode, 422);
+  const body = res.json() as { error: { type: string; message: string } };
+  assert.equal(body.error.type, "invalid_request");
+  assert.match(body.error.message, /router authority/);
+
+  await runtime.waitUntilIdle();
+  await app.close();
+});
+
+test("POST /tools/:name/execute with a missing agent uuid is 404", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const { app, runtime } = await appWith();
+  const missing = "00000000-0000-4000-8000-000000000001";
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/tools/yaad_recall/execute",
+    payload: { as_agent_id: missing, query: "anything" },
+  });
+  assert.equal(res.statusCode, 404);
+  const body = res.json() as { error: { type: string; message: string } };
+  assert.equal(body.error.type, "not_found");
+  assert.match(body.error.message, /not found/);
 
   await runtime.waitUntilIdle();
   await app.close();

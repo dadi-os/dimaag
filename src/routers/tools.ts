@@ -12,9 +12,17 @@ const nameParam = z.object({ name: z.string().min(1) }).strict();
 
 const executeBody = z
   .object({
-    as_agent_id: z.string().uuid(),
+    as_agent_id: z.union([z.literal("dadi"), z.string().uuid()]),
   })
   .passthrough();
+
+/** Tools Dadi may run via `as_agent_id: "dadi"` — router authority only. */
+const DADI_AUTHORITY_TOOLS = new Set([
+  "dimaag_spawn_agent",
+  "dimaag_grant_tool",
+  "dimaag_revoke_tool",
+  "dimaag_modify_agent",
+]);
 
 /** Register GET /tools, GET /tools/:name, POST /tools/:name/execute. */
 export async function registerTools(app: FastifyInstance): Promise<void> {
@@ -51,8 +59,18 @@ export async function registerTools(app: FastifyInstance): Promise<void> {
         : request.body;
     const parsed = parse(executeBody, raw);
     const { as_agent_id: asAgentId, ...input } = parsed;
-    await requireAgent(app.db, asAgentId);
-    const result = await executeTool(app.runtime.toolContext(asAgentId, "reasoning"), {
+    const callerId = asAgentId === "dadi" ? null : asAgentId;
+    if (callerId === null && !DADI_AUTHORITY_TOOLS.has(name)) {
+      throw new DimaagError(
+        422,
+        "invalid_request",
+        "as_agent_id dadi is limited to router authority tools",
+      );
+    }
+    if (callerId !== null) {
+      await requireAgent(app.db, callerId);
+    }
+    const result = await executeTool(app.runtime.toolContext(callerId, "reasoning"), {
       type: "tool_use",
       id: "cli",
       name,

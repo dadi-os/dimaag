@@ -9,11 +9,11 @@ const input = z.object({
   system_prompt: z.string().min(1),
 });
 
-/** Create a child agent with the caller as parent (no tools until grant_tool). */
+/** Create a child of the caller, or a root when the caller is Dadi. */
 export const spawnAgent = defineTool({
   name: "dimaag_spawn_agent",
   description:
-    "Create a child agent with the caller as its parent. The child starts with no granted tools — use dimaag_grant_tool afterward to give it capabilities.",
+    "Create a child agent with the caller as its parent. When called as Dadi, creates a root (parent_agent_id null). The child starts with no granted tools — use dimaag_grant_tool afterward to give it capabilities.",
   input,
   inputSchema: {
     type: "object",
@@ -28,7 +28,9 @@ export const spawnAgent = defineTool({
     required: ["name", "system_prompt"],
   },
   async handler(ctx, parsed) {
-    await requireAgent(ctx.db, ctx.callerId);
+    if (ctx.callerId !== null) {
+      await requireAgent(ctx.db, ctx.callerId);
+    }
     const id = randomUUID();
     try {
       await ctx.db.insert(agents).values({

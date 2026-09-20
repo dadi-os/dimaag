@@ -21,16 +21,16 @@ const input = z
     },
   );
 
-/** Update name / system_prompt / active for self or a direct child. */
+/** Update name / system_prompt / active for self or a direct child (any agent as Dadi). */
 export const modifyAgent = defineTool({
   name: "dimaag_modify_agent",
   description:
-    "Change an agent's name, system prompt, or active flag. Only the caller or its direct children are allowed.",
+    "Change an agent's name, system prompt, or active flag. Only the caller or its direct children are allowed. As Dadi, any agent is allowed.",
   input,
   inputSchema: {
     type: "object",
     properties: {
-      agent_id: { type: "string", description: "Self or a direct child" },
+      agent_id: { type: "string", description: "Self or a direct child (any agent as Dadi)" },
       name: { type: "string", description: "Unique agent name" },
       system_prompt: { type: "string" },
       active: { type: "boolean" },
@@ -39,7 +39,11 @@ export const modifyAgent = defineTool({
   },
   async handler(ctx, parsed) {
     const target = await requireAgent(ctx.db, parsed.agent_id);
-    if (target.id !== ctx.callerId && target.parentAgentId !== ctx.callerId) {
+    if (
+      ctx.callerId !== null &&
+      target.id !== ctx.callerId &&
+      target.parentAgentId !== ctx.callerId
+    ) {
       return fail("modify_agent is limited to self or direct children");
     }
 
