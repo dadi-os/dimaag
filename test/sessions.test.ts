@@ -25,7 +25,8 @@ test("HostSessions attaches worker tools and ignores spawn/list", () => {
   sessions.observe("a2", "browser_close", { browser_id: 10 }, false);
   assert.deepEqual(sessions.forAgent("a1").browsers, [11]);
   sessions.observe("a2", "terminal_close", { terminal_id: "t1" }, true);
-  assert.equal(sessions.forAgent("a1").terminals.some((t) => t.id === "t1"), true);
-  sessions.observe("a2", "terminal_close", { terminal_id: "t1" }, false);
   assert.deepEqual(sessions.forAgent("a1").terminals, [{ id: "t2", last_command: "pwd" }]);
+  sessions.observe("a1", "browser_navigate", { browser_id: 11, url: "https://z" }, false);
+  sessions.observe("a2", "browser_close", { browser_id: 11 }, true);
+  assert.deepEqual(sessions.forAgent("a1").browsers, []);
 });

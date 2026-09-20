@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { DimaagError } from "../errors.js";
 import { executeTool } from "../runtime/tools.js";
-import { requireAgent } from "../tools/shared.js";
+import { requireActiveAgent, requireToolGrant } from "../tools/shared.js";
 import { allTools, findTool } from "../tools/registry.js";
 import { parse } from "./schemas.js";
 
@@ -68,7 +68,8 @@ export async function registerTools(app: FastifyInstance): Promise<void> {
       );
     }
     if (callerId !== null) {
-      await requireAgent(app.db, callerId);
+      await requireActiveAgent(app.db, callerId);
+      await requireToolGrant(app.db, callerId, name);
     }
     const result = await executeTool(app.runtime.toolContext(callerId, "reasoning"), {
       type: "tool_use",

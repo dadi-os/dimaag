@@ -630,6 +630,53 @@ test("POST /tools/:name/execute with a missing agent uuid is 404", async () => {
   await app.close();
 });
 
+test("POST /tools/:name/execute without grant is 403", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "ungranted",
+    systemPrompt: "no tools",
+    tools: [],
+  });
+  const { app, runtime } = await appWith();
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/tools/yaad_recall/execute",
+    payload: { as_agent_id: workerId, query: "anything" },
+  });
+  assert.equal(res.statusCode, 403);
+  const body = res.json() as { error: { type: string; message: string } };
+  assert.equal(body.error.type, "forbidden");
+  assert.match(body.error.message, /does not hold yaad_recall/);
+
+  await runtime.waitUntilIdle();
+  await app.close();
+});
+
+test("POST /tools/:name/execute as inactive agent is 403", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "dormant",
+    systemPrompt: "asleep",
+    tools: ["yaad_recall"],
+  });
+  await handle.db.update(agents).set({ active: false }).where(eq(agents.id, workerId));
+  const { app, runtime } = await appWith();
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/tools/yaad_recall/execute",
+    payload: { as_agent_id: workerId, query: "anything" },
+  });
+  assert.equal(res.statusCode, 403);
+  const body = res.json() as { error: { type: string; message: string } };
+  assert.equal(body.error.type, "forbidden");
+  assert.match(body.error.message, /inactive/);
+
+  await runtime.waitUntilIdle();
+  await app.close();
+});
+
 test("GET /agents/root is invalid_request", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const { app, runtime } = await appWith();

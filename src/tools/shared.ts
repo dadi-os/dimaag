@@ -1,8 +1,8 @@
 /** Shared tool result helpers and agent lookup used by handlers. */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { agents } from "../db/schema.js";
+import { agentTools, agents } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
 import type { Lane } from "../types/domain.js";
 import type { EventBus } from "../runtime/events.js";
@@ -18,6 +18,7 @@ import type { NasClient } from "../nas/client.js";
 import type { YaadClient } from "../yaad/client.js";
 import type { HathGateway } from "../runtime/hath.js";
 import type { HostSessions } from "../runtime/sessions.js";
+import { toolId } from "./sync.js";
 
 export type ToolExecResult = {
   content: string;
@@ -69,6 +70,26 @@ export async function requireAgent(db: Db, id: string) {
     throw new DimaagError(404, "not_found", `agent ${id} not found`);
   }
   return row;
+}
+
+/** Load an active agent row or throw `404 not_found` / `403 forbidden`. */
+export async function requireActiveAgent(db: Db, id: string) {
+  const row = await requireAgent(db, id);
+  if (!row.active) {
+    throw new DimaagError(403, "forbidden", `agent ${id} is inactive`);
+  }
+  return row;
+}
+
+/** Ensure agentId holds a grant for toolName or throw `403 forbidden`. */
+export async function requireToolGrant(db: Db, agentId: string, toolName: string) {
+  const rows = await db
+    .select({ agentId: agentTools.agentId })
+    .from(agentTools)
+    .where(and(eq(agentTools.agentId, agentId), eq(agentTools.toolId, toolId(toolName))));
+  if (!rows[0]) {
+    throw new DimaagError(403, "forbidden", `agent does not hold ${toolName}`);
+  }
 }
 
 /** True when err (or a nested cause) is Postgres unique_violation `23505`. */

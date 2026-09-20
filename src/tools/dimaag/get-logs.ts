@@ -2,9 +2,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { agentLogs } from "../../db/schema.js";
 import { toLogRecord } from "../../serialize.js";
-import { requireAgent } from "../shared.js";
 import { defineTool } from "../types.js";
-import { ok } from "../shared.js";
+import { ok, fail, failWithoutAgentIdentity, requireAgent } from "../shared.js";
 
 const input = z
   .object({
@@ -14,16 +13,20 @@ const input = z
   })
   .strict();
 
-/** Query durable agent audit logs (thought / tool_call / tool_result / message). */
+/** Query durable agent audit logs for self or a direct child. */
 export const getLogs = defineTool({
   name: "dimaag_get_logs",
   description:
-    "Read agent cognition audit logs from Dimaag (thoughts, tool calls, tool results, messages). Optional agent_id scopes to one agent. Not system HTTP logs — use nas_get_logs for those.",
+    "Read cognition audit logs (thoughts, tool calls, tool results, messages) for yourself or a direct child. Defaults to the caller when agent_id is omitted. Not system HTTP logs — use nas_get_logs for those.",
   input,
   inputSchema: {
     type: "object",
     properties: {
-      agent_id: { type: "string", format: "uuid" },
+      agent_id: {
+        type: "string",
+        format: "uuid",
+        description: "Self or a direct child; defaults to the caller",
+      },
       event: {
         type: "string",
         enum: ["thought", "tool_call", "tool_result", "message"],
@@ -33,24 +36,22 @@ export const getLogs = defineTool({
     required: [],
   },
   async handler(ctx, parsed) {
-    const limit = parsed.limit ?? 50;
-    if (parsed.agent_id) {
-      await requireAgent(ctx.db, parsed.agent_id);
+    if (ctx.callerId === null) {
+      return failWithoutAgentIdentity();
     }
+    const targetId = parsed.agent_id ?? ctx.callerId;
+    const target = await requireAgent(ctx.db, targetId);
+    if (target.id !== ctx.callerId && target.parentAgentId !== ctx.callerId) {
+      return fail("get_logs is limited to self or direct children");
+    }
+    const limit = parsed.limit ?? 50;
     const rows = await ctx.db
       .select()
       .from(agentLogs)
       .where(
-        parsed.agent_id && parsed.event
-          ? and(
-              eq(agentLogs.agentId, parsed.agent_id),
-              eq(agentLogs.event, parsed.event),
-            )
-          : parsed.agent_id
-            ? eq(agentLogs.agentId, parsed.agent_id)
-            : parsed.event
-              ? eq(agentLogs.event, parsed.event)
-              : undefined,
+        parsed.event
+          ? and(eq(agentLogs.agentId, targetId), eq(agentLogs.event, parsed.event))
+          : eq(agentLogs.agentId, targetId),
       )
       .orderBy(desc(agentLogs.createdAt))
       .limit(limit);

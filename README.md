@@ -188,11 +188,11 @@ Reverse RPC over SSE `hath_command` + `POST /hath/commands/:id/result`. Discover
 | --- | --- |
 | `dimaag_spawn_agent` / `dimaag_modify_agent` / `dimaag_grant_tool` / `dimaag_revoke_tool` | agent tree |
 | `dimaag_schedule_message` / `dimaag_list_schedules` / `dimaag_cancel_schedule` | durable schedules |
-| `dimaag_get_logs` | agent audit (`thought` / `tool_call` / `tool_result` / `message`) |
+| `dimaag_get_logs` | agent audit (`thought` / `tool_call` / `tool_result` / `message`) for self or a direct child |
 
 ## CLI
 
-The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the appliance). It invokes this registry over HTTP (`GET /tools`, `POST /tools/:name/execute`). Requires `DIMAAG_URL` (no default) and exactly one caller identity on execute: `--as-agent-id <uuid>`, `--as <name>`, or `--as-dadi`. `as_agent_id: "dadi"` is limited to router authority tools (`dimaag_spawn_agent`, `dimaag_grant_tool`, `dimaag_revoke_tool`, `dimaag_modify_agent`).
+The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the appliance). It invokes this registry over HTTP (`GET /tools`, `POST /tools/:name/execute`). Requires `DIMAAG_URL` (no default) and exactly one caller identity on execute: `--as-agent-id <uuid>`, `--as <name>`, or `--as-dadi`. Agent callers must be active and hold a grant for the tool. `as_agent_id: "dadi"` is limited to router authority tools (`dimaag_spawn_agent`, `dimaag_grant_tool`, `dimaag_revoke_tool`, `dimaag_modify_agent`).
 
 ## Persistence
 

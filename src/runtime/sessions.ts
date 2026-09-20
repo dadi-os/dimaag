@@ -19,20 +19,21 @@ export class HostSessions {
   private readonly terminals = new Map<string, Map<string, string | null>>();
 
   /**
-   * observe records a tool call against the caller. Close drops the resource from every
-   * agent; other worker tools move that id to the end of the caller's list.
+   * observe records a tool call against the caller. Close always drops the resource from
+   * every agent (even when Nas returns an error — the resource is gone); other worker
+   * tools move that id to the end of the caller's list.
    */
-  observe(agentId: string, toolName: string, input: unknown, isError: boolean): void {
+  observe(agentId: string, toolName: string, input: unknown, _isError: boolean): void {
     if (toolName === "browser_close") {
       const id = numberField(input, "browser_id");
-      if (id !== null && !isError) {
+      if (id !== null) {
         this.dropBrowser(id);
       }
       return;
     }
     if (toolName === "terminal_close") {
       const id = stringField(input, "terminal_id");
-      if (id !== null && !isError) {
+      if (id !== null) {
         this.dropTerminal(id);
       }
       return;

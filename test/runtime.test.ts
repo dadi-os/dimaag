@@ -14,6 +14,7 @@ import { TranscriptStore } from "../src/runtime/transcript.js";
 import { buildApp } from "../src/app.js";
 import { migrate } from "../src/db/migrate.js";
 import { agents, agentTools, scheduledMessages, tools } from "../src/db/schema.js";
+import { writeAgentLog } from "../src/db/logs.js";
 import { toolId } from "../src/tools/sync.js";
 import { allTools, findTool } from "../src/tools/registry.js";
 import {
@@ -91,9 +92,10 @@ test("two concurrent messages to one agent serialize on its conversation lock", 
 
 test("modify_agent on a non-child is rejected", async () => {
   await resetRuntime(handle.sql, handle.db, config);
-  const parentId = await insertAgent(handle.db, {
+  const parentId = await insertWorker(handle.db, {
     name: "parent",
     systemPrompt: "parent prompt",
+    tools: [MODIFY_AGENT],
   });
   const strangerId = await insertAgent(handle.db, {
     name: "stranger",
@@ -119,9 +121,10 @@ test("modify_agent on a non-child is rejected", async () => {
 
 test("modify_agent on a direct child is allowed", async () => {
   await resetRuntime(handle.sql, handle.db, config);
-  const parentId = await insertAgent(handle.db, {
+  const parentId = await insertWorker(handle.db, {
     name: "boss",
     systemPrompt: "boss prompt",
+    tools: [MODIFY_AGENT],
   });
   const childId = await insertAgent(handle.db, {
     name: "worker",
@@ -149,9 +152,10 @@ test("modify_agent on a direct child is allowed", async () => {
 
 test("modify_agent renames self and a direct child", async () => {
   await resetRuntime(handle.sql, handle.db, config);
-  const parentId = await insertAgent(handle.db, {
+  const parentId = await insertWorker(handle.db, {
     name: "boss",
     systemPrompt: "boss prompt",
+    tools: [MODIFY_AGENT],
   });
   const childId = await insertAgent(handle.db, {
     name: "worker",
@@ -198,9 +202,10 @@ test("modify_agent renames self and a direct child", async () => {
 
 test("modify_agent rename of a stranger is rejected", async () => {
   await resetRuntime(handle.sql, handle.db, config);
-  const parentId = await insertAgent(handle.db, {
+  const parentId = await insertWorker(handle.db, {
     name: "parent",
     systemPrompt: "parent",
+    tools: [MODIFY_AGENT],
   });
   const strangerId = await insertAgent(handle.db, {
     name: "stranger",
@@ -230,9 +235,10 @@ test("modify_agent rename of a stranger is rejected", async () => {
 
 test("modify_agent rename collision is a tool error and leaves the row unchanged", async () => {
   await resetRuntime(handle.sql, handle.db, config);
-  const selfId = await insertAgent(handle.db, {
+  const selfId = await insertWorker(handle.db, {
     name: "alpha",
     systemPrompt: "alpha",
+    tools: [MODIFY_AGENT],
   });
   await insertAgent(handle.db, {
     name: "taken",
@@ -262,9 +268,10 @@ test("modify_agent rename collision is a tool error and leaves the row unchanged
 
 test("modify_agent accepts name alone", async () => {
   await resetRuntime(handle.sql, handle.db, config);
-  const selfId = await insertAgent(handle.db, {
+  const selfId = await insertWorker(handle.db, {
     name: "solo",
     systemPrompt: "keep me",
+    tools: [MODIFY_AGENT],
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -1135,4 +1142,140 @@ test("list_agents visibility is global across parents", async () => {
   assert.equal(byId.get(childOfB)?.parent_agent_id, rootB);
   assert.equal(byId.get(childOfB)?.parent_name, "Root B");
   assert.equal(byId.get(nestedCaller)?.parent_name, "Root A");
+});
+
+test("dimaag_get_logs defaults to caller and allows direct children only", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertWorker(handle.db, {
+    name: "log parent",
+    systemPrompt: "parent",
+    tools: ["dimaag_get_logs"],
+  });
+  const childId = await insertWorker(handle.db, {
+    name: "log child",
+    systemPrompt: "child",
+    parentAgentId: parentId,
+    tools: ["dimaag_get_logs"],
+  });
+  const strangerId = await insertWorker(handle.db, {
+    name: "log stranger",
+    systemPrompt: "stranger",
+    tools: ["dimaag_get_logs"],
+  });
+  await writeAgentLog(handle.db, {
+    agentId: parentId,
+    lane: "reasoning",
+    event: "thought",
+    payload: { text: "parent thought" },
+  });
+  await writeAgentLog(handle.db, {
+    agentId: childId,
+    lane: "reasoning",
+    event: "thought",
+    payload: { text: "child thought" },
+  });
+  await writeAgentLog(handle.db, {
+    agentId: strangerId,
+    lane: "reasoning",
+    event: "thought",
+    payload: { text: "stranger thought" },
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+
+  const self = await executeTool(runtime.toolContext(parentId, "reasoning"), {
+    type: "tool_use",
+    id: "gl1",
+    name: "dimaag_get_logs",
+    input: {},
+  });
+  assert.equal(self.isError, false, self.content);
+  const selfBody = JSON.parse(self.content) as {
+    logs: Array<{ agent_id: string; payload: { text: string } }>;
+  };
+  assert.equal(selfBody.logs.length, 1);
+  assert.equal(selfBody.logs[0]?.agent_id, parentId);
+  assert.equal(selfBody.logs[0]?.payload.text, "parent thought");
+
+  const child = await executeTool(runtime.toolContext(parentId, "reasoning"), {
+    type: "tool_use",
+    id: "gl2",
+    name: "dimaag_get_logs",
+    input: { agent_id: childId },
+  });
+  assert.equal(child.isError, false, child.content);
+  const childBody = JSON.parse(child.content) as {
+    logs: Array<{ agent_id: string; payload: { text: string } }>;
+  };
+  assert.equal(childBody.logs.length, 1);
+  assert.equal(childBody.logs[0]?.agent_id, childId);
+
+  const denied = await executeTool(runtime.toolContext(parentId, "reasoning"), {
+    type: "tool_use",
+    id: "gl3",
+    name: "dimaag_get_logs",
+    input: { agent_id: strangerId },
+  });
+  assert.equal(denied.isError, true);
+  assert.match(denied.content, /direct children/);
+
+  const asDadi = await executeTool(runtime.toolContext(null, "reasoning"), {
+    type: "tool_use",
+    id: "gl4",
+    name: "dimaag_get_logs",
+    input: {},
+  });
+  assert.equal(asDadi.isError, true);
+  assert.match(asDadi.content, /agent identity/);
+});
+
+test("executeTool denies registry tools without grant or when inactive", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const ungranted = await insertWorker(handle.db, {
+    name: "no grant",
+    systemPrompt: "none",
+    tools: [],
+  });
+  const dormant = await insertWorker(handle.db, {
+    name: "dormant worker",
+    systemPrompt: "asleep",
+    tools: ["yaad_recall"],
+  });
+  await handle.db.update(agents).set({ active: false }).where(eq(agents.id, dormant));
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+
+  const noGrant = await executeTool(runtime.toolContext(ungranted, "reasoning"), {
+    type: "tool_use",
+    id: "eg1",
+    name: "yaad_recall",
+    input: { query: "x" },
+  });
+  assert.equal(noGrant.isError, true);
+  assert.match(noGrant.content, /does not hold yaad_recall/);
+
+  const inactive = await executeTool(runtime.toolContext(dormant, "reasoning"), {
+    type: "tool_use",
+    id: "eg2",
+    name: "yaad_recall",
+    input: { query: "x" },
+  });
+  assert.equal(inactive.isError, true);
+  assert.match(inactive.content, /inactive/);
 });

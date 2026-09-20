@@ -6,6 +6,7 @@ import { buildApp } from "../src/app.js";
 import { migrate } from "../src/db/migrate.js";
 import { writeAgentLog } from "../src/db/logs.js";
 import { agentLogs } from "../src/db/schema.js";
+import { DimaagError } from "../src/errors.js";
 import { deliverAgentMessage } from "../src/runtime/deliver.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { EventBus, type RuntimeEvent } from "../src/runtime/events.js";
@@ -398,6 +399,87 @@ test("GET /agents surfaces sessions after worker host tools", async () => {
   ).agents.find((agent) => agent.id === workerId);
   assert.ok(afterWorker);
   assert.deepEqual(afterWorker.sessions.browsers, []);
+
+  await app.close();
+});
+
+test("GET /agents drops sessions when close tools error", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+    tools: ["browser_screenshot", "terminal_execute_shell", "browser_close", "terminal_close"],
+  });
+  const nas = mockNas({
+    browserScreenshot: () => Buffer.from("png"),
+    closeBrowser: () => {
+      throw new DimaagError(404, "not_found", "browser already gone");
+    },
+    closeTerminal: () => {
+      throw new DimaagError(404, "not_found", "terminal already gone");
+    },
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas,
+    config,
+    log: silentLog,
+  });
+  const app = await buildApp(config, {
+    db: handle.db,
+    sql: handle.sql,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas,
+    runtime,
+  });
+
+  await executeTool(runtime.toolContext(workerId, "reasoning"), {
+    type: "tool_use",
+    id: "shot1",
+    name: "browser_screenshot",
+    input: { browser_id: 10, scope: "display" },
+  });
+  await executeTool(runtime.toolContext(workerId, "reasoning"), {
+    type: "tool_use",
+    id: "ex1",
+    name: "terminal_execute_shell",
+    input: { terminal_id: "t1", command: "pwd" },
+  });
+
+  const closedBrowser = await executeTool(runtime.toolContext(workerId, "reasoning"), {
+    type: "tool_use",
+    id: "cb1",
+    name: "browser_close",
+    input: { browser_id: 10 },
+  });
+  assert.equal(closedBrowser.isError, true);
+
+  const closedTerminal = await executeTool(runtime.toolContext(workerId, "reasoning"), {
+    type: "tool_use",
+    id: "ct1",
+    name: "terminal_close",
+    input: { terminal_id: "t1" },
+  });
+  assert.equal(closedTerminal.isError, true);
+
+  const after = await app.inject({ method: "GET", url: "/agents" });
+  const afterWorker = (
+    after.json() as {
+      agents: Array<{
+        id: string;
+        sessions: { browsers: number[]; terminals: unknown[] };
+      }>;
+    }
+  ).agents.find((agent) => agent.id === workerId);
+  assert.ok(afterWorker);
+  assert.deepEqual(afterWorker.sessions, { browsers: [], terminals: [] });
 
   await app.close();
 });

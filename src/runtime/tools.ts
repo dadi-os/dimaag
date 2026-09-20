@@ -20,6 +20,8 @@ import {
   fail,
   ok,
   requireAgent,
+  requireActiveAgent,
+  requireToolGrant,
   failWithoutAgentIdentity,
   type ToolContext,
   type ToolExecResult,
@@ -27,7 +29,7 @@ import {
 import { deliverAgentMessage } from "./deliver.js";
 
 export type { ToolContext, ToolExecResult } from "../tools/shared.js";
-export { requireAgent } from "../tools/shared.js";
+export { requireAgent, requireActiveAgent, requireToolGrant } from "../tools/shared.js";
 
 export const sendMessageInputSchema: Record<string, unknown> = {
   type: "object",
@@ -180,6 +182,10 @@ async function dispatchTool(
       const definition = findTool(call.name);
       if (!definition) {
         return fail(`unknown reasoning tool: ${call.name}`);
+      }
+      if (ctx.callerId !== null) {
+        await requireActiveAgent(ctx.db, ctx.callerId);
+        await requireToolGrant(ctx.db, ctx.callerId, call.name);
       }
       const parsed = definition.input.parse(call.input);
       return await definition.handler(ctx, parsed);

@@ -602,13 +602,15 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
 
 test("cancel_schedule enforces creator; list_schedules is caller-scoped", async () => {
   await resetRuntime(handle.sql, handle.db, config);
-  const creatorId = await insertAgent(handle.db, {
+  const creatorId = await insertWorker(handle.db, {
     name: "creator",
     systemPrompt: "creator",
+    tools: ["dimaag_list_schedules", "dimaag_cancel_schedule"],
   });
-  const otherId = await insertAgent(handle.db, {
+  const otherId = await insertWorker(handle.db, {
     name: "other",
     systemPrompt: "other",
+    tools: ["dimaag_cancel_schedule"],
   });
   const targetId = await insertAgent(handle.db, {
     name: "list-target",
