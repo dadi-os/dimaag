@@ -18,13 +18,13 @@ const input = z
   .strict();
 
 /**
- * Run a host terminal command with a Chaavi secret in the environment.
+ * Fill a Chaavi secret into a host terminal command environment.
  * The secret is staged to a temp file, loaded into env_name, then deleted; it never appears in tool content.
  */
-export const withSecret = defineTool({
-  name: "chaavi_with_secret",
+export const fillSecret = defineTool({
+  name: "chaavi_fill_secret",
   description:
-    "Run a host terminal command with a Chaavi secret in env_name. Never prints the secret. Use for notarization keys, API tokens, and similar. Not for site logins (use chaavi_fill_login).",
+    "Fill a Chaavi secret into env_name and run a host terminal command. Never prints the secret. Use for notarization keys, API tokens, and similar. Not for site logins (use chaavi_fill_login).",
   input,
   inputSchema: {
     type: "object",
@@ -80,18 +80,19 @@ export const withSecret = defineTool({
         env_name: parsed.env_name,
       });
     } catch (err) {
-      if (err instanceof DimaagError) {
-        let extra = "";
-        if (stagedPath !== undefined) {
-          try {
-            await ctx.nas.exec(parsed.terminal_id, {
-              command: `rm -f ${shellQuote(stagedPath)}`,
-            });
-          } catch {
-            extra = ` secret staging file may remain; retry after terminal idle (${stagedPath})`;
-          }
+      let leftover = "";
+      if (stagedPath !== undefined) {
+        try {
+          await ctx.nas.exec(parsed.terminal_id, {
+            command: `rm -f ${shellQuote(stagedPath)}`,
+          });
+          stagedPath = undefined;
+        } catch {
+          leftover = ` secret staging file may remain; retry after terminal idle (${stagedPath})`;
         }
-        return fail(`${err.type}: ${err.message}${extra}`);
+      }
+      if (err instanceof DimaagError) {
+        return fail(`${err.type}: ${err.message}${leftover}`);
       }
       throw err;
     }

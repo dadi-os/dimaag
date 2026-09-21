@@ -13,6 +13,21 @@ type Connection = {
   cdpUrl: string;
 };
 
+type WebAuthnState = {
+  session: CDPSession;
+  authenticatorId: string;
+};
+
+/** PKCS#8 passkey loaded into a Chromium virtual authenticator. Never log these fields. */
+export type PasskeyInject = {
+  credentialId: string;
+  rpId: string;
+  privateKey: string;
+  userHandle: string;
+  signCount: number;
+  resident: boolean;
+};
+
 export type TabInfo = {
   tab_id: string;
   url: string;
@@ -30,6 +45,7 @@ export type SnapshotResult = {
 export class BrowserDriver {
   private readonly connections = new Map<number, Connection>();
   private readonly cdpUrls = new Map<number, string>();
+  private readonly webauthn = new Map<string, WebAuthnState>();
 
   constructor(
     private readonly nas: NasClient,
@@ -48,12 +64,25 @@ export class BrowserDriver {
 
   /** Close the Playwright connection but keep the remembered CDP URL for reconnect. */
   private detach(browserId: number): void {
+    this.dropWebAuthn(browserId);
     const conn = this.connections.get(browserId);
     this.connections.delete(browserId);
     if (!conn) {
       return;
     }
     void conn.browser.close().catch(() => {});
+  }
+
+  /** Detach kept WebAuthn CDP sessions for one Nas browser. */
+  private dropWebAuthn(browserId: number): void {
+    const prefix = `${browserId}:`;
+    for (const [key, state] of this.webauthn) {
+      if (!key.startsWith(prefix)) {
+        continue;
+      }
+      this.webauthn.delete(key);
+      void state.session.detach().catch(() => {});
+    }
   }
 
   dropAll(): void {
@@ -69,6 +98,7 @@ export class BrowserDriver {
       return existing.browser;
     }
     if (existing) {
+      this.dropWebAuthn(browserId);
       this.connections.delete(browserId);
       void existing.browser.close().catch(() => {});
     }
@@ -77,6 +107,7 @@ export class BrowserDriver {
     browser.on("disconnected", () => {
       if (this.connections.get(browserId)?.browser === browser) {
         this.connections.delete(browserId);
+        this.dropWebAuthn(browserId);
       }
     });
     return browser;
@@ -261,8 +292,12 @@ export class BrowserDriver {
   }
 
   async closeTab(browserId: number, tabId: string): Promise<void> {
-    const { page } = await this.resolvePage(browserId, tabId);
-    await page.close();
+    try {
+      const { page } = await this.resolvePage(browserId, tabId);
+      await page.close();
+    } finally {
+      this.forgetWebAuthn(`${browserId}:${tabId}`);
+    }
   }
 
   async navigate(
@@ -415,6 +450,101 @@ export class BrowserDriver {
       tab_id: resolved.tabId,
     };
   }
+
+  /**
+   * Load a passkey into a Chromium virtual authenticator on this tab.
+   * The CDP session stays open so the authenticator survives until the browser drops.
+   */
+  async addPasskey(
+    browserId: number,
+    tabId: string | undefined,
+    cred: PasskeyInject,
+  ): Promise<{ tab_id: string }> {
+    const resolved = await this.resolvePage(browserId, tabId);
+    const key = `${browserId}:${resolved.tabId}`;
+    try {
+      const state = await this.ensureWebAuthn(resolved.page, key);
+      await this.replaceCredential(state, cred);
+      return { tab_id: resolved.tabId };
+    } catch (err) {
+      this.forgetWebAuthn(key);
+      if (err instanceof DimaagError) {
+        throw err;
+      }
+      const message = err instanceof Error ? err.message : "passkey inject failed";
+      throw new DimaagError(502, "internal_error", message);
+    }
+  }
+
+  /** Enable WebAuthn CDP on the page and add one internal authenticator. */
+  private async ensureWebAuthn(page: Page, key: string): Promise<WebAuthnState> {
+    const existing = this.webauthn.get(key);
+    if (existing) {
+      return existing;
+    }
+    const session = await page.context().newCDPSession(page);
+    try {
+      await cdpSend(session, "WebAuthn.enable");
+      const added = await cdpSend<{ authenticatorId: string }>(
+        session,
+        "WebAuthn.addVirtualAuthenticator",
+        {
+          options: {
+            protocol: "ctap2",
+            transport: "internal",
+            hasResidentKey: true,
+            hasUserVerification: true,
+            isUserVerified: true,
+            automaticPresenceSimulation: true,
+          },
+        },
+      );
+      const state = { session, authenticatorId: added.authenticatorId };
+      this.webauthn.set(key, state);
+      return state;
+    } catch (err) {
+      await session.detach().catch(() => {});
+      throw err;
+    }
+  }
+
+  /** Replace any stored credential with the same id, then add this one. */
+  private async replaceCredential(state: WebAuthnState, cred: PasskeyInject): Promise<void> {
+    const listed = await cdpSend<{ credentials: Array<{ credentialId: string }> }>(
+      state.session,
+      "WebAuthn.getCredentials",
+      { authenticatorId: state.authenticatorId },
+    );
+    for (const existing of listed.credentials) {
+      if (existing.credentialId !== cred.credentialId) {
+        continue;
+      }
+      await cdpSend(state.session, "WebAuthn.removeCredential", {
+        authenticatorId: state.authenticatorId,
+        credentialId: cred.credentialId,
+      });
+    }
+    await cdpSend(state.session, "WebAuthn.addCredential", {
+      authenticatorId: state.authenticatorId,
+      credential: {
+        credentialId: cred.credentialId,
+        isResidentCredential: cred.resident,
+        rpId: cred.rpId,
+        privateKey: cred.privateKey,
+        userHandle: cred.userHandle,
+        signCount: cred.signCount,
+      },
+    });
+  }
+
+  private forgetWebAuthn(key: string): void {
+    const state = this.webauthn.get(key);
+    if (!state) {
+      return;
+    }
+    this.webauthn.delete(key);
+    void state.session.detach().catch(() => {});
+  }
 }
 
 function cssEscape(value: string): string {
@@ -427,6 +557,19 @@ function truncateUtf8(s: string, maxBytes: number): string {
     return s;
   }
   return buf.subarray(0, maxBytes).toString("utf8");
+}
+
+/** Send an experimental CDP method; Playwright's protocol typings omit WebAuthn. */
+function cdpSend<T>(
+  session: CDPSession,
+  method: string,
+  params?: Record<string, unknown>,
+): Promise<T> {
+  const send = session.send as unknown as (
+    method: string,
+    params?: Record<string, unknown>,
+  ) => Promise<T>;
+  return send(method, params);
 }
 
 /**

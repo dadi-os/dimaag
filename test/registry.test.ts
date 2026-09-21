@@ -74,6 +74,82 @@ test("syncTools with no grants resolves", async () => {
   await assert.doesNotReject(() => syncTools(handle.db));
 });
 
+test("syncTools remaps grants when a Chaavi tool is renamed", async () => {
+  await handle.sql`TRUNCATE scheduled_messages, agent_logs, agent_tools, tools, agents CASCADE`;
+  await syncTools(handle.db);
+
+  const agentId = await insertAgent(handle.db, {
+    name: "rename-holder",
+    systemPrompt: "prompt",
+  });
+  const alreadyHasFill = await insertAgent(handle.db, {
+    name: "already-fill",
+    systemPrompt: "prompt",
+  });
+  await handle.db.insert(tools).values({
+    id: toolId("chaavi_use_passkey"),
+    name: "chaavi_use_passkey",
+    description: "old passkey name",
+    inputSchema: { type: "object", properties: {} },
+  });
+  await handle.db.insert(tools).values({
+    id: toolId("chaavi_with_secret"),
+    name: "chaavi_with_secret",
+    description: "old secret name",
+    inputSchema: { type: "object", properties: {} },
+  });
+  await handle.db.insert(agentTools).values([
+    {
+      agentId,
+      toolId: toolId("chaavi_use_passkey"),
+      usage: "load google passkey",
+    },
+    {
+      agentId,
+      toolId: toolId("chaavi_with_secret"),
+      usage: "notary key in env",
+    },
+    {
+      agentId: alreadyHasFill,
+      toolId: toolId("chaavi_use_passkey"),
+      usage: "old passkey grant",
+    },
+    {
+      agentId: alreadyHasFill,
+      toolId: toolId("chaavi_fill_passkey"),
+      usage: "existing fill passkey grant",
+    },
+  ]);
+
+  await assert.doesNotReject(() => syncTools(handle.db));
+
+  const remapped = await handle.db.select().from(agentTools);
+  const byAgent = new Map(remapped.map((row) => [`${row.agentId}:${row.toolId}`, row.usage]));
+  assert.equal(byAgent.get(`${agentId}:${toolId("chaavi_fill_passkey")}`), "load google passkey");
+  assert.equal(byAgent.get(`${agentId}:${toolId("chaavi_fill_secret")}`), "notary key in env");
+  assert.equal(
+    byAgent.get(`${alreadyHasFill}:${toolId("chaavi_fill_passkey")}`),
+    "existing fill passkey grant",
+  );
+  assert.equal(
+    remapped.filter((row) => row.toolId === toolId("chaavi_use_passkey")).length,
+    0,
+  );
+  assert.equal(
+    remapped.filter((row) => row.toolId === toolId("chaavi_with_secret")).length,
+    0,
+  );
+  const leftoverTools = await handle.db.select().from(tools);
+  assert.equal(
+    leftoverTools.filter((row) => row.name === "chaavi_use_passkey").length,
+    0,
+  );
+  assert.equal(
+    leftoverTools.filter((row) => row.name === "chaavi_with_secret").length,
+    0,
+  );
+});
+
 test("migrate does not backfill grants onto existing roots", async () => {
   await handle.sql`TRUNCATE scheduled_messages, agent_logs, agent_tools, tools, agents CASCADE`;
   await syncTools(handle.db);

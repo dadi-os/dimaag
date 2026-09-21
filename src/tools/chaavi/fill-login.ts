@@ -20,14 +20,14 @@ const input = z
 export const fillLogin = defineTool({
   name: "chaavi_fill_login",
   description:
-    "Fill a login from Chaavi into a Nas browser. Do not use browser_type for passwords. username_ref is optional (skip if there is no username field). password_ref is required. submit presses Enter after the password.",
+    "Fill a login from Chaavi into a Nas browser. Do not use browser_type for passwords. username_ref is optional (skip if there is no username field). password_ref is required. submit presses Enter after the password. For passkeys use chaavi_fill_passkey. For a new account, chaavi_create_login first.",
   input,
   inputSchema: {
     type: "object",
     additionalProperties: false,
     required: ["item_id", "browser_id", "password_ref"],
     properties: {
-      item_id: { type: "string", description: "Vault item id from chaavi_list_items" },
+      item_id: { type: "string", description: "Vault item id from chaavi_list_items or chaavi_create_login" },
       browser_id: { type: "number", description: "Nas browser id" },
       tab_id: { type: "string", description: "Optional CDP target id" },
       username_ref: {

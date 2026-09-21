@@ -10,7 +10,9 @@ import type {
   ChaaviClient,
   ChaaviItem,
   ChaaviLogin,
+  ChaaviPasskey,
   ChaaviSecret,
+  CreateLoginRequest,
   ListItemsRequest,
 } from "../src/chaavi/client.js";
 import type {
@@ -302,26 +304,34 @@ export function mockGhar(opts: {
   };
 }
 
-/** Test double for ChaaviClient. Unstubbed getLogin/getSecret throw `not_found`. */
+/** Test double for ChaaviClient. Unstubbed getLogin/getPasskey/getSecret throw `not_found`. */
 export function mockChaavi(
   opts: {
     listItems?: (
       query?: ListItemsRequest,
     ) => Promise<{ items: ChaaviItem[] }> | { items: ChaaviItem[] };
+    createLogin?: (input: CreateLoginRequest) => Promise<ChaaviItem> | ChaaviItem;
     getLogin?: (itemId: string) => Promise<ChaaviLogin> | ChaaviLogin;
+    getPasskey?: (itemId: string) => Promise<ChaaviPasskey> | ChaaviPasskey;
     getSecret?: (itemId: string) => Promise<ChaaviSecret> | ChaaviSecret;
   } = {},
 ): ChaaviClient & {
   listItemsCalls: Array<ListItemsRequest | undefined>;
+  createLoginCalls: CreateLoginRequest[];
   getLoginCalls: string[];
+  getPasskeyCalls: string[];
   getSecretCalls: string[];
 } {
   const listItemsCalls: Array<ListItemsRequest | undefined> = [];
+  const createLoginCalls: CreateLoginRequest[] = [];
   const getLoginCalls: string[] = [];
+  const getPasskeyCalls: string[] = [];
   const getSecretCalls: string[] = [];
   return {
     listItemsCalls,
+    createLoginCalls,
     getLoginCalls,
+    getPasskeyCalls,
     getSecretCalls,
     async listItems(query) {
       listItemsCalls.push(query);
@@ -330,10 +340,24 @@ export function mockChaavi(
       }
       return { items: [] };
     },
+    async createLogin(input) {
+      createLoginCalls.push(input);
+      if (opts.createLogin) {
+        return opts.createLogin(input);
+      }
+      throw new DimaagError(500, "chaavi", "createLogin is not stubbed");
+    },
     async getLogin(itemId) {
       getLoginCalls.push(itemId);
       if (opts.getLogin) {
         return opts.getLogin(itemId);
+      }
+      throw new DimaagError(404, "not_found", `item ${itemId} not found`);
+    },
+    async getPasskey(itemId) {
+      getPasskeyCalls.push(itemId);
+      if (opts.getPasskey) {
+        return opts.getPasskey(itemId);
       }
       throw new DimaagError(404, "not_found", `item ${itemId} not found`);
     },

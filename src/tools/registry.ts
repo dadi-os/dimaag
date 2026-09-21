@@ -27,8 +27,10 @@ import { getState } from "./ghar/get-state.js";
 import { controlDevice } from "./ghar/control-device.js";
 import { getDeviceEvents } from "./ghar/get-device-events.js";
 import { listItems } from "./chaavi/list-items.js";
+import { createLogin } from "./chaavi/create-login.js";
 import { fillLogin } from "./chaavi/fill-login.js";
-import { withSecret } from "./chaavi/with-secret.js";
+import { fillPasskey } from "./chaavi/fill-passkey.js";
+import { fillSecret } from "./chaavi/fill-secret.js";
 import { getStatus as nasGetStatus } from "./nas/get-status.js";
 import { getLogs as nasGetLogs } from "./nas/get-logs.js";
 import { restartModule } from "./nas/restart-module.js";
@@ -88,8 +90,10 @@ const definitions = [
   controlDevice,
   getDeviceEvents,
   listItems,
+  createLogin,
   fillLogin,
-  withSecret,
+  fillPasskey,
+  fillSecret,
   spawnTerminal,
   listTerminals,
   closeTerminal,

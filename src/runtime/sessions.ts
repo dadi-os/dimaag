@@ -41,18 +41,24 @@ export class HostSessions {
     if (IGNORE.has(toolName)) {
       return;
     }
-    if (toolName.startsWith("browser_")) {
+    if (
+      toolName.startsWith("browser_") ||
+      toolName === "chaavi_fill_login" ||
+      toolName === "chaavi_fill_passkey"
+    ) {
       const id = numberField(input, "browser_id");
       if (id !== null) {
         this.touchBrowser(agentId, id);
       }
       return;
     }
-    if (toolName.startsWith("terminal_")) {
+    if (toolName.startsWith("terminal_") || toolName === "chaavi_fill_secret") {
       const id = stringField(input, "terminal_id");
       if (id !== null) {
         const command =
-          toolName === "terminal_execute_shell" ? stringField(input, "command") : undefined;
+          toolName === "terminal_execute_shell" || toolName === "chaavi_fill_secret"
+            ? stringField(input, "command")
+            : undefined;
         this.touchTerminal(agentId, id, command);
       }
     }

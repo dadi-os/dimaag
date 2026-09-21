@@ -32,14 +32,20 @@ after(async () => {
   await handle.close();
 });
 
-const CHAAVI_TOOLS = ["chaavi_list_items", "chaavi_fill_login", "chaavi_with_secret"] as const;
+const CHAAVI_TOOLS = [
+  "chaavi_list_items",
+  "chaavi_create_login",
+  "chaavi_fill_login",
+  "chaavi_fill_passkey",
+  "chaavi_fill_secret",
+] as const;
 
 test("Chaavi tools are registered", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   for (const name of CHAAVI_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 62);
+  assert.equal(allTools().length, 64);
   await assert.doesNotReject(() => syncTools(handle.db));
 });
 
@@ -60,6 +66,7 @@ test("list_items shapes items without a password field", async () => {
           kind: "login",
           username: "ada",
           uris: ["https://bank.example"],
+          hasPasskey: false,
         },
       ],
     }),
@@ -92,6 +99,7 @@ test("list_items shapes items without a password field", async () => {
   assert.equal(body.items[0]?.kind, "login");
   assert.equal(body.items[0]?.username, "ada");
   assert.deepEqual(body.items[0]?.uris, ["https://bank.example"]);
+  assert.equal(body.items[0]?.hasPasskey, false);
   assert.equal("password" in (body.items[0] ?? {}), false);
 });
 
@@ -169,12 +177,147 @@ test("fill_login types username then password and never returns the password", a
   assert.equal(result.content.includes(password), false);
 });
 
-test("with_secret redacts the value from exec output and omits it from the payload", async () => {
+test("create_login stores a vault item and never returns the password", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
-    tools: ["chaavi_with_secret"],
+    tools: ["chaavi_create_login"],
+  });
+  const itemId = "item-new-1";
+  const chaavi = mockChaavi({
+    createLogin: (input) => ({
+      id: itemId,
+      name: input.name,
+      kind: "login",
+      username: input.username,
+      uris: input.uri !== undefined ? [input.uri] : [],
+      hasPasskey: false,
+    }),
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi,
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
+    type: "tool_use",
+    id: "cl1",
+    name: "chaavi_create_login",
+    input: {
+      name: "Acme Careers",
+      username: "ada@example.com",
+      uri: "https://jobs.acme.example",
+      length: 24,
+      special: true,
+    },
+  });
+  assert.equal(result.isError, false);
+  assert.deepEqual(chaavi.createLoginCalls, [
+    {
+      name: "Acme Careers",
+      username: "ada@example.com",
+      uri: "https://jobs.acme.example",
+      length: 24,
+      special: true,
+    },
+  ]);
+  const body = JSON.parse(result.content) as Record<string, unknown>;
+  assert.equal(body.id, itemId);
+  assert.equal(body.name, "Acme Careers");
+  assert.equal(body.kind, "login");
+  assert.equal(body.username, "ada@example.com");
+  assert.deepEqual(body.uris, ["https://jobs.acme.example"]);
+  assert.equal(body.hasPasskey, false);
+  assert.equal("password" in body, false);
+});
+
+test("fill_passkey loads the credential into the browser and never returns the key", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+    tools: ["chaavi_fill_passkey"],
+  });
+  const itemId = "item-passkey-1";
+  const privateKey = "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg";
+  const chaavi = mockChaavi({
+    getPasskey: () => ({
+      credentialId: "QUJDRA==",
+      rpId: "google.com",
+      privateKey,
+      userHandle: "dXNlcg==",
+      signCount: 0,
+      resident: true,
+    }),
+  });
+  const addCalls: Array<{
+    browserId: number;
+    tabId: string | undefined;
+    cred: { rpId: string; privateKey: string };
+  }> = [];
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi,
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const ctx = {
+    ...runtime.toolContext(workerId, "reasoning"),
+    browsers: {
+      addPasskey: async (
+        browserId: number,
+        tabId: string | undefined,
+        cred: { rpId: string; privateKey: string },
+      ) => {
+        addCalls.push({ browserId, tabId, cred });
+        return { tab_id: tabId ?? "t1" };
+      },
+    } as unknown as BrowserDriver,
+  };
+  const result = await executeTool(ctx, {
+    type: "tool_use",
+    id: "pk1",
+    name: "chaavi_fill_passkey",
+    input: {
+      item_id: itemId,
+      browser_id: 10,
+      tab_id: "tab-1",
+    },
+  });
+  assert.equal(result.isError, false);
+  assert.equal(addCalls.length, 1);
+  assert.equal(addCalls[0]?.browserId, 10);
+  assert.equal(addCalls[0]?.tabId, "tab-1");
+  assert.equal(addCalls[0]?.cred.rpId, "google.com");
+  assert.equal(addCalls[0]?.cred.privateKey, privateKey);
+  assert.deepEqual(chaavi.getPasskeyCalls, [itemId]);
+  const body = JSON.parse(result.content) as Record<string, unknown>;
+  assert.equal(body.filled, true);
+  assert.equal(body.item_id, itemId);
+  assert.equal(body.rp_id, "google.com");
+  assert.equal(body.browser_id, 10);
+  assert.equal(body.tab_id, "tab-1");
+  assert.equal("privateKey" in body, false);
+  assert.equal("credentialId" in body, false);
+  assert.equal(result.content.includes(privateKey), false);
+});
+
+test("fill_secret redacts the value from exec output and omits it from the payload", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+    tools: ["chaavi_fill_secret"],
   });
   const itemId = "item-secret-1";
   const secret = "tok_live_abc";
@@ -202,7 +345,7 @@ test("with_secret redacts the value from exec output and omits it from the paylo
   const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "ws1",
-    name: "chaavi_with_secret",
+    name: "chaavi_fill_secret",
     input: {
       item_id: itemId,
       terminal_id: "t1",

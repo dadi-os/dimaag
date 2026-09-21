@@ -8,7 +8,7 @@ Agent runtime for dadi. It owns agent identity, transcripts, the dual-lane loop,
 - Dwar at `http://dwar.dadi` for chat and image describe
 - Yaad at `http://yaad.dadi` for memory tools
 - Ghar at `http://ghar.dadi` for home device tools
-- Chaavi at `http://chaavi.dadi` for vault tools (`chaavi_*`); secrets are never returned to the model
+- Chaavi at `http://chaavi.dadi` for vault tools (`chaavi_*`); secrets and passkey keys are never returned to the model
 - Nas at `http://nas.dadi` for host terminals, project filesystem, and headed Chromium browsers (also mesh DNS / logging)
 - `playwright-core` (no browser download — Chromium comes from Nas over CDP)
 
@@ -106,13 +106,15 @@ Transcript is in-process and shared. Conversation starts on inbound message, rea
 
 ### Chaavi (vault)
 
-Grantable inject tools. Metadata may reach the model; passwords and secret values never do.
+Grantable vault tools. Metadata may reach the model; passwords, passkey keys, and secret values never do.
 
 | tool | Chaavi route | when to use |
 | --- | --- | --- |
-| `chaavi_list_items` | `GET /v1/items` | find a vault item id by name or site uri (no secrets) |
+| `chaavi_list_items` | `GET /v1/items` | find a vault item id by name or site uri (`hasPasskey`, no secrets) |
+| `chaavi_create_login` | `POST /v1/logins` | create a login with a generated password; never invent or `browser_type` a password |
 | `chaavi_fill_login` | `POST /v1/items/:id/login` | type a login into a Nas browser; never `browser_type` a password |
-| `chaavi_with_secret` | `POST /v1/items/:id/secret` | run a host command with the secret in `env_name`; output is redacted |
+| `chaavi_fill_passkey` | `POST /v1/items/:id/passkey` | fill a passkey into a Nas browser virtual authenticator; click the site's passkey button after |
+| `chaavi_fill_secret` | `POST /v1/items/:id/secret` | run a host command with the secret in `env_name`; output is redacted |
 
 ### Terminal (shell + files)
 

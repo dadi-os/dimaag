@@ -70,7 +70,7 @@ after(async () => {
 });
 
 test("allTools includes the three schedule tools", async () => {
-  assert.equal(allTools().length, 62);
+  assert.equal(allTools().length, 64);
   assert.equal(findTool("dimaag_schedule_message")?.name, "dimaag_schedule_message");
   assert.equal(findTool("dimaag_list_schedules")?.name, "dimaag_list_schedules");
   assert.equal(findTool("dimaag_cancel_schedule")?.name, "dimaag_cancel_schedule");

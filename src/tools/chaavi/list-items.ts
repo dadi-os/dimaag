@@ -16,7 +16,7 @@ const input = z
 export const listItems = defineTool({
   name: "chaavi_list_items",
   description:
-    "Find vault items (passwords, logins, notes, secrets) by name or site uri. Does not return secrets. Call this before chaavi_fill_login or chaavi_with_secret when you do not already have the item_id.",
+    "Find vault items (passwords, logins, notes, secrets, passkeys) by name or site uri. Does not return secrets. hasPasskey is true when chaavi_fill_passkey applies. Call this before chaavi_fill_login, chaavi_fill_passkey, or chaavi_fill_secret when you do not already have the item_id. For a new site account use chaavi_create_login.",
   input,
   inputSchema: {
     type: "object",
@@ -46,6 +46,7 @@ export const listItems = defineTool({
           kind: item.kind,
           username: item.username,
           uris: item.uris,
+          hasPasskey: item.hasPasskey,
         })),
       }),
     );

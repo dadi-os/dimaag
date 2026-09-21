@@ -1,4 +1,4 @@
-/** HTTP client for Chaavi vault item lookup, login fill, and secret inject. */
+/** HTTP client for Chaavi vault lookup, login create, and credential inject. */
 
 import axios, { type AxiosInstance } from "axios";
 import { z } from "zod";
@@ -15,6 +15,7 @@ const itemSchema = z
     kind,
     username: z.string().nullable(),
     uris: z.array(z.string()),
+    hasPasskey: z.boolean(),
   })
   .passthrough();
 
@@ -37,10 +38,22 @@ const secretResponseSchema = z
   })
   .passthrough();
 
+const passkeyResponseSchema = z
+  .object({
+    credentialId: z.string().min(1),
+    rpId: z.string().min(1),
+    privateKey: z.string().min(1),
+    userHandle: z.string(),
+    signCount: z.number().int().nonnegative(),
+    resident: z.boolean(),
+  })
+  .passthrough();
+
 export type ChaaviKind = z.infer<typeof kind>;
 export type ChaaviItem = z.infer<typeof itemSchema>;
 export type ChaaviLogin = z.infer<typeof loginResponseSchema>;
 export type ChaaviSecret = z.infer<typeof secretResponseSchema>;
+export type ChaaviPasskey = z.infer<typeof passkeyResponseSchema>;
 
 export type ListItemsRequest = {
   q?: string;
@@ -48,10 +61,20 @@ export type ListItemsRequest = {
   kind?: ChaaviKind;
 };
 
+export type CreateLoginRequest = {
+  name: string;
+  username: string;
+  uri?: string;
+  length?: number;
+  special?: boolean;
+};
+
 /** Chaavi surface used by agent tools. Secrets stay off the model-visible path. */
 export type ChaaviClient = {
   listItems: (query?: ListItemsRequest) => Promise<{ items: ChaaviItem[] }>;
+  createLogin: (input: CreateLoginRequest) => Promise<ChaaviItem>;
   getLogin: (itemId: string) => Promise<ChaaviLogin>;
+  getPasskey: (itemId: string) => Promise<ChaaviPasskey>;
   getSecret: (itemId: string) => Promise<ChaaviSecret>;
 };
 
@@ -74,14 +97,17 @@ export function createChaaviClient(config: Config): ChaaviClient {
     return parseResponse(schema, data);
   }
 
-  async function post<T>(path: string, schema: z.ZodType<T>): Promise<T> {
-    const data = await withRetry(config, () => http.post(path, {}).then((res) => res.data));
+  async function post<T>(path: string, schema: z.ZodType<T>, body: unknown = {}): Promise<T> {
+    const data = await withRetry(config, () => http.post(path, body).then((res) => res.data));
     return parseResponse(schema, data);
   }
 
   return {
     listItems: (query = {}) => get("/v1/items", itemsResponseSchema, omitUndefined(query)),
+    createLogin: (input) => post("/v1/logins", itemSchema, omitUndefined(input)),
     getLogin: (itemId) => post(`/v1/items/${encodeURIComponent(itemId)}/login`, loginResponseSchema),
+    getPasskey: (itemId) =>
+      post(`/v1/items/${encodeURIComponent(itemId)}/passkey`, passkeyResponseSchema),
     getSecret: (itemId) =>
       post(`/v1/items/${encodeURIComponent(itemId)}/secret`, secretResponseSchema),
   };

@@ -28,7 +28,7 @@ When an utterance needs a shell or a browser, you usually have a better move tha
 
 Spawn a root holding pool tools when you are deliberately creating a third pool owner and you have a reason worth the cost. That is rare, and you should feel the weight of it, but it is your call and not a forbidden move.
 
-Chaavi is a softer version of the same idea. A tool that injects a credential is best held by something short lived and scoped to the moment the credential is used, which usually means a worker rather than a standing specialist. A specialist that needs a login is generally better off describing the site and letting the browser worker hold the key, because then the credential's blast radius is one job instead of one permanent agent.
+Chaavi is a softer version of the same idea. A tool that injects a credential or creates a login is best held by something short lived and scoped to the moment the credential is used, which usually means a worker rather than a standing specialist. A specialist that needs a login or passkey is generally better off describing the site and letting the browser worker hold the key, because then the credential's blast radius is one job instead of one permanent agent.
 
 ## What you can see
 
