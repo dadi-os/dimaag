@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import {
   DISPATCH_MESSAGE,
+  GET_AGENT,
   LIST_AGENTS,
   MODIFY_AGENT,
   SEND_MESSAGE,
@@ -643,6 +644,265 @@ test("as Dadi, modify_agent can change any agent", async () => {
   assert.equal(row?.name, "Nested Renamed");
   assert.equal(row?.systemPrompt, "new");
   assert.equal(row?.active, false);
+});
+
+const storedPrompt = "revise me in place\nkeep  the double space\tand \"quotes\" — café";
+
+test("get_agent returns a direct child's stored prompt byte for byte", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertWorker(handle.db, {
+    name: "prompt-parent",
+    systemPrompt: "parent",
+    tools: [GET_AGENT],
+  });
+  const childId = await insertAgent(handle.db, {
+    name: "prompt-child",
+    systemPrompt: storedPrompt,
+    parentAgentId: parentId,
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(parentId, "reasoning"), {
+    type: "tool_use",
+    id: "get-child",
+    name: GET_AGENT,
+    input: { agent_id: childId },
+  });
+  assert.equal(result.isError, false, result.content);
+  const body = JSON.parse(result.content) as { system_prompt: string; parent_agent_id: string };
+  assert.equal(body.system_prompt, storedPrompt);
+  assert.equal(body.parent_agent_id, parentId);
+  const [row] = await handle.db.select().from(agents).where(eq(agents.id, childId));
+  assert.equal(body.system_prompt, row?.systemPrompt);
+});
+
+test("get_agent lets an agent read itself", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const selfId = await insertWorker(handle.db, {
+    name: "self-reader",
+    systemPrompt: storedPrompt,
+    tools: [GET_AGENT],
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(selfId, "reasoning"), {
+    type: "tool_use",
+    id: "get-self",
+    name: GET_AGENT,
+    input: { agent_id: selfId },
+  });
+  assert.equal(result.isError, false, result.content);
+  const body = JSON.parse(result.content) as {
+    name: string;
+    system_prompt: string;
+    parent_agent_id: string | null;
+    active: boolean;
+  };
+  assert.equal(body.name, "self-reader");
+  assert.equal(body.system_prompt, storedPrompt);
+  assert.equal(body.parent_agent_id, null);
+  assert.equal(body.active, true);
+});
+
+test("get_agent refuses a grandchild and a sibling with the self-or-direct-child rule", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const grandparentId = await insertWorker(handle.db, {
+    name: "grandparent",
+    systemPrompt: "top",
+    tools: [GET_AGENT],
+  });
+  const childId = await insertAgent(handle.db, {
+    name: "mid",
+    systemPrompt: "mid",
+    parentAgentId: grandparentId,
+  });
+  const grandchildId = await insertAgent(handle.db, {
+    name: "leaf",
+    systemPrompt: "leaf prompt",
+    parentAgentId: childId,
+  });
+  const siblingId = await insertWorker(handle.db, {
+    name: "sibling",
+    systemPrompt: "sibling",
+    parentAgentId: grandparentId,
+    tools: [GET_AGENT],
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+
+  const grandchild = await executeTool(runtime.toolContext(grandparentId, "reasoning"), {
+    type: "tool_use",
+    id: "get-grandchild",
+    name: GET_AGENT,
+    input: { agent_id: grandchildId },
+  });
+  assert.equal(grandchild.isError, true);
+  assert.match(grandchild.content, /self or direct children/);
+  assert.doesNotMatch(grandchild.content, /not found/);
+
+  const sibling = await executeTool(runtime.toolContext(siblingId, "reasoning"), {
+    type: "tool_use",
+    id: "get-sibling",
+    name: GET_AGENT,
+    input: { agent_id: childId },
+  });
+  assert.equal(sibling.isError, true);
+  assert.match(sibling.content, /self or direct children/);
+  assert.doesNotMatch(sibling.content, /not found/);
+});
+
+test("as Dadi, get_agent reads any agent", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertAgent(handle.db, {
+    name: "other-parent",
+    systemPrompt: "parent",
+  });
+  const nestedId = await insertAgent(handle.db, {
+    name: "nested-stranger",
+    systemPrompt: storedPrompt,
+    parentAgentId: parentId,
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(null, "reasoning", "dadi"), {
+    type: "tool_use",
+    id: "dadi-get",
+    name: GET_AGENT,
+    input: { agent_id: nestedId },
+  });
+  assert.equal(result.isError, false, result.content);
+  assert.equal(JSON.parse(result.content).system_prompt, storedPrompt);
+});
+
+test("get_agent tool names match agent_tools for that agent", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertWorker(handle.db, {
+    name: "tools-parent",
+    systemPrompt: "parent",
+    tools: [GET_AGENT],
+  });
+  const childId = await insertWorker(handle.db, {
+    name: "tools-child",
+    systemPrompt: "child",
+    parentAgentId: parentId,
+    tools: ["yaad_recall", "dimaag_schedule_message"],
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(parentId, "reasoning"), {
+    type: "tool_use",
+    id: "get-tools",
+    name: GET_AGENT,
+    input: { agent_id: childId },
+  });
+  assert.equal(result.isError, false, result.content);
+  const held = await handle.db
+    .select({ name: tools.name })
+    .from(agentTools)
+    .innerJoin(tools, eq(agentTools.toolId, tools.id))
+    .where(eq(agentTools.agentId, childId))
+    .orderBy(asc(tools.name));
+  assert.deepEqual(
+    (JSON.parse(result.content) as { tools: string[] }).tools,
+    held.map((row) => row.name),
+  );
+  assert.deepEqual((JSON.parse(result.content) as { tools: string[] }).tools, [
+    "dimaag_schedule_message",
+    "yaad_recall",
+  ]);
+});
+
+test("get_agent then modify_agent with the same prompt leaves it identical", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertWorker(handle.db, {
+    name: "round-parent",
+    systemPrompt: "parent",
+    tools: [GET_AGENT, MODIFY_AGENT],
+  });
+  const childId = await insertAgent(handle.db, {
+    name: "round-child",
+    systemPrompt: storedPrompt,
+    parentAgentId: parentId,
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const ctx = runtime.toolContext(parentId, "reasoning");
+  const before = await executeTool(ctx, {
+    type: "tool_use",
+    id: "round-read",
+    name: GET_AGENT,
+    input: { agent_id: childId },
+  });
+  assert.equal(before.isError, false, before.content);
+  const prompt = (JSON.parse(before.content) as { system_prompt: string }).system_prompt;
+  assert.equal(prompt, storedPrompt);
+
+  const modified = await executeTool(ctx, {
+    type: "tool_use",
+    id: "round-write",
+    name: MODIFY_AGENT,
+    input: { agent_id: childId, system_prompt: prompt },
+  });
+  assert.equal(modified.isError, false, modified.content);
+
+  const after = await executeTool(ctx, {
+    type: "tool_use",
+    id: "round-reread",
+    name: GET_AGENT,
+    input: { agent_id: childId },
+  });
+  assert.equal(after.isError, false, after.content);
+  assert.equal((JSON.parse(after.content) as { system_prompt: string }).system_prompt, prompt);
+  const [row] = await handle.db.select().from(agents).where(eq(agents.id, childId));
+  assert.equal(row?.systemPrompt, storedPrompt);
 });
 
 test("as Dadi, schedule_message fails without writing a row", async () => {

@@ -15,6 +15,7 @@ import { typeText } from "./browser/type.js";
 import { waitFor } from "./browser/wait-for.js";
 import { spawnAgent } from "./dimaag/spawn-agent.js";
 import { modifyAgent } from "./dimaag/modify-agent.js";
+import { getAgent } from "./dimaag/get-agent.js";
 import { grantTool } from "./dimaag/grant-tool.js";
 import { revokeTool } from "./dimaag/revoke-tool.js";
 import { scheduleMessage } from "./dimaag/schedule-message.js";
@@ -69,6 +70,7 @@ import { searchHistory } from "./yaad/search-history.js";
 const definitions = [
   spawnAgent,
   modifyAgent,
+  getAgent,
   grantTool,
   revokeTool,
   scheduleMessage,

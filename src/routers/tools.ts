@@ -22,6 +22,7 @@ const DADI_AUTHORITY_TOOLS = new Set([
   "dimaag_grant_tool",
   "dimaag_revoke_tool",
   "dimaag_modify_agent",
+  "dimaag_get_agent",
 ]);
 
 /** Register GET /tools, GET /tools/:name, POST /tools/:name/execute. */

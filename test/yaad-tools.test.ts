@@ -52,7 +52,7 @@ test("Yaad tools are registered and syncTools does not auto-grant", async () => 
   for (const name of YAAD_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 61);
+  assert.equal(allTools().length, 62);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   assert.equal(grants.length, 0);
