@@ -27,10 +27,15 @@ export type ToolExecResult = {
   audit: Record<string, unknown>;
 };
 
+/** Who is invoking a tool: an agents-row UUID, or a synthetic CLI identity. */
+export type ToolCallerKind = "agent" | "dadi" | "user";
+
 export type ToolContext = {
   db: Db;
-  /** Null means Dadi (router authority), not an agents row. */
+  /** Agent UUID when `callerKind` is `agent`; null for `dadi` and `user`. */
   callerId: string | null;
+  /** Distinguishes synthetic CLI callers when `callerId` is null. */
+  callerKind: ToolCallerKind;
   lane: Lane;
   yaad: YaadClient;
   ghar: GharClient;
@@ -57,7 +62,7 @@ export function ok(value: unknown, audit: Record<string, unknown> = {}): ToolExe
   return { content: JSON.stringify(value), isError: false, audit };
 }
 
-/** Fail when a tool needs a real agent and the caller is Dadi (`callerId` null). */
+/** Fail when a tool needs an agents-row caller (`callerId` null for dadi/user). */
 export function failWithoutAgentIdentity(): ToolExecResult {
   return fail("this tool needs an agent identity");
 }

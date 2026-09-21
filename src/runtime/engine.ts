@@ -26,6 +26,7 @@ import { runReasoningLoop } from "./reasoning.js";
 import { SteerQueue } from "./steer.js";
 import { HostSessions } from "./sessions.js";
 import { executeTool, type ToolContext, type ToolExecResult } from "./tools.js";
+import type { ToolCallerKind } from "../tools/shared.js";
 import { TranscriptStore } from "./transcript.js";
 import { createScheduler, type Scheduler } from "./scheduler.js";
 
@@ -48,7 +49,11 @@ export type Runtime = {
   enqueueConversation: (agentId: string) => void;
   enqueueReasoning: (agentId: string) => void;
   waitUntilIdle: () => Promise<void>;
-  toolContext: (callerId: string | null, lane: Lane) => ToolContext;
+  toolContext: (
+    callerId: string | null,
+    lane: Lane,
+    callerKind?: ToolCallerKind,
+  ) => ToolContext;
 };
 
 /** Wire locks, queues, and lane runners for one process. */
@@ -143,10 +148,15 @@ export function createRuntime(opts: {
     toolContext,
   };
 
-  function toolContext(callerId: string | null, lane: Lane): ToolContext {
+  function toolContext(
+    callerId: string | null,
+    lane: Lane,
+    callerKind: ToolCallerKind = callerId === null ? "dadi" : "agent",
+  ): ToolContext {
     return {
       db: opts.db,
       callerId,
+      callerKind,
       lane,
       yaad: opts.yaad,
       ghar: opts.ghar,

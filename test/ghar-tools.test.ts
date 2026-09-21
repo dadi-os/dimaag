@@ -148,6 +148,47 @@ test("control_device attributes cause to the calling agent, not the parent", asy
   assert.notEqual(call.body.cause_ref, parentId);
 });
 
+test("control_device cause_ref distinguishes dadi and user when callerId is null", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const deviceId = randomUUID();
+  const ghar = mockGhar({});
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar,
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const asDadi = await executeTool(runtime.toolContext(null, "reasoning", "dadi"), {
+    type: "tool_use",
+    id: "cd-dadi",
+    name: "ghar_control_device",
+    input: {
+      device_id: deviceId,
+      capability: "switchable",
+      params: { state: "on" },
+    },
+  });
+  assert.equal(asDadi.isError, false);
+  assert.equal(ghar.commandCalls[0]!.body.cause_ref, "dadi");
+
+  const asUser = await executeTool(runtime.toolContext(null, "reasoning", "user"), {
+    type: "tool_use",
+    id: "cd-user",
+    name: "ghar_control_device",
+    input: {
+      device_id: deviceId,
+      capability: "switchable",
+      params: { state: "off" },
+    },
+  });
+  assert.equal(asUser.isError, false);
+  assert.equal(ghar.commandCalls[1]!.body.cause_ref, "user");
+});
+
 test("Ghar unreachable fails with ghar code, not an empty success", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {

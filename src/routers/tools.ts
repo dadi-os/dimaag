@@ -12,7 +12,7 @@ const nameParam = z.object({ name: z.string().min(1) }).strict();
 
 const executeBody = z
   .object({
-    as_agent_id: z.union([z.literal("dadi"), z.string().uuid()]),
+    as_agent_id: z.union([z.literal("dadi"), z.literal("user"), z.string().uuid()]),
   })
   .passthrough();
 
@@ -59,8 +59,10 @@ export async function registerTools(app: FastifyInstance): Promise<void> {
         : request.body;
     const parsed = parse(executeBody, raw);
     const { as_agent_id: asAgentId, ...input } = parsed;
-    const callerId = asAgentId === "dadi" ? null : asAgentId;
-    if (callerId === null && !DADI_AUTHORITY_TOOLS.has(name)) {
+    const callerKind =
+      asAgentId === "dadi" ? "dadi" : asAgentId === "user" ? "user" : "agent";
+    const callerId = callerKind === "agent" ? asAgentId : null;
+    if (asAgentId === "dadi" && !DADI_AUTHORITY_TOOLS.has(name)) {
       throw new DimaagError(
         422,
         "invalid_request",
@@ -71,7 +73,7 @@ export async function registerTools(app: FastifyInstance): Promise<void> {
       await requireActiveAgent(app.db, callerId);
       await requireToolGrant(app.db, callerId, name);
     }
-    const result = await executeTool(app.runtime.toolContext(callerId, "reasoning"), {
+    const result = await executeTool(app.runtime.toolContext(callerId, "reasoning", callerKind), {
       type: "tool_use",
       id: "cli",
       name,

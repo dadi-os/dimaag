@@ -611,6 +611,53 @@ test("POST /tools/:name/execute as dadi rejects worker tools", async () => {
   await app.close();
 });
 
+test("POST /tools/:name/execute as user runs a worker tool without a grant", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const yaad = mockYaad({
+    recall: () => ({
+      nodes: [],
+      edges: [],
+      sufficient: false,
+      coverage: 0,
+    }),
+  });
+  const dwar = mockDwar({});
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar,
+    yaad,
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+  const app = await buildApp(config, {
+    db: handle.db,
+    sql: handle.sql,
+    dwar,
+    yaad,
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    runtime,
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/tools/yaad_recall/execute",
+    payload: { as_agent_id: "user", query: "Vedant lunch" },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { ok: boolean; is_error: boolean; content: string };
+  assert.equal(body.ok, true);
+  assert.equal(body.is_error, false);
+  assert.deepEqual(yaad.recallCalls, [{ query: "Vedant lunch" }]);
+
+  await runtime.waitUntilIdle();
+  await app.close();
+});
+
 test("POST /tools/:name/execute with a missing agent uuid is 404", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const { app, runtime } = await appWith();

@@ -63,6 +63,7 @@ test("steer_reasoning starts a run when reasoning is idle", async () => {
     {
       db: {} as never,
       callerId: agentId,
+      callerKind: "agent",
       lane: "conversation",
       steer,
       intents: new IntentQueue(),
@@ -96,6 +97,7 @@ test("steer_reasoning does not start a second run while reasoning is busy", asyn
     {
       db: {} as never,
       callerId: agentId,
+      callerKind: "agent",
       lane: "conversation",
       steer,
       intents: new IntentQueue(),

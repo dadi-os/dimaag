@@ -192,7 +192,7 @@ Reverse RPC over SSE `hath_command` + `POST /hath/commands/:id/result`. Discover
 
 ## CLI
 
-The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the appliance). It invokes this registry over HTTP (`GET /tools`, `POST /tools/:name/execute`). Requires `DIMAAG_URL` (no default) and exactly one caller identity on execute: `--as-agent-id <uuid>`, `--as <name>`, or `--as-dadi`. Agent callers must be active and hold a grant for the tool. `as_agent_id: "dadi"` is limited to router authority tools (`dimaag_spawn_agent`, `dimaag_grant_tool`, `dimaag_revoke_tool`, `dimaag_modify_agent`).
+The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the appliance). It invokes this registry over HTTP (`GET /tools`, `POST /tools/:name/execute`). Requires `DIMAAG_URL` (no default) and exactly one caller identity on execute: `--as-agent-id <uuid>`, `--as-dadi`, or `--as-user`. Agent callers must be active and hold a grant for the tool. `as_agent_id: "dadi"` is limited to router authority tools (`dimaag_spawn_agent`, `dimaag_grant_tool`, `dimaag_revoke_tool`, `dimaag_modify_agent`). `as_agent_id: "user"` skips grant and active checks for any tool (human / ops).
 
 ## Persistence
 
@@ -214,6 +214,6 @@ Schedule tools (`dimaag_schedule_message`, `dimaag_list_schedules`, `dimaag_canc
 | `GET` | `/logs` | cross-agent audit trail |
 | `GET` | `/tools` | grantable tool catalog |
 | `GET` | `/tools/:name` | one tool schema |
-| `POST` | `/tools/:name/execute` | run tool as `as_agent_id` (`uuid` or `"dadi"`) |
+| `POST` | `/tools/:name/execute` | run tool as `as_agent_id` (`uuid`, `"dadi"`, or `"user"`) |
 
 Unknown request fields are a 422. No CORS — clients use Tauri HTTP (or equivalent) outside the browser sandbox.
