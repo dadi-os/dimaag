@@ -63,12 +63,17 @@ test("spawn_browser and list_browsers call Nas", async () => {
     systemPrompt: "do the job",
     tools: ["browser_spawn", "browser_list"],
   });
+  const browserBodies: Array<{ id?: number } | undefined> = [];
   const nas = mockNas({
-    createBrowser: () => ({
-      id: 10,
-      display: ":10",
-      cdp_url: "ws://nas.dadi/browsers/10/devtools/browser/abc",
-    }),
+    createBrowser: (body) => {
+      browserBodies.push(body);
+      const id = body?.id ?? 10;
+      return {
+        id,
+        display: `:${id}`,
+        cdp_url: `ws://nas.dadi/browsers/${id}/devtools/browser/abc`,
+      };
+    },
     listBrowsers: () => [
       {
         id: 10,
@@ -96,6 +101,15 @@ test("spawn_browser and list_browsers call Nas", async () => {
   });
   assert.equal(spawned.isError, false, spawned.content);
   assert.equal(nas.createBrowserCalls, 1);
+  const respawned = await executeTool(runtime.toolContext(workerId, "reasoning"), {
+    type: "tool_use",
+    id: "sb2",
+    name: "browser_spawn",
+    input: { browser_id: 12 },
+  });
+  assert.equal(respawned.isError, false, respawned.content);
+  assert.equal(nas.createBrowserCalls, 2);
+  assert.deepEqual(browserBodies, [{}, { id: 12 }]);
   const body = JSON.parse(spawned.content);
   assert.equal(body.browser_id, 10);
   assert.match(body.cdp_url, /browsers\/10/);

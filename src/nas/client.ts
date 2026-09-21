@@ -102,7 +102,8 @@ const browserInfoSchema = z
   })
   .passthrough();
 
-export type CreateTerminalRequest = { cwd?: string };
+export type CreateTerminalRequest = { id?: string; cwd?: string };
+export type CreateBrowserRequest = { id?: number };
 export type CreateTerminalResponse = z.infer<typeof createTerminalResponseSchema>;
 export type TerminalInfo = z.infer<typeof terminalInfoSchema>;
 export type ExecRequest = {
@@ -210,7 +211,7 @@ export type NasClient = {
   editFile: (body: EditFileRequest) => Promise<z.infer<typeof editResponseSchema>>;
   glob: (body: GlobRequest) => Promise<z.infer<typeof globResponseSchema>>;
   grep: (body: GrepRequest) => Promise<z.infer<typeof grepResponseSchema>>;
-  createBrowser: () => Promise<CreateBrowserResponse>;
+  createBrowser: (body?: CreateBrowserRequest) => Promise<CreateBrowserResponse>;
   listBrowsers: () => Promise<BrowserInfo[]>;
   closeBrowser: (id: number) => Promise<void>;
   browserScreenshot: (id: number) => Promise<Buffer>;
@@ -293,7 +294,7 @@ export function createNasClient(config: Config): NasClient {
     editFile: (body) => post("/fs/edit", body, editResponseSchema),
     glob: (body) => post("/fs/glob", omitUndefined(body), globResponseSchema),
     grep: (body) => post("/fs/grep", omitUndefined(body), grepResponseSchema),
-    createBrowser: () => post("/browsers", {}, createBrowserResponseSchema),
+    createBrowser: (body = {}) => post("/browsers", omitUndefined(body), createBrowserResponseSchema),
     listBrowsers: () => get("/browsers", z.array(browserInfoSchema)),
     closeBrowser: (id) => del(`/browsers/${id}`),
     browserScreenshot: async (id) => {

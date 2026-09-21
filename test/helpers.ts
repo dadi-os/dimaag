@@ -25,6 +25,7 @@ import type {
 import type {
   BrowserInfo,
   CaptureRequest,
+  CreateBrowserRequest,
   CreateBrowserResponse,
   CreateTerminalRequest,
   CreateTerminalResponse,
@@ -380,7 +381,9 @@ export function mockNas(opts: {
   ) =>
     | Promise<{ matches: Array<{ path: string; line: number; text: string }>; truncated: boolean }>
     | { matches: Array<{ path: string; line: number; text: string }>; truncated: boolean };
-  createBrowser?: () => Promise<CreateBrowserResponse> | CreateBrowserResponse;
+  createBrowser?: (
+    body?: CreateBrowserRequest,
+  ) => Promise<CreateBrowserResponse> | CreateBrowserResponse;
   listBrowsers?: () => Promise<BrowserInfo[]> | BrowserInfo[];
   closeBrowser?: (id: number) => Promise<void> | void;
   browserScreenshot?: (id: number) => Promise<Buffer> | Buffer;
@@ -514,10 +517,10 @@ export function mockNas(opts: {
       }
       return { matches: [], truncated: false };
     },
-    async createBrowser() {
+    async createBrowser(body) {
       createBrowserCalls += 1;
       if (opts.createBrowser) {
-        return opts.createBrowser();
+        return opts.createBrowser(body);
       }
       return {
         id: 10,

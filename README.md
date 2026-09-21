@@ -120,7 +120,7 @@ Thin clients over Nas. Shell is the run-a-command mechanism; file tools are the 
 
 | tool | holder | Nas route |
 | --- | --- | --- |
-| `terminal_spawn` | manager | `POST /terminals` |
+| `terminal_spawn` | manager | `POST /terminals`. Optional `terminal_id` starts that session name; omit it for the lowest unused name. A new shell either way. |
 | `terminal_list` | manager | `GET /terminals` |
 | `terminal_close` | manager | `DELETE /terminals/{id}` |
 | `terminal_execute_shell` | worker | `POST /terminals/{id}/exec` |
@@ -142,7 +142,7 @@ Each worker drives one Nas Chromium over CDP (`playwright-core` `connectOverCDP`
 
 | tool | holder | notes |
 | --- | --- | --- |
-| `browser_spawn` | manager | Nas `POST /browsers` → `{ browser_id, cdp_url }` |
+| `browser_spawn` | manager | Nas `POST /browsers` → `{ browser_id, cdp_url }`. Optional `browser_id` reopens that profile; omit it for the lowest id with no saved Chromium data. |
 | `browser_list` | manager | Nas `GET /browsers` |
 | `browser_close` | manager | Nas `DELETE` + drop in-process CDP connection |
 | `browser_list_tabs` / `browser_new_tab` / `browser_close_tab` | worker | CDP target ids |

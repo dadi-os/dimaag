@@ -67,6 +67,41 @@ test("Nas terminal tools and destructive ops are registered", async () => {
   await assert.doesNotReject(() => syncTools(handle.db));
 });
 
+test("terminal_spawn forwards terminal_id and leaves a fresh spawn empty", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+    tools: ["terminal_spawn"],
+  });
+  const nas = mockNas({});
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas,
+    config,
+    log: silentLog,
+  });
+  const fresh = await executeTool(runtime.toolContext(workerId, "reasoning"), {
+    type: "tool_use",
+    id: "ts1",
+    name: "terminal_spawn",
+    input: {},
+  });
+  assert.equal(fresh.isError, false, fresh.content);
+  const named = await executeTool(runtime.toolContext(workerId, "reasoning"), {
+    type: "tool_use",
+    id: "ts2",
+    name: "terminal_spawn",
+    input: { terminal_id: "t4", cwd: "/var/lib/dadi" },
+  });
+  assert.equal(named.isError, false, named.content);
+  assert.deepEqual(nas.createTerminalCalls, [{}, { id: "t4", cwd: "/var/lib/dadi" }]);
+});
+
 test("execute_shell passes through exit code, output, and timed_out", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
