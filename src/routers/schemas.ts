@@ -1,10 +1,11 @@
 /** Request body / param zod schemas and parse helpers for HTTP routes. */
 
-import { z, type ZodError, type ZodType } from "zod";
+import { z, type ZodError } from "zod";
+import { agentIdSchema } from "../agent-id.js";
 import { DimaagError } from "../errors.js";
 
 /** Parse with zod; map failures to `422 invalid_request`. */
-export function parse<T>(schema: ZodType<T>, data: unknown): T {
+export function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.output<S> {
   const parsed = schema.safeParse(data);
   if (!parsed.success) {
     throw new DimaagError(422, "invalid_request", formatZod(parsed.error));
@@ -49,7 +50,7 @@ export const postDadiBody = z
 
 export const postMessageBody = z
   .object({
-    to_agent_id: z.string().uuid(),
+    to_agent_id: agentIdSchema,
     /** May be empty when attachments are present; patched server-side. */
     content: z.string(),
     attachments: z.array(messageAttachment).max(8).optional(),
@@ -65,11 +66,18 @@ export const postMessageBody = z
     }
   });
 
-export const idParam = z.object({ id: z.string().uuid() }).strict();
+export const idParam = z.object({ id: agentIdSchema }).strict();
 
 export const logsQuery = z
   .object({
     event: z.enum(["thought", "tool_call", "tool_result", "message"]).optional(),
     limit: z.coerce.number().int().positive().max(200).optional(),
+  })
+  .strict();
+
+export const agentMessagesQuery = z
+  .object({
+    since_seq: z.coerce.number().int().nonnegative().optional(),
+    limit: z.coerce.number().int().positive().max(500).default(200),
   })
   .strict();

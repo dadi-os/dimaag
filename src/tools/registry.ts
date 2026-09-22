@@ -18,6 +18,7 @@ import { modifyAgent } from "./dimaag/modify-agent.js";
 import { getAgent } from "./dimaag/get-agent.js";
 import { grantTool } from "./dimaag/grant-tool.js";
 import { revokeTool } from "./dimaag/revoke-tool.js";
+import { listTools } from "./dimaag/list-tools.js";
 import { scheduleMessage } from "./dimaag/schedule-message.js";
 import { listSchedules } from "./dimaag/list-schedules.js";
 import { cancelSchedule } from "./dimaag/cancel-schedule.js";
@@ -75,6 +76,7 @@ const definitions = [
   getAgent,
   grantTool,
   revokeTool,
+  listTools,
   scheduleMessage,
   listSchedules,
   cancelSchedule,

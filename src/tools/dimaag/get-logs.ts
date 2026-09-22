@@ -1,5 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { agentIdSchema } from "../../agent-id.js";
 import { agentLogs } from "../../db/schema.js";
 import { toLogRecord } from "../../serialize.js";
 import { defineTool } from "../types.js";
@@ -7,7 +8,7 @@ import { ok, fail, failWithoutAgentIdentity, requireAgent } from "../shared.js";
 
 const input = z
   .object({
-    agent_id: z.string().uuid().optional(),
+    agent_id: agentIdSchema.optional(),
     event: z.enum(["thought", "tool_call", "tool_result", "message"]).optional(),
     limit: z.number().int().min(1).max(200).optional(),
   })

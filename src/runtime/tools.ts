@@ -3,8 +3,9 @@
  * Registry tools are resolved for the reasoning lane; conversation uses the switch below.
  */
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { z, ZodError } from "zod";
+import { agentIdOrUserSchema, agentIdSchema } from "../agent-id.js";
 import { agents } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
 import type { DwarTool, DwarToolUseBlock } from "../types/domain.js";
@@ -36,7 +37,7 @@ export const sendMessageInputSchema: Record<string, unknown> = {
   properties: {
     to_agent_id: {
       type: ["string", "null"],
-      description: "Recipient agent id, or null for the user",
+      description: "Recipient kebab-case agent id, or null for the user",
     },
     intent: {
       type: "string",
@@ -51,7 +52,7 @@ export const dispatchMessageInputSchema: Record<string, unknown> = {
   properties: {
     to_agent_id: {
       type: ["string", "null"],
-      description: "Recipient agent id, or null for the user",
+      description: "Recipient kebab-case agent id, or null for the user",
     },
     content: { type: "string", description: "The message to persist and deliver" },
   },
@@ -75,9 +76,9 @@ export const yieldInputSchema: Record<string, unknown> = {
 export const listAgentsInputSchema: Record<string, unknown> = {
   type: "object",
   properties: {
-    name: {
+    id: {
       type: "string",
-      description: "Exact agent name (case-sensitive). Returns at most one row.",
+      description: "Exact kebab-case agent id. Returns at most one row.",
     },
     include_inactive: {
       type: "boolean",
@@ -119,21 +120,21 @@ export const yieldTool: DwarTool = {
   input_schema: yieldInputSchema,
 };
 
-/** Look up agents by exact name or list the roster (id, name, parent, active). */
+/** Look up agents by exact id or list the roster (id, name alias, parent, active). */
 export const listAgentsTool: DwarTool = {
   name: LIST_AGENTS,
   description:
-    "List agents visible to you: id, name, parent, and whether each is active. Pass name for an exact case-sensitive lookup (empty list on miss). Pass include_inactive true to include dormant agents.",
+    "List agents visible to you: id, name (alias of id), parent, and whether each is active. Pass id for an exact kebab-case lookup (empty list on miss). Pass include_inactive true to include dormant agents.",
   input_schema: listAgentsInputSchema,
 };
 
 const sendInput = z.object({
-  to_agent_id: z.string().uuid().nullable(),
+  to_agent_id: agentIdOrUserSchema,
   intent: z.string().min(1),
 });
 
 const dispatchInput = z.object({
-  to_agent_id: z.string().uuid().nullable(),
+  to_agent_id: agentIdOrUserSchema,
   content: z.string().min(1),
 });
 
@@ -145,7 +146,7 @@ const yieldInput = z.object({}).strict();
 
 const listAgentsInput = z
   .object({
-    name: z.string().min(1).optional(),
+    id: agentIdSchema.optional(),
     include_inactive: z.boolean().optional(),
   })
   .strict();
@@ -263,8 +264,8 @@ async function runListAgents(ctx: ToolContext, raw: unknown): Promise<ToolExecRe
   const input = listAgentsInput.parse(raw ?? {});
   const includeInactive = input.include_inactive ?? false;
   const conditions = [];
-  if (input.name !== undefined) {
-    conditions.push(eq(agents.name, input.name));
+  if (input.id !== undefined) {
+    conditions.push(eq(agents.id, input.id));
   }
   if (!includeInactive) {
     conditions.push(eq(agents.active, true));
@@ -272,39 +273,20 @@ async function runListAgents(ctx: ToolContext, raw: unknown): Promise<ToolExecRe
   const query = ctx.db
     .select({
       id: agents.id,
-      name: agents.name,
       parentAgentId: agents.parentAgentId,
       active: agents.active,
     })
     .from(agents)
-    .orderBy(asc(agents.name));
+    .orderBy(asc(agents.id));
   const rows =
     conditions.length === 0 ? await query : await query.where(and(...conditions));
-
-  const parentIds = [
-    ...new Set(
-      rows
-        .map((row) => row.parentAgentId)
-        .filter((id): id is string => id !== null),
-    ),
-  ];
-  const nameById = new Map<string, string>();
-  if (parentIds.length > 0) {
-    const parents = await ctx.db
-      .select({ id: agents.id, name: agents.name })
-      .from(agents)
-      .where(inArray(agents.id, parentIds));
-    for (const parent of parents) {
-      nameById.set(parent.id, parent.name);
-    }
-  }
 
   return ok({
     agents: rows.map((row) => ({
       id: row.id,
-      name: row.name,
+      name: row.id,
       parent_agent_id: row.parentAgentId,
-      parent_name: row.parentAgentId ? (nameById.get(row.parentAgentId) ?? null) : null,
+      parent_name: row.parentAgentId,
       active: row.active,
     })),
   });

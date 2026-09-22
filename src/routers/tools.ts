@@ -2,6 +2,7 @@
 
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { agentIdSchema } from "../agent-id.js";
 import { DimaagError } from "../errors.js";
 import { executeTool } from "../runtime/tools.js";
 import { requireActiveAgent, requireToolGrant } from "../tools/shared.js";
@@ -12,7 +13,7 @@ const nameParam = z.object({ name: z.string().min(1) }).strict();
 
 const executeBody = z
   .object({
-    as_agent_id: z.union([z.literal("dadi"), z.literal("user"), z.string().uuid()]),
+    as_agent_id: z.union([z.literal("dadi"), z.literal("user"), agentIdSchema]),
   })
   .passthrough();
 

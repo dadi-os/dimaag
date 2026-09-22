@@ -9,6 +9,7 @@ import type { YaadClient } from "./yaad/client.js";
 import { DimaagError } from "./errors.js";
 import { registerRequestLogging } from "./logging.js";
 import { createRuntime, type Runtime } from "./runtime/engine.js";
+import { hydrateTranscript } from "./db/messages.js";
 import { registerV1 } from "./routers/index.js";
 
 declare module "fastify" {
@@ -66,6 +67,9 @@ export async function buildApp(
       config,
       log: app.log,
     });
+  if (!deps.runtime) {
+    await hydrateTranscript(deps.db, runtime.transcript);
+  }
   app.decorate("config", config);
   app.decorate("db", deps.db);
   app.decorate("sql", deps.sql);
@@ -116,7 +120,7 @@ export async function buildApp(
     });
   });
 
-  /** Process start — Hath uses this to drop chat that predates the live transcript. */
+  /** Process start ISO — process identity only; not a chat epoch. */
   const startedAt = new Date().toISOString();
   app.get("/health", async () => ({ status: "ok", started_at: startedAt }));
   await app.register(registerV1);

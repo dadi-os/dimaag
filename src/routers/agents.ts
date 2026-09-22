@@ -2,12 +2,13 @@
 
 import { and, desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { listHumanMessages } from "../db/messages.js";
 import { agentLogs, agents, agentTools, tools } from "../db/schema.js";
 import type { AgentRow } from "../db/schema.js";
 import { requireAgent } from "../runtime/tools.js";
 import { toAgentRecord, toLogRecord } from "../serialize.js";
 import type { AgentRecord } from "../types/domain.js";
-import { idParam, logsQuery, parse } from "./schemas.js";
+import { agentMessagesQuery, idParam, logsQuery, parse } from "./schemas.js";
 
 /** Attach ephemeral running locks and host sessions for API responses. */
 function withLive(row: AgentRow, runtime: FastifyInstance["runtime"]): AgentRecord {
@@ -59,6 +60,17 @@ export async function registerAgents(app: FastifyInstance): Promise<void> {
     const { id } = parse(idParam, request.params);
     const agentRow = await requireAgent(app.db, id);
     return agentDetail(app, agentRow);
+  });
+
+  app.get("/agents/:id/messages", async (request) => {
+    const { id } = parse(idParam, request.params);
+    await requireAgent(app.db, id);
+    const query = parse(agentMessagesQuery, request.query);
+    const messages = await listHumanMessages(app.db, id, {
+      ...(query.since_seq !== undefined ? { sinceSeq: query.since_seq } : {}),
+      limit: query.limit,
+    });
+    return { messages };
   });
 
   app.get("/agents/:id/logs", async (request) => {

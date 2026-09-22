@@ -1,6 +1,8 @@
 [runtime]
 # How long a request waits for a busy lane lock before failing.
 lane_queue_timeout_ms = 30000
+# Max message turns included in each Dwar call (rolling window).
+transcript_window_messages = 40
 
 [dwar]
 timeout_ms = 330000

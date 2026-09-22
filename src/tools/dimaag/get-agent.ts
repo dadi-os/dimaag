@@ -1,23 +1,27 @@
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { agentIdSchema } from "../../agent-id.js";
 import { agentTools, tools } from "../../db/schema.js";
 import { defineTool } from "../types.js";
 import { ok, fail, requireAgent } from "../shared.js";
 
 const input = z.object({
-  agent_id: z.string().uuid(),
+  agent_id: agentIdSchema,
 });
 
-/** Read name, system prompt, parent, active flag, and tool names for self or a direct child (any agent as Dadi). */
+/** Read id, system prompt, parent, active flag, and tool names for self or a direct child (any agent as Dadi). */
 export const getAgent = defineTool({
   name: "dimaag_get_agent",
   description:
-    "Read an agent's name, system prompt, parent, active flag, and the names of the tools it holds. Only the caller or its direct children are allowed. As Dadi, any agent is allowed.",
+    "Read an agent's id, system prompt, parent, active flag, and the names of the tools it holds. Only the caller or its direct children are allowed. As Dadi, any agent is allowed.",
   input,
   inputSchema: {
     type: "object",
     properties: {
-      agent_id: { type: "string", description: "Self or a direct child (any agent as Dadi)" },
+      agent_id: {
+        type: "string",
+        description: "Self or a direct child (any agent as Dadi); immutable kebab-case id",
+      },
     },
     required: ["agent_id"],
   },
@@ -39,7 +43,7 @@ export const getAgent = defineTool({
       .orderBy(asc(tools.name));
 
     return ok({
-      name: target.name,
+      name: target.id,
       system_prompt: target.systemPrompt,
       parent_agent_id: target.parentAgentId,
       active: target.active,

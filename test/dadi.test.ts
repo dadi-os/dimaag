@@ -85,7 +85,7 @@ test("POST /dadi spawn routes to a new top-level worker", async () => {
   const [agent] = await handle.db.select().from(agents).where(eq(agents.id, body.thread_id));
   assert.ok(agent);
   assert.equal(agent.parentAgentId, null);
-  assert.equal(agent.name, "thread");
+  assert.equal(agent.id, "thread");
   assert.equal(agent.systemPrompt, "do the job");
 
   const grants = await handle.db
@@ -163,7 +163,7 @@ test("POST /dadi reuse delivers to an existing top-level thread", async () => {
 test("POST /dadi roster marks a dormant root as dormant", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const dormantId = await insertWorker(handle.db, {
-    name: "Finance Specialist",
+    name: "finance-specialist",
     systemPrompt: "own the money",
     tools: [],
   });
@@ -191,7 +191,7 @@ test("POST /dadi roster marks a dormant root as dormant", async () => {
   });
   assert.equal(res.statusCode, 201);
   const system = captured.completeCalls[0]?.system ?? "";
-  assert.match(system, new RegExp(`Finance Specialist \\(${dormantId}\\) \\[dormant\\]`));
+  assert.match(system, new RegExp(`- ${dormantId} \\[dormant\\]`));
   assert.match(system, /own the money/);
 
   await runtime.waitUntilIdle();
@@ -201,7 +201,7 @@ test("POST /dadi roster marks a dormant root as dormant", async () => {
 test("POST /dadi reuse of a dormant root wakes it, emits agent_modified, and delivers", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
-    name: "Finance Specialist",
+    name: "finance-specialist",
     systemPrompt: "own the money",
     tools: [],
   });
@@ -245,7 +245,7 @@ test("POST /dadi reuse of a dormant root wakes it, emits agent_modified, and del
   assert.ok(modified[0] && modified[0].type === "agent_modified");
   assert.equal(modified[0].agent_id, workerId);
   assert.equal(modified[0].active, true);
-  assert.equal(modified[0].name, "Finance Specialist");
+  assert.equal(modified[0].name, "finance-specialist");
 
   const delivered = runtime.transcript.transcriptFor(workerId);
   assert.equal(delivered.length, 1);
@@ -454,7 +454,7 @@ test("POST /dadi reuse of a dormant nested agent is still 422", async () => {
   await app.close();
 });
 
-test("POST /dadi spawn name conflict is 409", async () => {
+test("POST /dadi spawn id conflict is 409", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   await insertWorker(handle.db, {
     name: "taken",
@@ -470,7 +470,7 @@ test("POST /dadi spawn name conflict is 409", async () => {
           name: "decide",
           input: {
             action: "spawn",
-            name: "taken",
+            id: "taken",
             system_prompt: "duplicate",
           },
         },
@@ -489,7 +489,7 @@ test("POST /dadi spawn name conflict is 409", async () => {
   assert.equal(res.statusCode, 409);
   const body = res.json() as { error: { type: string; message: string } };
   assert.equal(body.error.type, "conflict");
-  assert.match(body.error.message, /taken/);
+  assert.match(body.error.message, /taken|already exists/);
 
   await runtime.waitUntilIdle();
   await app.close();
@@ -574,7 +574,7 @@ test("POST /tools/:name/execute as dadi spawn_agent creates a root", async () =>
     url: "/tools/dimaag_spawn_agent/execute",
     payload: {
       as_agent_id: "dadi",
-      name: "Finance Specialist",
+      id: "finance-specialist",
       system_prompt: "own the money",
     },
   });
@@ -582,8 +582,8 @@ test("POST /tools/:name/execute as dadi spawn_agent creates a root", async () =>
   const body = res.json() as { ok: boolean; is_error: boolean; content: string };
   assert.equal(body.ok, true);
   assert.equal(body.is_error, false);
-  const content = JSON.parse(body.content) as { agent_id: string; name: string };
-  assert.equal(content.name, "Finance Specialist");
+  const content = JSON.parse(body.content) as { agent_id: string };
+  assert.equal(content.agent_id, "finance-specialist");
 
   const [agent] = await handle.db.select().from(agents).where(eq(agents.id, content.agent_id));
   assert.ok(agent);
@@ -658,10 +658,10 @@ test("POST /tools/:name/execute as user runs a worker tool without a grant", asy
   await app.close();
 });
 
-test("POST /tools/:name/execute with a missing agent uuid is 404", async () => {
+test("POST /tools/:name/execute with a missing agent id is 404", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const { app, runtime } = await appWith();
-  const missing = "00000000-0000-4000-8000-000000000001";
+  const missing = "missing-agent-that-does-not-exist";
 
   const res = await app.inject({
     method: "POST",
@@ -724,11 +724,11 @@ test("POST /tools/:name/execute as inactive agent is 403", async () => {
   await app.close();
 });
 
-test("GET /agents/root is invalid_request", async () => {
+test("GET /agents/:id rejects non-kebab ids", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const { app, runtime } = await appWith();
 
-  const res = await app.inject({ method: "GET", url: "/agents/root" });
+  const res = await app.inject({ method: "GET", url: "/agents/Not-Valid" });
   assert.equal(res.statusCode, 422);
   const body = res.json() as { error: { type: string } };
   assert.equal(body.error.type, "invalid_request");
@@ -748,7 +748,7 @@ test("POST /dadi spawn with grants creates exactly those agent_tools rows", asyn
           name: "decide",
           input: {
             action: "spawn",
-            name: "Finance Specialist",
+            id: "finance-specialist",
             system_prompt: "own the money",
             grants: [
               { tool_name: "yaad_recall", usage: "remember money facts" },
@@ -797,7 +797,7 @@ test("POST /dadi spawn with an unknown grant creates no agent", async () => {
           name: "decide",
           input: {
             action: "spawn",
-            name: "Broken",
+            id: "broken",
             system_prompt: "should not land",
             grants: [{ tool_name: "not_a_real_tool", usage: "nope" }],
           },
@@ -821,7 +821,7 @@ test("POST /dadi spawn with an unknown grant creates no agent", async () => {
 
   const after = await handle.db.select().from(agents);
   assert.equal(after.length, before.length);
-  assert.equal(after.some((row) => row.name === "Broken"), false);
+  assert.equal(after.some((row) => row.id === "broken"), false);
 
   await runtime.waitUntilIdle();
   await app.close();
@@ -839,7 +839,7 @@ test("POST /dadi spawn with duplicate grants creates no agent", async () => {
           name: "decide",
           input: {
             action: "spawn",
-            name: "Duped",
+            id: "duped",
             system_prompt: "should not land",
             grants: [
               { tool_name: "yaad_recall", usage: "one" },
@@ -865,7 +865,7 @@ test("POST /dadi spawn with duplicate grants creates no agent", async () => {
   assert.match(body.error.message, /duplicate grant/);
   const after = await handle.db.select().from(agents);
   assert.equal(after.length, before.length);
-  assert.equal(after.some((row) => row.name === "Duped"), false);
+  assert.equal(after.some((row) => row.id === "duped"), false);
 
   await runtime.waitUntilIdle();
   await app.close();
@@ -882,7 +882,7 @@ test("POST /dadi spawn with no grants creates an agent holding nothing", async (
           name: "decide",
           input: {
             action: "spawn",
-            name: "Empty Hands",
+            id: "empty-hands",
             system_prompt: "talk only",
           },
         },
@@ -910,11 +910,11 @@ test("POST /dadi spawn with no grants creates an agent holding nothing", async (
   await app.close();
 });
 
-test("POST /dadi modify rename emits agent_modified with the new name", async () => {
+test("POST /dadi modify prompt emits agent_modified", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
     name: "old-name",
-    systemPrompt: "job",
+    systemPrompt: "old prompt",
     tools: [],
   });
   const dwar = mockDwar({
@@ -924,7 +924,7 @@ test("POST /dadi modify rename emits agent_modified with the new name", async ()
           type: "tool_use",
           id: "decide-1",
           name: "decide",
-          input: { action: "modify", thread_id: workerId, name: "New Name" },
+          input: { action: "modify", thread_id: workerId, system_prompt: "new prompt" },
         },
       ],
       stop_reason: "tool_use",
@@ -940,66 +940,24 @@ test("POST /dadi modify rename emits agent_modified with the new name", async ()
   const res = await app.inject({
     method: "POST",
     url: "/dadi",
-    payload: { content: "rename that thread" },
+    payload: { content: "update that thread" },
   });
   assert.equal(res.statusCode, 201);
-  const body = res.json() as { action: string; name: string };
+  const body = res.json() as { action: string; name: string; system_prompt: string };
   assert.equal(body.action, "modified");
-  assert.equal(body.name, "New Name");
+  assert.equal(body.name, "old-name");
+  assert.equal(body.system_prompt, "new prompt");
 
-  const modified = seen.find((event) => event.type === "agent_modified");
-  assert.ok(modified && modified.type === "agent_modified");
-  assert.equal(modified.agent_id, workerId);
-  assert.equal(modified.name, "New Name");
+  const modified = seen.filter((event) => event.type === "agent_modified");
+  assert.equal(modified.length, 1);
+  assert.equal(modified[0].name, "old-name");
+  assert.equal(modified[0].agent_id, workerId);
 
   const [agent] = await handle.db.select().from(agents).where(eq(agents.id, workerId));
-  assert.equal(agent?.name, "New Name");
+  assert.equal(agent?.systemPrompt, "new prompt");
+  assert.equal(agent?.id, "old-name");
 
   await runtime.waitUntilIdle();
   await app.close();
 });
 
-test("POST /dadi modify rename onto a taken name is conflict and changes nothing", async () => {
-  await resetRuntime(handle.sql, handle.db, config);
-  const workerId = await insertWorker(handle.db, {
-    name: "rename-me",
-    systemPrompt: "job",
-    tools: [],
-  });
-  await insertWorker(handle.db, {
-    name: "taken",
-    systemPrompt: "already",
-    tools: [],
-  });
-  const dwar = mockDwar({
-    complete: () => ({
-      content: [
-        {
-          type: "tool_use",
-          id: "decide-1",
-          name: "decide",
-          input: { action: "modify", thread_id: workerId, name: "taken" },
-        },
-      ],
-      stop_reason: "tool_use",
-      usage: { input_tokens: 1, output_tokens: 1 },
-    }),
-  });
-  const { app, runtime } = await appWith(dwar);
-
-  const res = await app.inject({
-    method: "POST",
-    url: "/dadi",
-    payload: { content: "steal the name" },
-  });
-  assert.equal(res.statusCode, 409);
-  const body = res.json() as { error: { type: string; message: string } };
-  assert.equal(body.error.type, "conflict");
-  assert.match(body.error.message, /taken/);
-
-  const [agent] = await handle.db.select().from(agents).where(eq(agents.id, workerId));
-  assert.equal(agent?.name, "rename-me");
-
-  await runtime.waitUntilIdle();
-  await app.close();
-});

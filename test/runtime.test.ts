@@ -153,7 +153,7 @@ test("modify_agent on a direct child is allowed", async () => {
   assert.equal(result.audit.old_system_prompt, "old prompt");
 });
 
-test("modify_agent renames self and a direct child", async () => {
+test("modify_agent updates prompt on self and a direct child", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const parentId = await insertWorker(handle.db, {
     name: "boss",
@@ -180,30 +180,32 @@ test("modify_agent renames self and a direct child", async () => {
     type: "tool_use",
     id: "rn-self",
     name: MODIFY_AGENT,
-    input: { agent_id: parentId, name: "Boss Renamed" },
+    input: { agent_id: parentId, system_prompt: "boss prompt v2" },
   });
   assert.equal(self.isError, false);
   const selfBody = JSON.parse(self.content);
-  assert.equal(selfBody.old_name, "boss");
-  assert.equal(selfBody.new_name, "Boss Renamed");
-  assert.equal(self.audit.old_name, "boss");
-  assert.equal(self.audit.new_name, "Boss Renamed");
+  assert.equal(selfBody.old_system_prompt, "boss prompt");
+  assert.equal(selfBody.new_system_prompt, "boss prompt v2");
+  assert.equal(self.audit.old_system_prompt, "boss prompt");
+  assert.equal(self.audit.new_system_prompt, "boss prompt v2");
   const [parent] = await handle.db.select().from(agents).where(eq(agents.id, parentId));
-  assert.equal(parent?.name, "Boss Renamed");
+  assert.equal(parent?.systemPrompt, "boss prompt v2");
+  assert.equal(parent?.id, "boss");
 
   const child = await executeTool(runtime.toolContext(parentId, "reasoning"), {
     type: "tool_use",
     id: "rn-child",
     name: MODIFY_AGENT,
-    input: { agent_id: childId, name: "Worker Renamed" },
+    input: { agent_id: childId, system_prompt: "child prompt v2" },
   });
   assert.equal(child.isError, false);
-  assert.equal(JSON.parse(child.content).new_name, "Worker Renamed");
+  assert.equal(JSON.parse(child.content).new_system_prompt, "child prompt v2");
   const [row] = await handle.db.select().from(agents).where(eq(agents.id, childId));
-  assert.equal(row?.name, "Worker Renamed");
+  assert.equal(row?.systemPrompt, "child prompt v2");
+  assert.equal(row?.id, "worker");
 });
 
-test("modify_agent rename of a stranger is rejected", async () => {
+test("modify_agent of a stranger is rejected", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const parentId = await insertWorker(handle.db, {
     name: "parent",
@@ -228,24 +230,20 @@ test("modify_agent rename of a stranger is rejected", async () => {
     type: "tool_use",
     id: "rn-stranger",
     name: MODIFY_AGENT,
-    input: { agent_id: strangerId, name: "Hijacked" },
+    input: { agent_id: strangerId, system_prompt: "hijacked" },
   });
   assert.equal(result.isError, true);
   assert.match(result.content, /direct children/);
   const [row] = await handle.db.select().from(agents).where(eq(agents.id, strangerId));
-  assert.equal(row?.name, "stranger");
+  assert.equal(row?.systemPrompt, "stranger");
 });
 
-test("modify_agent rename collision is a tool error and leaves the row unchanged", async () => {
+test("modify_agent rejects empty updates", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const selfId = await insertWorker(handle.db, {
     name: "alpha",
     systemPrompt: "alpha",
     tools: [MODIFY_AGENT],
-  });
-  await insertAgent(handle.db, {
-    name: "taken",
-    systemPrompt: "taken",
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -259,17 +257,15 @@ test("modify_agent rename collision is a tool error and leaves the row unchanged
   });
   const result = await executeTool(runtime.toolContext(selfId, "reasoning"), {
     type: "tool_use",
-    id: "rn-collision",
+    id: "rn-empty",
     name: MODIFY_AGENT,
-    input: { agent_id: selfId, name: "taken" },
+    input: { agent_id: selfId },
   });
   assert.equal(result.isError, true);
-  assert.match(result.content, /an agent named taken already exists/);
-  const [row] = await handle.db.select().from(agents).where(eq(agents.id, selfId));
-  assert.equal(row?.name, "alpha");
+  assert.match(result.content, /system_prompt or active is required/);
 });
 
-test("modify_agent accepts name alone", async () => {
+test("modify_agent accepts active alone", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const selfId = await insertWorker(handle.db, {
     name: "solo",
@@ -290,13 +286,12 @@ test("modify_agent accepts name alone", async () => {
     type: "tool_use",
     id: "rn-only",
     name: MODIFY_AGENT,
-    input: { agent_id: selfId, name: "Solo Renamed" },
+    input: { agent_id: selfId, active: false },
   });
   assert.equal(result.isError, false);
   const body = JSON.parse(result.content);
-  assert.equal(body.new_name, "Solo Renamed");
   assert.equal(body.new_system_prompt, "keep me");
-  assert.equal(body.active, true);
+  assert.equal(body.active, false);
 });
 
 test("reasoning context has send_message, list_agents, and no dispatch_message", async () => {
@@ -311,6 +306,7 @@ test("reasoning context has send_message, list_agents, and no dispatch_message",
     agentId: workerId,
     lane: "reasoning",
     transcript: new TranscriptStore(),
+    transcriptWindowMessages: 40,
   });
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes(SEND_MESSAGE));
@@ -477,6 +473,7 @@ test("conversation tools are dispatch_message, steer_reasoning, list_agents, yie
     agentId: workerId,
     lane: "conversation",
     transcript: new TranscriptStore(),
+    transcriptWindowMessages: 40,
   });
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes(DISPATCH_MESSAGE));
@@ -502,7 +499,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
     type: "tool_use",
     id: "sp0",
     name: "dimaag_spawn_agent",
-    input: { name: "no-prompt-child" },
+    input: { id: "no-prompt-child" },
   });
   assert.equal(missing.isError, true);
 
@@ -510,7 +507,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
     type: "tool_use",
     id: "sp1",
     name: "dimaag_spawn_agent",
-    input: { name: "fresh-child", system_prompt: "do one job" },
+    input: { id: "fresh-child", system_prompt: "do one job" },
   });
   assert.equal(spawned.isError, false);
   const childId = JSON.parse(spawned.content).agent_id as string;
@@ -519,6 +516,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
     agentId: childId,
     lane: "reasoning",
     transcript: new TranscriptStore(),
+    transcriptWindowMessages: 40,
   });
   assert.deepEqual(
     childCtx.tools.map((tool) => tool.name),
@@ -558,6 +556,7 @@ test("grant_tool on a direct child succeeds and appears in assembleContext", asy
     agentId: childId,
     lane: "reasoning",
     transcript: new TranscriptStore(),
+    transcriptWindowMessages: 40,
   });
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes("dimaag_modify_agent"));
@@ -726,14 +725,13 @@ test("as Dadi, modify_agent can change any agent", async () => {
     name: MODIFY_AGENT,
     input: {
       agent_id: nestedId,
-      name: "Nested Renamed",
       system_prompt: "new",
       active: false,
     },
   });
   assert.equal(result.isError, false, result.content);
   const [row] = await handle.db.select().from(agents).where(eq(agents.id, nestedId));
-  assert.equal(row?.name, "Nested Renamed");
+  assert.equal(row?.id, "nested-mod");
   assert.equal(row?.systemPrompt, "new");
   assert.equal(row?.active, false);
 });
@@ -1137,6 +1135,7 @@ test("revoke_tool removes a grant and fails when the child does not hold it", as
     agentId: childId,
     lane: "reasoning",
     transcript: new TranscriptStore(),
+    transcriptWindowMessages: 40,
   });
   assert.equal(
     ctx.tools.map((tool) => tool.name).includes("dimaag_modify_agent"),
@@ -1181,6 +1180,7 @@ test("an agent can grant a tool it does not itself hold", async () => {
     agentId: parentId,
     lane: "reasoning",
     transcript: new TranscriptStore(),
+    transcriptWindowMessages: 40,
   });
   assert.equal(
     parentCtx.tools.map((tool) => tool.name).includes("dimaag_modify_agent"),
@@ -1202,6 +1202,7 @@ test("an agent can grant a tool it does not itself hold", async () => {
     agentId: childId,
     lane: "reasoning",
     transcript: new TranscriptStore(),
+    transcriptWindowMessages: 40,
   });
   assert.ok(childCtx.tools.map((tool) => tool.name).includes("dimaag_modify_agent"));
 });
@@ -1209,7 +1210,7 @@ test("an agent can grant a tool it does not itself hold", async () => {
 test("list_agents is in both lanes for an agent with no grants", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const agentId = await insertAgent(handle.db, {
-    name: "No Grants",
+    name: "no-grants",
     systemPrompt: "empty",
   });
   const reasoning = await assembleContext({
@@ -1217,12 +1218,14 @@ test("list_agents is in both lanes for an agent with no grants", async () => {
     agentId,
     lane: "reasoning",
     transcript: new TranscriptStore(),
+    transcriptWindowMessages: 40,
   });
   const conversation = await assembleContext({
     db: handle.db,
     agentId,
     lane: "conversation",
     transcript: new TranscriptStore(),
+    transcriptWindowMessages: 40,
   });
   assert.deepEqual(reasoning.tools.map((tool) => tool.name), [
     SEND_MESSAGE,
@@ -1290,14 +1293,14 @@ test("list_agents is absent from GET /tools, the tools table, and grant_tool", a
   assert.match(granted.content, /no tool named list_agents/);
 });
 
-test("list_agents exact name is case-sensitive and empty on miss", async () => {
+test("list_agents exact id is case-sensitive and empty on miss", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const codingId = await insertAgent(handle.db, {
-    name: "Coding Manager",
+    name: "coding-manager",
     systemPrompt: "terminals",
   });
   const callerId = await insertAgent(handle.db, {
-    name: "Caller",
+    name: "caller",
     systemPrompt: "look up",
   });
   const runtime = createRuntime({
@@ -1314,7 +1317,7 @@ test("list_agents exact name is case-sensitive and empty on miss", async () => {
     type: "tool_use",
     id: "la1",
     name: LIST_AGENTS,
-    input: { name: "Coding Manager" },
+    input: { id: "coding-manager" },
   });
   assert.equal(hit.isError, false);
   const hitBody = JSON.parse(hit.content) as {
@@ -1322,7 +1325,7 @@ test("list_agents exact name is case-sensitive and empty on miss", async () => {
   };
   assert.equal(hitBody.agents.length, 1);
   assert.equal(hitBody.agents[0]?.id, codingId);
-  assert.equal(hitBody.agents[0]?.name, "Coding Manager");
+  assert.equal(hitBody.agents[0]?.name, "coding-manager");
   assert.equal(hitBody.agents[0]?.parent_agent_id, null);
   assert.equal(hitBody.agents[0]?.parent_name, null);
   assert.equal(hitBody.agents[0]?.active, true);
@@ -1331,7 +1334,7 @@ test("list_agents exact name is case-sensitive and empty on miss", async () => {
     type: "tool_use",
     id: "la2",
     name: LIST_AGENTS,
-    input: { name: "coding manager" },
+    input: { id: "coding-manger" },
   });
   assert.equal(missCase.isError, false);
   assert.deepEqual(JSON.parse(missCase.content).agents, []);
@@ -1340,7 +1343,7 @@ test("list_agents exact name is case-sensitive and empty on miss", async () => {
     type: "tool_use",
     id: "la3",
     name: LIST_AGENTS,
-    input: { name: "Does Not Exist" },
+    input: { id: "does-not-exist" },
   });
   assert.equal(missName.isError, false);
   assert.deepEqual(JSON.parse(missName.content).agents, []);
@@ -1349,16 +1352,16 @@ test("list_agents exact name is case-sensitive and empty on miss", async () => {
 test("list_agents omits dormant agents unless include_inactive", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const activeId = await insertAgent(handle.db, {
-    name: "Active Root",
+    name: "active-root",
     systemPrompt: "active",
   });
   const dormantId = await insertAgent(handle.db, {
-    name: "Dormant Root",
+    name: "dormant-root",
     systemPrompt: "asleep",
   });
   await handle.db.update(agents).set({ active: false }).where(eq(agents.id, dormantId));
   const callerId = await insertAgent(handle.db, {
-    name: "Lister",
+    name: "lister",
     systemPrompt: "list",
   });
   const runtime = createRuntime({
@@ -1400,18 +1403,18 @@ test("list_agents omits dormant agents unless include_inactive", async () => {
   const dormant = inactiveBody.agents.find((row) => row.id === dormantId);
   assert.ok(dormant);
   assert.equal(dormant.active, false);
-  assert.equal(dormant.name, "Dormant Root");
+  assert.equal(dormant.name, "dormant-root");
 });
 
 test("list_agents resolves parent_name when the parent is dormant", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const parentId = await insertAgent(handle.db, {
-    name: "Dormant Parent",
+    name: "dormant-parent",
     systemPrompt: "asleep",
   });
   await handle.db.update(agents).set({ active: false }).where(eq(agents.id, parentId));
   const childId = await insertAgent(handle.db, {
-    name: "Awake Child",
+    name: "awake-child",
     systemPrompt: "nested",
     parentAgentId: parentId,
   });
@@ -1429,7 +1432,7 @@ test("list_agents resolves parent_name when the parent is dormant", async () => 
     type: "tool_use",
     id: "la7",
     name: LIST_AGENTS,
-    input: { name: "Awake Child" },
+    input: { id: "awake-child" },
   });
   assert.equal(listed.isError, false);
   const body = JSON.parse(listed.content) as {
@@ -1437,26 +1440,26 @@ test("list_agents resolves parent_name when the parent is dormant", async () => 
   };
   assert.equal(body.agents.length, 1);
   assert.equal(body.agents[0]?.parent_agent_id, parentId);
-  assert.equal(body.agents[0]?.parent_name, "Dormant Parent");
+  assert.equal(body.agents[0]?.parent_name, "dormant-parent");
 });
 
 test("list_agents visibility is global across parents", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const rootA = await insertAgent(handle.db, {
-    name: "Root A",
+    name: "root-a",
     systemPrompt: "a",
   });
   const rootB = await insertAgent(handle.db, {
-    name: "Root B",
+    name: "root-b",
     systemPrompt: "b",
   });
   const childOfB = await insertAgent(handle.db, {
-    name: "Child Of B",
+    name: "child-of-b",
     systemPrompt: "nested",
     parentAgentId: rootB,
   });
   const nestedCaller = await insertAgent(handle.db, {
-    name: "Nested Caller",
+    name: "nested-caller",
     systemPrompt: "under a",
     parentAgentId: rootA,
   });
@@ -1492,25 +1495,25 @@ test("list_agents visibility is global across parents", async () => {
   assert.ok(byId.has(childOfB));
   assert.ok(byId.has(nestedCaller));
   assert.equal(byId.get(childOfB)?.parent_agent_id, rootB);
-  assert.equal(byId.get(childOfB)?.parent_name, "Root B");
-  assert.equal(byId.get(nestedCaller)?.parent_name, "Root A");
+  assert.equal(byId.get(childOfB)?.parent_name, "root-b");
+  assert.equal(byId.get(nestedCaller)?.parent_name, "root-a");
 });
 
 test("dimaag_get_logs defaults to caller and allows direct children only", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const parentId = await insertWorker(handle.db, {
-    name: "log parent",
+    name: "log-parent",
     systemPrompt: "parent",
     tools: ["dimaag_get_logs"],
   });
   const childId = await insertWorker(handle.db, {
-    name: "log child",
+    name: "log-child",
     systemPrompt: "child",
     parentAgentId: parentId,
     tools: ["dimaag_get_logs"],
   });
   const strangerId = await insertWorker(handle.db, {
-    name: "log stranger",
+    name: "log-stranger",
     systemPrompt: "stranger",
     tools: ["dimaag_get_logs"],
   });
@@ -1592,12 +1595,12 @@ test("dimaag_get_logs defaults to caller and allows direct children only", async
 test("executeTool denies registry tools without grant or when inactive", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const ungranted = await insertWorker(handle.db, {
-    name: "no grant",
+    name: "no-grant",
     systemPrompt: "none",
     tools: [],
   });
   const dormant = await insertWorker(handle.db, {
-    name: "dormant worker",
+    name: "dormant-worker",
     systemPrompt: "asleep",
     tools: ["yaad_recall"],
   });

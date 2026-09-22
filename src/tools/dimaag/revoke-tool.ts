@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { agentIdSchema } from "../../agent-id.js";
 import { agentTools } from "../../db/schema.js";
 import { defineTool } from "../types.js";
 import { findTool } from "../registry.js";
@@ -7,7 +8,7 @@ import { toolId } from "../sync.js";
 import { ok, fail, requireAgent } from "../shared.js";
 
 const input = z.object({
-  agent_id: z.string().uuid(),
+  agent_id: agentIdSchema,
   tool_name: z.string().min(1),
 });
 

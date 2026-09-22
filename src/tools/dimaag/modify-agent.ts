@@ -1,37 +1,33 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { agents } from "../../db/schema.js";
+import { agentIdSchema } from "../../agent-id.js";
 import { defineTool } from "../types.js";
-import { ok, fail, requireAgent, isUniqueViolation } from "../shared.js";
+import { ok, fail, requireAgent } from "../shared.js";
 
 const input = z
   .object({
-    agent_id: z.string().uuid(),
-    name: z.string().min(1).optional(),
+    agent_id: agentIdSchema,
     system_prompt: z.string().min(1).optional(),
     active: z.boolean().optional(),
   })
-  .refine(
-    (value) =>
-      value.name !== undefined ||
-      value.system_prompt !== undefined ||
-      value.active !== undefined,
-    {
-      message: "name, system_prompt, or active is required",
-    },
-  );
+  .refine((value) => value.system_prompt !== undefined || value.active !== undefined, {
+    message: "system_prompt or active is required",
+  });
 
-/** Update name / system_prompt / active for self or a direct child (any agent as Dadi). */
+/** Update system_prompt / active for self or a direct child (any agent as Dadi). Id is immutable. */
 export const modifyAgent = defineTool({
   name: "dimaag_modify_agent",
   description:
-    "Change an agent's name, system prompt, or active flag. Only the caller or its direct children are allowed. As Dadi, any agent is allowed.",
+    "Change an agent's system prompt or active flag. The agent id is immutable kebab-case and cannot be renamed. Only the caller or its direct children are allowed. As Dadi, any agent is allowed.",
   input,
   inputSchema: {
     type: "object",
     properties: {
-      agent_id: { type: "string", description: "Self or a direct child (any agent as Dadi)" },
-      name: { type: "string", description: "Unique agent name" },
+      agent_id: {
+        type: "string",
+        description: "Self or a direct child (any agent as Dadi); immutable kebab-case id",
+      },
       system_prompt: { type: "string" },
       active: { type: "boolean" },
     },
@@ -47,33 +43,23 @@ export const modifyAgent = defineTool({
       return fail("modify_agent is limited to self or direct children");
     }
 
-    const oldName = target.name;
-    const newName = parsed.name ?? oldName;
     const oldPrompt = target.systemPrompt;
     const newPrompt = parsed.system_prompt ?? oldPrompt;
     const active = parsed.active ?? target.active;
     const now = new Date();
-    try {
-      await ctx.db
-        .update(agents)
-        .set({
-          name: newName,
-          systemPrompt: newPrompt,
-          active,
-          updatedAt: now,
-        })
-        .where(eq(agents.id, target.id));
-    } catch (err) {
-      if (isUniqueViolation(err)) {
-        return fail(`an agent named ${newName} already exists`);
-      }
-      throw err;
-    }
+    await ctx.db
+      .update(agents)
+      .set({
+        systemPrompt: newPrompt,
+        active,
+        updatedAt: now,
+      })
+      .where(eq(agents.id, target.id));
 
     ctx.events.emit({
       type: "agent_modified",
       agent_id: target.id,
-      name: newName,
+      name: target.id,
       active,
       at: now.toISOString(),
     });
@@ -81,15 +67,11 @@ export const modifyAgent = defineTool({
     return ok(
       {
         agent_id: target.id,
-        old_name: oldName,
-        new_name: newName,
         old_system_prompt: oldPrompt,
         new_system_prompt: newPrompt,
         active,
       },
       {
-        old_name: oldName,
-        new_name: newName,
         old_system_prompt: oldPrompt,
         new_system_prompt: newPrompt,
       },

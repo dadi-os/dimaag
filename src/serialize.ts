@@ -33,7 +33,8 @@ function parseLogEvent(value: string): LogEvent {
 export function toAgentRecord(row: AgentRow): Omit<AgentRecord, "running" | "sessions"> {
   return {
     id: row.id,
-    name: row.name,
+    /** Display alias of the immutable kebab-case id (Hath / roster compat). */
+    name: row.id,
     system_prompt: row.systemPrompt,
     parent_agent_id: row.parentAgentId,
     active: row.active,

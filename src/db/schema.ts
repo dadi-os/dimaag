@@ -1,6 +1,7 @@
-/** Drizzle table definitions for agents, logs, tools, grants, and scheduled messages. */
+/** Drizzle table definitions for agents, logs, tools, grants, messages, and schedules. */
 
 import {
+  bigint,
   boolean,
   check,
   index,
@@ -21,17 +22,20 @@ const timestamptz = (name: string) => timestamp(name, { withTimezone: true, mode
 export const agents = pgTable(
   "agents",
   {
-    id: uuid("id").primaryKey(),
-    name: text("name").notNull(),
+    /** Immutable kebab-case id; also the human-readable address (`browser-manager`). */
+    id: text("id").primaryKey(),
     systemPrompt: text("system_prompt").notNull(),
-    parentAgentId: uuid("parent_agent_id").references((): AnyPgColumn => agents.id),
+    parentAgentId: text("parent_agent_id").references((): AnyPgColumn => agents.id),
     active: boolean("active").notNull().default(true),
     createdAt: timestamptz("created_at").notNull().defaultNow(),
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("agents_name_idx").on(table.name),
     index("agents_parent_agent_id_idx").on(table.parentAgentId),
+    check(
+      "agents_id_kebab_check",
+      sql`${table.id} ~ '^[a-z][a-z0-9]*(-[a-z0-9]+)*$'`,
+    ),
   ],
 );
 
@@ -39,7 +43,7 @@ export const agentLogs = pgTable(
   "agent_logs",
   {
     id: uuid("id").primaryKey(),
-    agentId: uuid("agent_id")
+    agentId: text("agent_id")
       .notNull()
       .references(() => agents.id),
     lane: text("lane").notNull(),
@@ -73,7 +77,7 @@ export const tools = pgTable(
 export const agentTools = pgTable(
   "agent_tools",
   {
-    agentId: uuid("agent_id")
+    agentId: text("agent_id")
       .notNull()
       .references(() => agents.id),
     toolId: uuid("tool_id")
@@ -83,6 +87,32 @@ export const agentTools = pgTable(
     createdAt: timestamptz("created_at").notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.agentId, table.toolId] })],
+);
+
+/**
+ * Durable chat / lane transcript. Survives restart. Null party = human.
+ * `seq` is stable across process restarts (identity column).
+ */
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid("id").primaryKey(),
+    seq: bigint("seq", { mode: "number" }).generatedAlwaysAsIdentity().notNull(),
+    fromAgentId: text("from_agent_id").references(() => agents.id),
+    toAgentId: text("to_agent_id").references(() => agents.id),
+    content: text("content").notNull(),
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("messages_seq_idx").on(table.seq),
+    index("messages_to_agent_id_seq_idx").on(table.toAgentId, table.seq),
+    index("messages_from_agent_id_seq_idx").on(table.fromAgentId, table.seq),
+    index("messages_created_at_idx").on(table.createdAt),
+    check(
+      "messages_party_check",
+      sql`${table.fromAgentId} IS NOT NULL OR ${table.toAgentId} IS NOT NULL`,
+    ),
+  ],
 );
 
 /**
@@ -98,10 +128,10 @@ export const scheduledMessages = pgTable(
   "scheduled_messages",
   {
     id: uuid("id").primaryKey(),
-    fromAgentId: uuid("from_agent_id")
+    fromAgentId: text("from_agent_id")
       .notNull()
       .references(() => agents.id),
-    toAgentId: uuid("to_agent_id")
+    toAgentId: text("to_agent_id")
       .notNull()
       .references(() => agents.id),
     content: text("content").notNull(),
@@ -124,6 +154,7 @@ export const scheduledMessages = pgTable(
 
 export type AgentRow = typeof agents.$inferSelect;
 export type AgentLogRow = typeof agentLogs.$inferSelect;
+export type MessageRow = typeof messages.$inferSelect;
 export type ToolRow = typeof tools.$inferSelect;
 export type AgentToolRow = typeof agentTools.$inferSelect;
 export type ScheduledMessageRow = typeof scheduledMessages.$inferSelect;

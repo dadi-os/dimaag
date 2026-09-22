@@ -1,6 +1,8 @@
-/** In-process replacement for the messages table. Dies with the process, same as locks/steer/intents. */
+/** In-process cache of durable messages. Hydrated from DB on boot; dies with the process. */
 
 export type TranscriptEntry = {
+  /** Durable messages.id when loaded from or written to the messages table. */
+  id?: string;
   seq: number;
   fromAgentId: string | null;
   toAgentId: string | null;
@@ -13,34 +15,53 @@ export class TranscriptStore {
   private readonly inbox = new Map<string, TranscriptEntry[]>();
   private readonly outbox = new Map<string, TranscriptEntry[]>();
 
-  /** Records one message. Call once per dispatch; inbox/outbox are updated from the row. */
-  append(entry: { fromAgentId: string | null; toAgentId: string | null; content: string }): TranscriptEntry {
-    const row: TranscriptEntry = { seq: ++this.counter, ...entry, createdAt: new Date() };
-    if (entry.toAgentId !== null) {
-      const list = this.inbox.get(entry.toAgentId) ?? [];
+  /**
+   * Ingest a durable (or test) row into inbox/outbox. Advances the local seq
+   * watermark so later appends do not collide when used in unit tests.
+   */
+  ingest(row: TranscriptEntry): void {
+    this.counter = Math.max(this.counter, row.seq);
+    if (row.toAgentId !== null) {
+      const list = this.inbox.get(row.toAgentId) ?? [];
       list.push(row);
-      this.inbox.set(entry.toAgentId, list);
+      this.inbox.set(row.toAgentId, list);
     }
-    if (entry.fromAgentId !== null) {
-      const list = this.outbox.get(entry.fromAgentId) ?? [];
+    if (row.fromAgentId !== null) {
+      const list = this.outbox.get(row.fromAgentId) ?? [];
       list.push(row);
-      this.outbox.set(entry.fromAgentId, list);
+      this.outbox.set(row.fromAgentId, list);
     }
+  }
+
+  /**
+   * Records one message with a process-local seq. Prefer insertMessage + ingest
+   * on the live path; tests may still call append directly.
+   */
+  append(entry: {
+    fromAgentId: string | null;
+    toAgentId: string | null;
+    content: string;
+    id?: string;
+  }): TranscriptEntry {
+    const row: TranscriptEntry = {
+      seq: ++this.counter,
+      fromAgentId: entry.fromAgentId,
+      toAgentId: entry.toAgentId,
+      content: entry.content,
+      createdAt: new Date(),
+      ...(entry.id !== undefined ? { id: entry.id } : {}),
+    };
+    this.ingest(row);
     return row;
   }
 
   /**
-   * Same computation assembleContext always did: every message this agent received,
-   * plus its own outgoing messages to the counterparty of the most recent inbound.
+   * Every inbound message for this agent plus every outbound message from it,
+   * sorted by seq.
    */
   transcriptFor(agentId: string): TranscriptEntry[] {
     const inbound = this.inbox.get(agentId) ?? [];
-    const latest = inbound[inbound.length - 1];
-    let outgoing: TranscriptEntry[] = [];
-    if (latest) {
-      const counterpart = latest.fromAgentId;
-      outgoing = (this.outbox.get(agentId) ?? []).filter((row) => row.toAgentId === counterpart);
-    }
+    const outgoing = this.outbox.get(agentId) ?? [];
     const bySeq = new Map<number, TranscriptEntry>();
     for (const row of inbound) bySeq.set(row.seq, row);
     for (const row of outgoing) bySeq.set(row.seq, row);

@@ -27,12 +27,12 @@ export type ToolExecResult = {
   audit: Record<string, unknown>;
 };
 
-/** Who is invoking a tool: an agents-row UUID, or a synthetic CLI identity. */
+/** Who is invoking a tool: an agents-row kebab id, or a synthetic CLI identity. */
 export type ToolCallerKind = "agent" | "dadi" | "user";
 
 export type ToolContext = {
   db: Db;
-  /** Agent UUID when `callerKind` is `agent`; null for `dadi` and `user`. */
+  /** Agent kebab-case id when `callerKind` is `agent`; null for `dadi` and `user`. */
   callerId: string | null;
   /** Distinguishes synthetic CLI callers when `callerId` is null. */
   callerKind: ToolCallerKind;

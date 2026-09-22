@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { agentIdSchema } from "../../agent-id.js";
 import { scheduledMessages } from "../../db/schema.js";
 import { defineTool } from "../types.js";
 import { ok, fail, requireAgent, failWithoutAgentIdentity } from "../shared.js";
 
 const input = z.object({
-  to_agent_id: z.string().uuid(),
+  to_agent_id: agentIdSchema,
   content: z.string().min(1),
   run_at: z.string().datetime({ offset: true }),
   interval_minutes: z.number().int().min(1).optional(),

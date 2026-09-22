@@ -2,10 +2,10 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { agentIdSchema } from "../agent-id.js";
 import { agentTools, agents } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
 import { patchMessageContent } from "../runtime/attachments.js";
@@ -20,7 +20,7 @@ import { formatZod, postDadiBody, parse } from "./schemas.js";
 const decideTool: DwarTool = {
   name: "decide",
   description:
-    "Choose reuse, spawn, or modify. Call exactly once. thread_id must be a listed id when reusing or modifying.",
+    "Choose reuse, spawn, or modify. Call exactly once. thread_id must be a listed id when reusing or modifying. Spawn uses an immutable kebab-case id (not a separate name). Modify cannot rename.",
   input_schema: {
     type: "object",
     properties: {
@@ -32,7 +32,11 @@ const decideTool: DwarTool = {
         type: "string",
         description: "Existing top-level thread to reuse, or any agent to modify",
       },
-      name: { type: "string", description: "Unique name when spawning or renaming" },
+      id: {
+        type: "string",
+        description:
+          "Immutable kebab-case agent id when spawning (e.g. finance-specialist, coding-manager)",
+      },
       system_prompt: {
         type: "string",
         description: "Job prompt when spawning, or replacement prompt when modifying",
@@ -69,20 +73,19 @@ const grantEntry = z.object({
 
 const reuseDecision = z.object({
   action: z.literal("reuse"),
-  thread_id: z.string().uuid(),
+  thread_id: agentIdSchema,
 });
 
 const spawnDecision = z.object({
   action: z.literal("spawn"),
-  name: z.string().min(1),
+  id: agentIdSchema,
   system_prompt: z.string().min(1),
   grants: z.array(grantEntry).optional(),
 });
 
 const modifyDecision = z.object({
   action: z.literal("modify"),
-  thread_id: z.string().uuid(),
-  name: z.string().min(1).optional(),
+  thread_id: agentIdSchema,
   system_prompt: z.string().min(1).optional(),
   active: z.boolean().optional(),
 });
@@ -92,13 +95,12 @@ const decideInput = z
   .superRefine((value, ctx) => {
     if (
       value.action === "modify" &&
-      value.name === undefined &&
       value.system_prompt === undefined &&
       value.active === undefined
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "name, system_prompt, or active is required",
+        message: "system_prompt or active is required",
       });
     }
   });
@@ -183,7 +185,7 @@ async function routeDadi(
       app.runtime.events.emit({
         type: "agent_modified",
         agent_id: thread.id,
-        name: thread.name,
+        name: thread.id,
         active: true,
         at: now.toISOString(),
       });
@@ -193,7 +195,7 @@ async function routeDadi(
 
   if (parsed.data.action === "spawn") {
     const grants = parsed.data.grants ?? [];
-    const spawnName = parsed.data.name;
+    const spawnId = parsed.data.id;
     const spawnPrompt = parsed.data.system_prompt;
     const seenTools = new Set<string>();
     for (const grant of grants) {
@@ -209,19 +211,17 @@ async function routeDadi(
         throw new DimaagError(422, "invalid_request", `no tool named ${grant.tool_name}`);
       }
     }
-    const id = randomUUID();
     try {
       await app.db.transaction(async (tx) => {
         await tx.insert(agents).values({
-          id,
-          name: spawnName,
+          id: spawnId,
           systemPrompt: spawnPrompt,
           parentAgentId: null,
           active: true,
         });
         for (const grant of grants) {
           await tx.insert(agentTools).values({
-            agentId: id,
+            agentId: spawnId,
             toolId: toolId(grant.tool_name),
             usage: grant.usage,
           });
@@ -232,53 +232,44 @@ async function routeDadi(
         throw new DimaagError(
           409,
           "conflict",
-          `an agent named ${spawnName} already exists`,
+          `an agent with id ${spawnId} already exists`,
         );
       }
       throw err;
     }
     app.runtime.events.emit({
       type: "agent_spawned",
-      agent_id: id,
+      agent_id: spawnId,
       parent_agent_id: null,
-      name: spawnName,
+      name: spawnId,
       at: new Date().toISOString(),
     });
-    return deliverRouted(app, id, content, true);
+    return deliverRouted(app, spawnId, content, true);
   }
 
   const target = await requireAgent(app.db, parsed.data.thread_id);
   const now = new Date();
-  const name = parsed.data.name ?? target.name;
   const systemPrompt = parsed.data.system_prompt ?? target.systemPrompt;
   const active = parsed.data.active ?? target.active;
-  try {
-    await app.db
-      .update(agents)
-      .set({
-        name,
-        systemPrompt,
-        active,
-        updatedAt: now,
-      })
-      .where(eq(agents.id, target.id));
-  } catch (err) {
-    if (isUniqueViolation(err)) {
-      throw new DimaagError(409, "conflict", `an agent named ${name} already exists`);
-    }
-    throw err;
-  }
+  await app.db
+    .update(agents)
+    .set({
+      systemPrompt,
+      active,
+      updatedAt: now,
+    })
+    .where(eq(agents.id, target.id));
   app.runtime.events.emit({
     type: "agent_modified",
     agent_id: target.id,
-    name,
+    name: target.id,
     active,
     at: now.toISOString(),
   });
   return {
     action: "modified",
     agent_id: target.id,
-    name,
+    name: target.id,
     active,
     system_prompt: systemPrompt,
   };
@@ -316,7 +307,6 @@ async function listTopLevelThreads(app: FastifyInstance): Promise<string[]> {
   const rows = await app.db
     .select({
       id: agents.id,
-      name: agents.name,
       active: agents.active,
       systemPrompt: agents.systemPrompt,
     })
@@ -326,7 +316,7 @@ async function listTopLevelThreads(app: FastifyInstance): Promise<string[]> {
     const purpose = row.systemPrompt.trim().split(/\n/)[0] ?? "";
     const brief = purpose.length > 120 ? `${purpose.slice(0, 117)}…` : purpose;
     const status = row.active ? "active" : "dormant";
-    const head = `- ${row.name} (${row.id}) [${status}]`;
+    const head = `- ${row.id} [${status}]`;
     return brief ? `${head}: ${brief}` : head;
   });
 }

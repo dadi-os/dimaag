@@ -1,12 +1,18 @@
-/** `POST /messages` — deliver a user message (optional image attachments) to an agent. */
+/** `POST /messages` — deliver a user message; `GET /threads` — human↔agent summaries. */
 
 import type { FastifyInstance } from "fastify";
+import { listThreads } from "../db/messages.js";
 import { patchMessageContent } from "../runtime/attachments.js";
 import { deliverUserMessage } from "../runtime/deliver.js";
 import { requireAgent } from "../runtime/tools.js";
 import { postMessageBody, parse } from "./schemas.js";
 
 export async function registerMessages(app: FastifyInstance): Promise<void> {
+  app.get("/threads", async () => {
+    const threads = await listThreads(app.db);
+    return { threads };
+  });
+
   app.post("/messages", async (request, reply) => {
     const body = parse(postMessageBody, request.body);
     await requireAgent(app.db, body.to_agent_id);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentIdSchema } from "../../agent-id.js";
 import { agentTools } from "../../db/schema.js";
 import { defineTool } from "../types.js";
 import { findTool } from "../registry.js";
@@ -6,7 +7,7 @@ import { toolId } from "../sync.js";
 import { ok, fail, requireAgent } from "../shared.js";
 
 const input = z.object({
-  agent_id: z.string().uuid(),
+  agent_id: agentIdSchema,
   tool_name: z.string().min(1),
   usage: z.string().min(1),
 });
@@ -15,12 +16,15 @@ const input = z.object({
 export const grantTool = defineTool({
   name: "dimaag_grant_tool",
   description:
-    "Give one of your direct children a tool. As Dadi, any agent is allowed. usage explains when and why that specific agent should reach for it, which the child sees alongside the tool's own description.",
+    "Give one of your direct children a tool. As Dadi, any agent is allowed. usage explains when and why that specific agent should reach for it, which the child sees alongside the tool's own description. When you are unsure of exact registry names for a suite (chaavi_, browser_, terminal_, …), call dimaag_list_tools first.",
   input,
   inputSchema: {
     type: "object",
     properties: {
-      agent_id: { type: "string", description: "A direct child of yours (any agent as Dadi)" },
+      agent_id: {
+        type: "string",
+        description: "A direct child of yours (any agent as Dadi); immutable kebab-case id",
+      },
       tool_name: { type: "string", description: "Registry tool name" },
       usage: {
         type: "string",

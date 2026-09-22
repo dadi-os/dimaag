@@ -22,6 +22,7 @@ const tomlPath = join(serviceRoot, "config.toml");
 const fileSchema = z.object({
   runtime: z.object({
     lane_queue_timeout_ms: z.number().int().positive(),
+    transcript_window_messages: z.number().int().positive(),
   }),
   dwar: z.object({
     timeout_ms: z.number().int().positive(),

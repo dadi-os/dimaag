@@ -70,7 +70,7 @@ after(async () => {
 });
 
 test("allTools includes the three schedule tools", async () => {
-  assert.equal(allTools().length, 64);
+  assert.equal(allTools().length, 65);
   assert.equal(findTool("dimaag_schedule_message")?.name, "dimaag_schedule_message");
   assert.equal(findTool("dimaag_list_schedules")?.name, "dimaag_list_schedules");
   assert.equal(findTool("dimaag_cancel_schedule")?.name, "dimaag_cancel_schedule");
@@ -480,13 +480,13 @@ test("tick error is isolated and a later tick still runs", async () => {
     config,
     log,
   });
-  const original = runtime.transcript.append.bind(runtime.transcript);
-  runtime.transcript.append = () => {
+  const original = runtime.transcript.ingest.bind(runtime.transcript);
+  runtime.transcript.ingest = () => {
     throw new Error("forced delivery failure");
   };
   await runtime.scheduler.tick();
   assert.ok(errors.some((entry) => entry.code === "schedule_tick_failed"));
-  runtime.transcript.append = original;
+  runtime.transcript.ingest = original;
 
   const secondId = randomUUID();
   await handle.db.insert(scheduledMessages).values({
@@ -545,7 +545,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
     id: "s-missing",
     name: "dimaag_schedule_message",
     input: {
-      to_agent_id: randomUUID(),
+      to_agent_id: "missing-peer-agent",
       content: "no",
       run_at: future,
     },

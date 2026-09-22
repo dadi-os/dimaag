@@ -236,6 +236,7 @@ export function createRuntime(opts: {
         agentId,
         lane,
         transcript,
+        transcriptWindowMessages: opts.config.runtime.transcript_window_messages,
       });
     const exec = (call: DwarToolUseBlock) => executeTool(toolContext(agentId, lane), call);
     const logThought = (response: DwarChatResponse) =>

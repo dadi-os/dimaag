@@ -1,4 +1,5 @@
 import type { Db } from "../db/client.js";
+import { insertMessage, messageToTranscriptEntry } from "../db/messages.js";
 import { writeAgentLog } from "../db/logs.js";
 import type { EventBus } from "./events.js";
 import type { TranscriptEntry, TranscriptStore } from "./transcript.js";
@@ -19,18 +20,23 @@ export async function deliverUserMessage(
   toAgentId: string,
   content: string,
 ): Promise<TranscriptEntry> {
-  const row = deps.transcript.append({
+  const stored = await insertMessage(deps.db, {
     fromAgentId: null,
     toAgentId,
     content,
   });
+  const row = messageToTranscriptEntry(stored);
+  deps.transcript.ingest(row);
+  if (row.id === undefined) {
+    throw new Error("durable message missing id");
+  }
   await writeAgentLog(deps.db, {
     agentId: toAgentId,
     lane: "conversation",
     event: "message",
     payload: {
       direction: "receive",
-      message_id: null,
+      message_id: row.id,
       from_agent_id: null,
       to_agent_id: row.toAgentId,
       content: row.content,
@@ -64,18 +70,23 @@ export async function deliverAgentMessage(
   },
 ): Promise<TranscriptEntry> {
   const extra = args.extraPayload ?? {};
-  const row = deps.transcript.append({
+  const stored = await insertMessage(deps.db, {
     fromAgentId: args.fromAgentId,
     toAgentId: args.toAgentId,
     content: args.content,
   });
+  const row = messageToTranscriptEntry(stored);
+  deps.transcript.ingest(row);
+  if (row.id === undefined) {
+    throw new Error("durable message missing id");
+  }
   await writeAgentLog(deps.db, {
     agentId: args.fromAgentId,
     lane: "conversation",
     event: "message",
     payload: {
       direction: "send",
-      message_id: null,
+      message_id: row.id,
       from_agent_id: args.fromAgentId,
       to_agent_id: row.toAgentId,
       content: row.content,
@@ -90,7 +101,7 @@ export async function deliverAgentMessage(
       event: "message",
       payload: {
         direction: "receive",
-        message_id: null,
+        message_id: row.id,
         from_agent_id: args.fromAgentId,
         to_agent_id: row.toAgentId,
         content: row.content,

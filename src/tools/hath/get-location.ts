@@ -12,7 +12,7 @@ const input = z
 export const getLocation = defineTool({
   name: "hath_get_location",
   description:
-    "Get latitude, longitude, accuracy (meters), and timestamp from a Hath client. Fails with permission_denied when the user has not granted location access.",
+    "Get latitude, longitude, accuracy (meters), UTC timestamp, and a human address when available from a Hath client (street address on Apple via reverse geocode; city/region on Windows). Fails with permission_denied when the user has not granted location access; capability_unsupported on platforms without a native location API.",
   input,
   inputSchema: {
     type: "object",

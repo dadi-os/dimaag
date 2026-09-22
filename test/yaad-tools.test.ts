@@ -52,7 +52,7 @@ test("Yaad tools are registered and syncTools does not auto-grant", async () => 
   for (const name of YAAD_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 64);
+  assert.equal(allTools().length, 65);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   assert.equal(grants.length, 0);
@@ -71,6 +71,7 @@ test("assembleContext for a worker includes Yaad tools, send_message, and yield 
     agentId: workerId,
     lane: "reasoning",
     transcript: new TranscriptStore(),
+    transcriptWindowMessages: 40,
   });
   const names = new Set(ctx.tools.map((tool) => tool.name));
   for (const name of [...granted, SEND_MESSAGE, LIST_AGENTS, "yield"]) {

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { AGENT_ID_PATTERN } from "../src/agent-id.js";
 import type { Config } from "../src/config.js";
 import { loadConfig } from "../src/config.js";
 import { createDb, type Db, type Sql } from "../src/db/client.js";
@@ -150,7 +150,7 @@ export function mockDwar(opts: {
             type: "tool_use",
             id: "decide-1",
             name: "decide",
-            input: { action: "spawn", name: "thread", system_prompt: "do the job" },
+            input: { action: "spawn", id: "thread", system_prompt: "do the job" },
           },
         ],
         stop_reason: "tool_use",
@@ -619,7 +619,7 @@ export async function openTestDb(): Promise<{ db: Db; sql: Sql; close: () => Pro
 }
 
 export async function resetRuntime(sql: Sql, db: Db, _config: Config): Promise<void> {
-  await sql`TRUNCATE scheduled_messages, agent_logs, agent_tools, tools, agents CASCADE`;
+  await sql`TRUNCATE scheduled_messages, messages, agent_logs, agent_tools, tools, agents CASCADE`;
   await syncTools(db);
 }
 
@@ -627,7 +627,8 @@ export async function resetRuntime(sql: Sql, db: Db, _config: Config): Promise<v
 export async function insertWorker(
   db: Db,
   args: {
-    name: string;
+    id?: string;
+    name?: string;
     systemPrompt: string;
     parentAgentId?: string | null;
     tools: readonly string[];
@@ -649,13 +650,14 @@ const MANAGER_TOOLS = [
   "dimaag_modify_agent",
   "dimaag_grant_tool",
   "dimaag_revoke_tool",
+  "dimaag_list_tools",
 ] as const;
 
 /** Agent that can spawn/grant/revoke/modify children. */
 export async function insertManager(
   db: Db,
-  args: { name: string; systemPrompt: string } = {
-    name: "manager",
+  args: { id?: string; name?: string; systemPrompt: string } = {
+    id: "manager",
     systemPrompt: "manage children",
   },
 ): Promise<string> {
@@ -670,14 +672,27 @@ export async function insertManager(
   return id;
 }
 
+/** insertAgent creates an agent row; `id` is kebab-case (`name` accepted as alias). */
 export async function insertAgent(
   db: Db,
-  args: { name: string; systemPrompt: string; parentAgentId?: string | null },
+  args: {
+    id?: string;
+    name?: string;
+    systemPrompt: string;
+    parentAgentId?: string | null;
+  },
 ): Promise<string> {
-  const id = randomUUID();
+  const id = args.id ?? args.name;
+  if (id === undefined) {
+    throw new Error("insertAgent requires id (or name alias)");
+  }
+  if (!AGENT_ID_PATTERN.test(id)) {
+    throw new Error(
+      `insertAgent id must be kebab-case matching ${AGENT_ID_PATTERN}: got ${JSON.stringify(id)}`,
+    );
+  }
   await db.insert(agents).values({
     id,
-    name: args.name,
     systemPrompt: args.systemPrompt,
     parentAgentId: args.parentAgentId ?? null,
     active: true,

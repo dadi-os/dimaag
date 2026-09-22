@@ -34,6 +34,32 @@ test("findTool returns undefined for a name not in the registry", () => {
 test("findTool returns registered tools", () => {
   assert.equal(findTool("dimaag_spawn_agent")?.name, "dimaag_spawn_agent");
   assert.equal(findTool("dimaag_grant_tool")?.name, "dimaag_grant_tool");
+  assert.equal(findTool("dimaag_list_tools")?.name, "dimaag_list_tools");
+});
+
+test("dimaag_list_tools returns registry entries and honors prefix", async () => {
+  const tool = findTool("dimaag_list_tools");
+  assert.ok(tool);
+  const ctx = {} as never;
+  const all = await tool.handler(ctx, {});
+  assert.equal(all.isError, false);
+  const allBody = JSON.parse(all.content) as {
+    tools: { name: string; description: string }[];
+    count: number;
+  };
+  assert.ok(allBody.count >= 1);
+  assert.ok(allBody.tools.some((row) => row.name === "dimaag_list_tools"));
+  assert.ok(allBody.tools.every((row) => row.description.length > 0));
+
+  const filtered = await tool.handler(ctx, { prefix: "dimaag_" });
+  assert.equal(filtered.isError, false);
+  const filteredBody = JSON.parse(filtered.content) as {
+    tools: { name: string }[];
+    count: number;
+  };
+  assert.ok(filteredBody.count >= 1);
+  assert.ok(filteredBody.tools.every((row) => row.name.startsWith("dimaag_")));
+  assert.ok(filteredBody.count < allBody.count);
 });
 
 test("syncTools prunes grants and tool rows not in the registry", async () => {
