@@ -2,6 +2,9 @@
  * Agent runtime: lane locks, steer/intent queues, transcript, and lane runners.
  * Conversation enqueue always schedules a run — the lane lock serializes concurrent
  * wakes so a second user message is not dropped while conversation is busy.
+ * Reasoning does not wake conversation on exit; send_message already enqueues when
+ * it queues an intent. A blanket wake races a follow-up run whose transcript ends
+ * on an assistant turn, which chat providers reject.
  */
 
 import { eq } from "drizzle-orm";
@@ -219,7 +222,6 @@ export function createRuntime(opts: {
     } finally {
       release?.();
       if (lane === "reasoning") {
-        enqueueConversation(agentId);
         if (steer.hasItems(agentId)) {
           enqueueReasoning(agentId);
         }

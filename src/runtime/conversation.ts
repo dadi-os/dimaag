@@ -22,6 +22,8 @@ export type ConversationLoopDeps = {
  * no tools is treated as a degraded exit (provider failure), not the happy path.
  * Scratchpad holds mid-turn tool results only — cleared when the turn ends so
  * prior yields cannot few-shot the next wake.
+ * Skips the provider call when the assembled history is empty or ends on an
+ * assistant turn with no drained intent — providers reject those requests.
  */
 export async function runConversationLoop(deps: ConversationLoopDeps): Promise<void> {
   const scratchpad = deps.scratchpad;
@@ -32,6 +34,11 @@ export async function runConversationLoop(deps: ConversationLoopDeps): Promise<v
     const intents = deps.intents.drain(deps.agentId);
     if (intents.length > 0) {
       messages.push({ role: "user", content: formatIntentTurn(intents) });
+    }
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "user") {
+      scratchpad.length = 0;
+      return;
     }
 
     const response = await deps.converse({

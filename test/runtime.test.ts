@@ -32,6 +32,8 @@ import {
   resetRuntime,
   silentLog,
   testConfig,
+  toolUse,
+  yieldTurn,
 } from "./helpers.js";
 
 const config = testConfig();
@@ -371,6 +373,96 @@ test("a steer with reasoning idle starts a Dwar reasoning call", async () => {
   assert.ok(first);
   const blob = JSON.stringify(first.messages);
   assert.match(blob, /wake up/);
+});
+
+test("reasoning exit without send_message does not wake conversation", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const callerId = await insertAgent(handle.db, {
+    name: "quiet-reasoner",
+    systemPrompt: "think quietly",
+  });
+  const dwar = mockDwar({
+    reason: async () => yieldTurn("r-yield"),
+    converse: async () => endTurn(),
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar,
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    yaad: mockYaad(),
+    config,
+    log: silentLog,
+  });
+  runtime.transcript.append({
+    fromAgentId: null,
+    toAgentId: callerId,
+    content: "earlier user note",
+  });
+  runtime.transcript.append({
+    fromAgentId: callerId,
+    toAgentId: null,
+    content: "already replied",
+  });
+  await executeTool(runtime.toolContext(callerId, "conversation"), {
+    type: "tool_use",
+    id: "s-quiet",
+    name: "steer_reasoning",
+    input: { instruction: "think then stop" },
+  });
+  await runtime.waitUntilIdle();
+  assert.ok(dwar.reasoningCalls.length >= 1);
+  assert.equal(dwar.conversationCalls.length, 0);
+});
+
+test("send_message wakes conversation once; reasoning exit does not double-wake", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const callerId = await insertAgent(handle.db, {
+    name: "handoff-reasoner",
+    systemPrompt: "hand off",
+  });
+  let reasonTurn = 0;
+  const dwar = mockDwar({
+    reason: async () => {
+      reasonTurn += 1;
+      if (reasonTurn === 1) {
+        return toolUse(
+          SEND_MESSAGE,
+          { to_agent_id: null, intent: "say hi" },
+          "sm-1",
+        );
+      }
+      return yieldTurn("r-yield");
+    },
+    converse: async () => yieldTurn("c-yield"),
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar,
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    yaad: mockYaad(),
+    config,
+    log: silentLog,
+  });
+  await executeTool(runtime.toolContext(callerId, "conversation"), {
+    type: "tool_use",
+    id: "s-handoff",
+    name: "steer_reasoning",
+    input: { instruction: "compose a hello" },
+  });
+  await runtime.waitUntilIdle();
+  assert.ok(dwar.reasoningCalls.length >= 1);
+  assert.equal(dwar.conversationCalls.length, 1);
+  const converse = dwar.conversationCalls[0];
+  assert.ok(converse);
+  const blob = JSON.stringify(converse.messages);
+  assert.match(blob, /say hi/);
+  const last = converse.messages[converse.messages.length - 1];
+  assert.ok(last);
+  assert.equal(last.role, "user");
 });
 
 test("conversation tools are dispatch_message, steer_reasoning, list_agents, yield — never route_message", async () => {
