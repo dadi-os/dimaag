@@ -207,7 +207,7 @@ Schedule tools (`dimaag_schedule_message`, `dimaag_list_schedules`, `dimaag_canc
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/health` | `{ "status": "ok" }` |
+| `GET` | `/health` | `{ "status": "ok", "started_at": "<iso>" }` — process lifetime for live transcript |
 | `POST` | `/dadi` | router: classify once, then spawn/reuse/modify |
 | `POST` | `/messages` | user → agent; images described via Dwar |
 | `GET` | `/events` | SSE live events; no replay |

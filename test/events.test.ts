@@ -132,6 +132,26 @@ test("POST /messages emits a message event", async () => {
   await app.close();
 });
 
+test("GET /health includes started_at for live-transcript alignment", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const app = await buildApp(config, {
+    db: handle.db,
+    sql: handle.sql,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+  });
+  const res = await app.inject({ method: "GET", url: "/health" });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { status?: string; started_at?: string };
+  assert.equal(body.status, "ok");
+  assert.equal(typeof body.started_at, "string");
+  assert.ok(body.started_at && !Number.isNaN(Date.parse(body.started_at)));
+  await app.close();
+});
+
 test("dispatch_message emits message with agent_id set to the recipient", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const callerId = await insertWorker(handle.db, {

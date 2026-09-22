@@ -116,7 +116,9 @@ export async function buildApp(
     });
   });
 
-  app.get("/health", async () => ({ status: "ok" }));
+  /** Process start — Hath uses this to drop chat that predates the live transcript. */
+  const startedAt = new Date().toISOString();
+  app.get("/health", async () => ({ status: "ok", started_at: startedAt }));
   await app.register(registerV1);
   return app;
 }
