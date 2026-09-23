@@ -25,22 +25,25 @@ const OLDER_HISTORY_HINT =
 /**
  * laneBlock tells the model which lane it is on. Conversation never sees
  * granted domain tools; without this text it invents "tools are missing."
+ * Do not catalog specific registry tool names here — only lane roles.
  */
 function laneBlock(lane: Lane): string {
   if (lane === "conversation") {
     return [
       "You are on the conversation lane.",
-      "Your only tools here are dispatch_message, steer_reasoning, list_agents, and yield.",
-      "Granted domain tools (browser_*, terminal_*, chaavi_*, dimaag_spawn_agent, dimaag_grant_tool, and the rest) live on the reasoning lane. They are not missing from your agent — they are simply not bound to this lane.",
-      "When work needs those tools, call steer_reasoning with a concrete instruction (what to do, and which browser_id or terminal_id when known). Do not tell the user or another agent that you lack tools, grants, or spawn capability because you cannot see them here.",
-      "A not_found on a browser_id or terminal_id means that session is not running — steer reasoning to bring it back (or ask your parent) — it is not a missing-tool problem.",
-      "Compose and send with dispatch_message; end the turn with yield.",
+      "You manage this agent's reasoning lane and its messages to other agents and the user.",
+      "Your tools here are dispatch_message, steer_reasoning, list_agents, and yield only.",
+      "Granted domain tools run on the reasoning lane. They are not missing — they are not bound to this lane. Steer reasoning to do domain work; use terminate on steer_reasoning to halt reasoning so its next tool call does not run.",
+      "Never tell anyone you lack grants or spawn capability because you cannot see domain tools here.",
+      "Do not claim another agent is working unless you have already dispatched to them. End the turn with yield.",
     ].join("\n");
   }
   return [
     "You are on the reasoning lane.",
-    "Your granted domain tools are available here, along with send_message, list_agents, and yield. Use the granted tools to do the work.",
-    "A not_found on a browser_id or terminal_id means that session is not running (often after a host or process restart). Bring it back if you hold the pool spawn tool, or report that exact error to your parent — do not claim your tools are missing.",
+    "Your granted domain tools are available here, along with send_message, list_agents, and yield. Use only the tools listed in this request — do not invent tool names.",
+    "If a tool returns an error, do not repeat the same call with the same arguments. Change approach, or send_message to escalate.",
+    "If you lack a capability you need, message your parent to request the grant and state your case. Keep task dialogue with whoever contracted or messaged you about the job.",
+    "A not_found on a browser or terminal session means that session is not running — bring it back if you hold the pool tools, or report that exact error. That is not a missing-grant problem.",
     "To speak to someone, call send_message with an intent; conversation will compose. End the turn with yield.",
   ].join("\n");
 }
@@ -56,8 +59,19 @@ function routingBlock(agentId: string, parentAgentId: string | null): string {
       : `Your parent is ${parentAgentId}.`;
   const routing =
     parentAgentId === null
-      ? "Routing: You may message the user (to_agent_id null). When a child escalates a blocker or completion to you, resolve it or ask the user."
-      : `Routing: Prefer your parent (${parentAgentId}) for progress, blockers, and completion — not the user (to_agent_id null). If stuck, message your parent with what you tried and what failed. If the user wrote to you directly, forward that to your parent rather than chatting with the user unless your parent or the user clearly expects a direct reply.`;
+      ? [
+          "Messaging:",
+          "- Whoever messages you about a job is your point of contact for that job — reply to them with progress, blockers, and results.",
+          "- You may message the user (to_agent_id null) when they are that point of contact, or when you need a decision only they can make.",
+          "- When a child needs a capability only you can grant, they will ask you; judge the case and grant or refuse.",
+        ].join("\n")
+      : [
+          "Messaging:",
+          "- Whoever messaged you about the job is your point of contact for task progress, blockers, and results — usually the agent that contracted you (not always your parent).",
+          `- Your parent (${parentAgentId}) owns grants. If you need a capability you do not hold, ask your parent with a clear case. Do not invent tool names you were not granted.`,
+          "- If the user interjects while you are working for another agent, acknowledge the user and keep reporting the job to that contracting agent unless the user is now clearly taking over the conversation with you.",
+          "- Address agents by exact kebab-case id from list_agents (or null for the user).",
+        ].join("\n");
   return `Your agent id is ${agentId}.\n${parentLine}\n${routing}`;
 }
 

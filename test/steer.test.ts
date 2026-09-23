@@ -121,3 +121,100 @@ test("steer_reasoning does not start a second run while reasoning is busy", asyn
   assert.deepEqual(started, []);
   assert.equal(steer.hasItems(agentId), true);
 });
+
+test("steer_reasoning with terminate stops the next tool call from running", async () => {
+  const steer = new SteerQueue();
+  const agentId = "agent-terminate";
+  const executed: string[] = [];
+  let turn = 0;
+
+  await runReasoningLoop({
+    agentId,
+    scratchpad: [],
+    scratchpadClear: { keep: 5, maxChars: 80_000 },
+    assemble: async () => ({ system: "sys", messages: [], tools: [] }),
+    reason: async () => {
+      turn += 1;
+      if (turn === 1) {
+        steer.requestTerminate(agentId);
+        return toolUse("send_message", { to_agent_id: null, intent: "should not run" });
+      }
+      return toolUse("yield", {});
+    },
+    executeTool: async (call) => {
+      executed.push(call.name);
+      return { content: "{}", isError: false, audit: {} };
+    },
+    steer,
+    logThought: async () => {},
+    logToolCall: async () => {},
+    logToolResult: async () => {},
+  });
+
+  assert.equal(turn, 1);
+  assert.deepEqual(executed, []);
+  assert.equal(steer.isTerminate(agentId), false);
+});
+
+test("steer_reasoning terminate mid-batch blocks remaining domain tools", async () => {
+  const steer = new SteerQueue();
+  const agentId = "agent-terminate-batch";
+  const executed: string[] = [];
+
+  await runReasoningLoop({
+    agentId,
+    scratchpad: [],
+    scratchpadClear: { keep: 5, maxChars: 80_000 },
+    assemble: async () => ({ system: "sys", messages: [], tools: [] }),
+    reason: async () => ({
+      content: [
+        { type: "tool_use", id: "a", name: "send_message", input: { to_agent_id: null, intent: "one" } },
+        { type: "tool_use", id: "b", name: "send_message", input: { to_agent_id: null, intent: "two" } },
+      ],
+      stop_reason: "tool_use",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    }),
+    executeTool: async (call) => {
+      executed.push(call.name);
+      steer.requestTerminate(agentId);
+      return { content: "{}", isError: false, audit: {} };
+    },
+    steer,
+    logThought: async () => {},
+    logToolCall: async () => {},
+    logToolResult: async () => {},
+  });
+
+  assert.deepEqual(executed, ["send_message"]);
+  assert.equal(steer.isTerminate(agentId), false);
+});
+
+test("steer_reasoning accepts terminate without instruction", async () => {
+  const locks = new LaneLocks();
+  const steer = new SteerQueue();
+  const agentId = "00000000-0000-4000-8000-0000000000ff";
+  const result = await executeTool(
+    {
+      db: {} as never,
+      callerId: agentId,
+      callerKind: "agent",
+      lane: "conversation",
+      steer,
+      intents: new IntentQueue(),
+      locks,
+      transcript: new TranscriptStore(),
+      sessions: new HostSessions(),
+      enqueueConversation: () => {},
+      enqueueReasoning: () => {},
+    },
+    {
+      type: "tool_use",
+      id: "t1",
+      name: STEER_REASONING,
+      input: { terminate: true },
+    },
+  );
+  assert.equal(result.isError, false);
+  assert.equal(steer.isTerminate(agentId), true);
+  assert.equal(steer.hasItems(agentId), false);
+});

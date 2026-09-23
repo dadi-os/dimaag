@@ -62,9 +62,18 @@ export const dispatchMessageInputSchema: Record<string, unknown> = {
 export const steerReasoningInputSchema: Record<string, unknown> = {
   type: "object",
   properties: {
-    instruction: { type: "string", description: "What reasoning should do next" },
+    instruction: {
+      type: "string",
+      description:
+        "What reasoning should do next. Omit when terminate is true and you only need to halt.",
+    },
+    terminate: {
+      type: "boolean",
+      description:
+        "When true, stop the reasoning lane in its tracks: the next tool call does not run. Use for stop/kill. Can combine with instruction.",
+    },
   },
-  required: ["instruction"],
+  additionalProperties: false,
 };
 
 export const yieldInputSchema: Record<string, unknown> = {
@@ -92,7 +101,7 @@ export const listAgentsInputSchema: Record<string, unknown> = {
 export const sendMessageTool: DwarTool = {
   name: SEND_MESSAGE,
   description:
-    "Hand an intent to your conversation lane so it can compose and dispatch a message. Does not send anything itself. to_agent_id null is the user. Prefer your parent for progress and blockers when you have one — see the routing block in your system prompt. Report real tool errors (for example not_found on a browser_id) honestly; do not invent that your granted tools are missing.",
+    "Hand an intent to your conversation lane so it can compose and dispatch a message. Does not send anything itself. to_agent_id null is the user. See the routing block for who to address. Report real tool errors honestly; do not invent that grants are missing.",
   input_schema: sendMessageInputSchema,
 };
 
@@ -100,7 +109,7 @@ export const sendMessageTool: DwarTool = {
 export const dispatchMessageTool: DwarTool = {
   name: DISPATCH_MESSAGE,
   description:
-    "Write a message to another agent or to the user (to_agent_id null). This is the only way a message addressed to someone else is persisted. Does not end the turn — call yield when done. Prefer your parent for task progress and blockers when you have one — see the routing block. Never claim domain tools are missing: those tools live on the reasoning lane; use steer_reasoning for work that needs them.",
+    "Write a message to another agent or to the user (to_agent_id null). This is the only way a message addressed to someone else is persisted. Does not end the turn — call yield when done. See the routing block for who to address. Domain work runs on the reasoning lane — use steer_reasoning for that; do not claim grants are missing because conversation cannot see them.",
   input_schema: dispatchMessageInputSchema,
 };
 
@@ -108,7 +117,7 @@ export const dispatchMessageTool: DwarTool = {
 export const steerReasoningTool: DwarTool = {
   name: STEER_REASONING,
   description:
-    "Queue an instruction for your own reasoning lane, where granted domain tools actually run. Starts a reasoning run if that lane is idle. Use this for any work that needs browser_*, terminal_*, chaavi_*, spawn, grant, or other granted tools — do not report those tools as missing from conversation. Pass a concrete instruction (action plus browser_id or terminal_id when known).",
+    "Direct your reasoning lane. You manage reasoning from conversation: pass instruction for what it should do next (domain tools run there), and/or terminate true to halt it immediately so the next tool call does not run. Starts a reasoning wake if that lane is idle. Use terminate for stop/kill.",
   input_schema: steerReasoningInputSchema,
 };
 
@@ -138,9 +147,15 @@ const dispatchInput = z.object({
   content: z.string().min(1),
 });
 
-const steerInput = z.object({
-  instruction: z.string().min(1),
-});
+const steerInput = z
+  .object({
+    instruction: z.string().min(1).optional(),
+    terminate: z.boolean().optional(),
+  })
+  .strict()
+  .refine((value) => value.terminate === true || value.instruction !== undefined, {
+    message: "instruction or terminate is required",
+  });
 
 const yieldInput = z.object({}).strict();
 
@@ -251,12 +266,20 @@ async function runSteerReasoning(ctx: ToolContext, raw: unknown): Promise<ToolEx
   if (ctx.callerId === null) {
     return failWithoutAgentIdentity();
   }
-  const input = steerInput.parse(raw);
-  ctx.steer.append(ctx.callerId, input.instruction);
+  const input = steerInput.parse(raw ?? {});
+  if (input.instruction !== undefined) {
+    ctx.steer.append(ctx.callerId, input.instruction);
+  }
+  if (input.terminate === true) {
+    ctx.steer.requestTerminate(ctx.callerId);
+  }
   if (!ctx.locks.isBusy(ctx.callerId, "reasoning")) {
     ctx.enqueueReasoning(ctx.callerId);
   }
-  return ok({ queued: true });
+  return ok({
+    queued: true,
+    terminate: input.terminate === true,
+  });
 }
 
 /** runListAgents returns id/name/parent/active for matching agents (global visibility). */

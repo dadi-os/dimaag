@@ -56,9 +56,9 @@ An awkward spawn is recoverable with a new prompt (modify) or by retiring the ag
 
 Ids are unique across every agent that has ever existed. A spawn that fails on a taken id is usually telling you the agent already exists and is dormant, which is a reuse or modify.
 
-**The system prompt.** Write the job, not the mechanics. The agent receives its granted tools with descriptions and per grant usage notes attached, so explaining how a tool works wastes space and goes stale the moment the tool changes. Say what this agent is responsible for, what sits outside it, and who it works with by id.
+**The system prompt.** Write the job, not the mechanics. The agent receives its granted tools with descriptions and per grant usage notes attached, so naming tools inside the prompt wastes space, goes stale, and teaches the model to invent calls it was never granted. Say what this agent is responsible for, what sits outside it, and who it works with by id.
 
-Every agent has two lanes. The runtime injects which lane is active and what that means: conversation only messages and steers; reasoning runs granted tools. Do not invent a parallel explanation of the tool surface inside the prompt — but do tell managers and workers what to do when a `browser_id` or `terminal_id` comes back not_found (bring it back / ask the pool owner). That error is ordinary after a restart and is not "tools missing."
+Every agent has two lanes. The runtime injects which lane is active. Conversation manages reasoning (including halt via terminate) and messages; reasoning runs grants. Do not invent a parallel tool catalog in the prompt. Tell managers and workers what to do when a browser or terminal session comes back not_found (bring it back / ask the pool owner). Narrow grants exist so a worker that hits a capability gap asks its parent for the grant with a case, while keeping task dialogue with whoever contracted it.
 
 Two things belong in every prompt you write, both because of how the runtime behaves rather than as policy.
 
