@@ -87,6 +87,10 @@ Every agent has both lanes. **Reasoning** is the executor (tool-calling against 
 
 Transcript is in-process and shared. Conversation starts on inbound message, reasoning finish, or `send_message`. `steer_reasoning` queues instructions for the next reasoning step.
 
+Mid-wake **scratchpads** hold assistant + tool_result pairs until `yield` (or a bare exit). Each iteration clears older tool_result bodies: the last `[runtime].scratchpad_keep_tool_results` turns stay full, and a `[runtime].scratchpad_tool_result_max_chars` budget can clear further so long wakes stay near a working-set size. There is no per-wake step limit — wakes run until yield. Cleared results say to call the tool again if needed.
+
+Assembled context always includes an identity/routing block: agent id, parent (or root), and guidance that children should prefer their parent for progress and blockers rather than messaging the user. Roots may message the user. This is prompt guidance only — `send_message` / `dispatch_message` do not enforce it.
+
 ## Tools
 
 `src/tools/` is the source of truth; `tools` table is a projection synced at migrate. Grants are parent-to-direct-child only.
@@ -200,7 +204,7 @@ The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the app
 
 ## Persistence
 
-`agents`, `agent_logs`, `messages`, and `scheduled_messages` survive restart. `messages` is the source of truth for human↔agent chat and the rolling lane transcript (last `[runtime].transcript_window_messages` turns, default 40). Older turns remain in `agent_logs` / `dimaag_get_logs`. Scratchpads, locks, steer/intent queues, host `sessions`, and the event stream do not survive. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
+`agents`, `agent_logs`, `messages`, and `scheduled_messages` survive restart. `messages` is the source of truth for human↔agent chat and the rolling lane transcript (last `[runtime].transcript_window_messages` turns, default 40). Older turns remain in `agent_logs` / `dimaag_get_logs`. Scratchpads (with mid-wake tool-result clearing), locks, steer/intent queues, host `sessions`, and the event stream do not survive. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
 
 Schedule tools (`dimaag_schedule_message`, `dimaag_list_schedules`, `dimaag_cancel_schedule`) persist one-shot and recurring deliveries; the in-process scheduler ticks from `[schedule].tick_seconds` in `config.toml` (wall clock uses `TIMEZONE` in `constants.ts`).
 

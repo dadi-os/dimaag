@@ -2,11 +2,13 @@ import type { DwarChatRequest, DwarChatResponse, DwarMessage, DwarToolUseBlock }
 import { YIELD } from "../types/domain.js";
 import type { IntentQueue } from "./intents.js";
 import { formatIntentTurn } from "./intents.js";
+import { clearOldToolResults, type ClearOldToolResultsOpts } from "./scratchpad.js";
 import type { ToolExecResult } from "./tools.js";
 
 export type ConversationLoopDeps = {
   agentId: string;
   scratchpad: DwarMessage[];
+  scratchpadClear: ClearOldToolResultsOpts;
   assemble: () => Promise<DwarChatRequest>;
   converse: (request: DwarChatRequest) => Promise<DwarChatResponse>;
   executeTool: (call: DwarToolUseBlock) => Promise<ToolExecResult>;
@@ -21,7 +23,8 @@ export type ConversationLoopDeps = {
  * narration. The only clean exit is the embedded yield tool. A bare response with
  * no tools is treated as a degraded exit (provider failure), not the happy path.
  * Scratchpad holds mid-turn tool results only — cleared when the turn ends so
- * prior yields cannot few-shot the next wake.
+ * prior yields cannot few-shot the next wake. Each iteration clears older
+ * tool_result bodies so long wakes stay near a working-set size.
  * Skips the provider call when the assembled history is empty or ends on an
  * assistant turn with no drained intent — providers reject those requests.
  */
@@ -29,6 +32,7 @@ export async function runConversationLoop(deps: ConversationLoopDeps): Promise<v
   const scratchpad = deps.scratchpad;
 
   for (;;) {
+    clearOldToolResults(scratchpad, deps.scratchpadClear);
     const assembled = await deps.assemble();
     const messages: DwarMessage[] = [...assembled.messages, ...scratchpad];
     const intents = deps.intents.drain(deps.agentId);

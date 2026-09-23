@@ -23,6 +23,22 @@ const OLDER_HISTORY_HINT =
   "Older turns beyond the live window are available via dimaag_get_logs.";
 
 /**
+ * routingBlock states this agent's id and parent so both lanes know who to
+ * address. Guidance lives in the prompt — messaging tools do not enforce it.
+ */
+function routingBlock(agentId: string, parentAgentId: string | null): string {
+  const parentLine =
+    parentAgentId === null
+      ? "You are a root agent (no parent)."
+      : `Your parent is ${parentAgentId}.`;
+  const routing =
+    parentAgentId === null
+      ? "Routing: You may message the user (to_agent_id null). When a child escalates a blocker or completion to you, resolve it or ask the user."
+      : `Routing: Prefer your parent (${parentAgentId}) for progress, blockers, and completion — not the user (to_agent_id null). If stuck, message your parent with what you tried and what failed. If the user wrote to you directly, forward that to your parent rather than chatting with the user unless your parent or the user clearly expects a direct reply.`;
+  return `Your agent id is ${agentId}.\n${parentLine}\n${routing}`;
+}
+
+/**
  * One assembler for both lanes. The transcript is identical; only the tool set differs.
  * Active direct children are appended so a parent can address workers it spawned.
  * Message history is truncated to the last `transcriptWindowMessages` turns.
@@ -59,7 +75,7 @@ export async function assembleContext(opts: {
     });
     system = `${system}\n\nYour active direct children:\n${lines.join("\n")}`;
   }
-  system = `${system}\n\n${OLDER_HISTORY_HINT}`;
+  system = `${system}\n\n${routingBlock(agent.id, agent.parentAgentId)}\n\n${OLDER_HISTORY_HINT}`;
 
   const entries = opts.transcript.transcriptFor(opts.agentId);
   const windowed =

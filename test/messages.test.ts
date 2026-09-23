@@ -10,8 +10,10 @@ import { assembleContext } from "../src/runtime/context.js";
 import { deliverAgentMessage, deliverUserMessage } from "../src/runtime/deliver.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { EventBus } from "../src/runtime/events.js";
+import { executeTool } from "../src/runtime/tools.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import {
+  insertAgent,
   insertWorker,
   mockChaavi,
   mockDwar,
@@ -312,4 +314,95 @@ test("backfill migration smoke: agent_logs message events land in messages after
   assert.equal(rows[0]?.content, "legacy from logs");
   assert.equal(rows[0]?.toAgentId, agentId);
   assert.equal(rows[0]?.fromAgentId, null);
+});
+
+test("assembleContext injects agent id and parent routing for children", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertAgent(handle.db, {
+    id: "routing-parent",
+    systemPrompt: "parent",
+  });
+  const childId = await insertAgent(handle.db, {
+    id: "routing-child",
+    systemPrompt: "child",
+    parentAgentId: parentId,
+  });
+  const childCtx = await assembleContext({
+    db: handle.db,
+    agentId: childId,
+    lane: "reasoning",
+    transcript: new TranscriptStore(),
+    transcriptWindowMessages: 40,
+  });
+  assert.match(childCtx.system, /Your agent id is routing-child/);
+  assert.match(childCtx.system, /Your parent is routing-parent/);
+  assert.match(childCtx.system, /Prefer your parent/);
+
+  const parentCtx = await assembleContext({
+    db: handle.db,
+    agentId: parentId,
+    lane: "conversation",
+    transcript: new TranscriptStore(),
+    transcriptWindowMessages: 40,
+  });
+  assert.match(parentCtx.system, /Your agent id is routing-parent/);
+  assert.match(parentCtx.system, /You are a root agent/);
+  assert.match(parentCtx.system, /You may message the user/);
+});
+
+test("child may still send_message and dispatch_message to the user", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertAgent(handle.db, {
+    id: "msg-parent",
+    systemPrompt: "parent",
+  });
+  const childId = await insertWorker(handle.db, {
+    id: "msg-child",
+    systemPrompt: "child",
+    parentAgentId: parentId,
+    tools: [],
+  });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+
+  const send = await executeTool(runtime.toolContext(childId, "reasoning"), {
+    type: "tool_use",
+    id: "child-send-user",
+    name: "send_message",
+    input: { to_agent_id: null, intent: "status for Ankur" },
+  });
+  assert.equal(send.isError, false);
+
+  const dispatch = await executeTool(runtime.toolContext(childId, "conversation"), {
+    type: "tool_use",
+    id: "child-dispatch-user",
+    name: "dispatch_message",
+    input: { to_agent_id: null, content: "hello Ankur" },
+  });
+  assert.equal(dispatch.isError, false);
+
+  const toParent = await executeTool(runtime.toolContext(childId, "conversation"), {
+    type: "tool_use",
+    id: "child-dispatch-parent",
+    name: "dispatch_message",
+    input: { to_agent_id: parentId, content: "blocked on login" },
+  });
+  assert.equal(toParent.isError, false);
+
+  const rootSend = await executeTool(runtime.toolContext(parentId, "reasoning"), {
+    type: "tool_use",
+    id: "root-send-user",
+    name: "send_message",
+    input: { to_agent_id: null, intent: "report to Ankur" },
+  });
+  assert.equal(rootSend.isError, false);
+  await runtime.waitUntilIdle();
 });

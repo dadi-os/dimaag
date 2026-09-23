@@ -28,6 +28,7 @@ test("a steer arriving mid-loop is applied on the next iteration", async () => {
   await runReasoningLoop({
     agentId,
     scratchpad,
+    scratchpadClear: { keep: 5, maxChars: 80_000 },
     assemble: async () => ({ system: "sys", messages: [], tools: [] }),
     reason: async (request) => {
       calls.push(request);

@@ -276,11 +276,19 @@ export function createRuntime(opts: {
     return { assemble, exec, logThought, logToolCall, logToolResult };
   }
 
+  function scratchpadClearOpts() {
+    return {
+      keep: opts.config.runtime.scratchpad_keep_tool_results,
+      maxChars: opts.config.runtime.scratchpad_tool_result_max_chars,
+    };
+  }
+
   function reasoningDeps(agentId: string) {
     const helpers = laneHelpers(agentId, "reasoning");
     return {
       agentId,
       scratchpad: scratchpadFor(reasoningScratchpads, agentId),
+      scratchpadClear: scratchpadClearOpts(),
       assemble: helpers.assemble,
       reason: opts.dwar.reason,
       executeTool: helpers.exec,
@@ -296,6 +304,7 @@ export function createRuntime(opts: {
     return {
       agentId,
       scratchpad: scratchpadFor(conversationScratchpads, agentId),
+      scratchpadClear: scratchpadClearOpts(),
       assemble: helpers.assemble,
       converse: opts.dwar.converse,
       executeTool: helpers.exec,

@@ -2,11 +2,13 @@ import type { DwarChatRequest, DwarChatResponse, DwarMessage, DwarToolUseBlock }
 import { YIELD } from "../types/domain.js";
 import type { SteerQueue } from "./steer.js";
 import { formatSteerTurn } from "./steer.js";
+import { clearOldToolResults, type ClearOldToolResultsOpts } from "./scratchpad.js";
 import type { ToolExecResult } from "./tools.js";
 
 export type ReasoningLoopDeps = {
   agentId: string;
   scratchpad: DwarMessage[];
+  scratchpadClear: ClearOldToolResultsOpts;
   assemble: () => Promise<DwarChatRequest>;
   reason: (request: DwarChatRequest) => Promise<DwarChatResponse>;
   executeTool: (call: DwarToolUseBlock) => Promise<ToolExecResult>;
@@ -21,12 +23,14 @@ export type ReasoningLoopDeps = {
  * internal working output. The only clean exit is the embedded yield tool. A bare
  * response with no tools is a degraded exit; pending steers still continue the loop.
  * Scratchpad holds mid-turn tool results only — cleared when the turn ends so
- * prior yields cannot few-shot the next wake.
+ * prior yields cannot few-shot the next wake. Each iteration clears older
+ * tool_result bodies so long wakes stay near a working-set size.
  */
 export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
   const scratchpad = deps.scratchpad;
 
   for (;;) {
+    clearOldToolResults(scratchpad, deps.scratchpadClear);
     const assembled = await deps.assemble();
     const messages: DwarMessage[] = [...assembled.messages, ...scratchpad];
     const steers = deps.steer.drain(deps.agentId);

@@ -92,7 +92,7 @@ export const listAgentsInputSchema: Record<string, unknown> = {
 export const sendMessageTool: DwarTool = {
   name: SEND_MESSAGE,
   description:
-    "Hand an intent to your conversation lane so it can compose and dispatch a message. Does not send anything itself. to_agent_id null is the user.",
+    "Hand an intent to your conversation lane so it can compose and dispatch a message. Does not send anything itself. to_agent_id null is the user. Prefer your parent for progress and blockers when you have one — see the routing block in your system prompt.",
   input_schema: sendMessageInputSchema,
 };
 
@@ -100,7 +100,7 @@ export const sendMessageTool: DwarTool = {
 export const dispatchMessageTool: DwarTool = {
   name: DISPATCH_MESSAGE,
   description:
-    "Write a message to another agent or to the user (to_agent_id null). This is the only way a message addressed to someone else is persisted. Does not end the turn — call yield when done.",
+    "Write a message to another agent or to the user (to_agent_id null). This is the only way a message addressed to someone else is persisted. Does not end the turn — call yield when done. Prefer your parent for task progress and blockers when you have one — see the routing block.",
   input_schema: dispatchMessageInputSchema,
 };
 
