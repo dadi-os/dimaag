@@ -58,6 +58,8 @@ Ids are unique across every agent that has ever existed. A spawn that fails on a
 
 **The system prompt.** Write the job, not the mechanics. The agent receives its granted tools with descriptions and per grant usage notes attached, so explaining how a tool works wastes space and goes stale the moment the tool changes. Say what this agent is responsible for, what sits outside it, and who it works with by id.
 
+Every agent has two lanes. The runtime injects which lane is active and what that means: conversation only messages and steers; reasoning runs granted tools. Do not invent a parallel explanation of the tool surface inside the prompt — but do tell managers and workers what to do when a `browser_id` or `terminal_id` comes back not_found (bring it back / ask the pool owner). That error is ordinary after a restart and is not "tools missing."
+
 Two things belong in every prompt you write, both because of how the runtime behaves rather than as policy.
 
 There are no iteration caps, so two agents negotiating in good faith can continue indefinitely and it costs real money. Give every agent the same stopping shape: state your case, clarify once if refused, then take it to your parent. Managers do not message Ankur.

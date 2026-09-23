@@ -337,6 +337,8 @@ test("assembleContext injects agent id and parent routing for children", async (
   assert.match(childCtx.system, /Your agent id is routing-child/);
   assert.match(childCtx.system, /Your parent is routing-parent/);
   assert.match(childCtx.system, /Prefer your parent/);
+  assert.match(childCtx.system, /You are on the reasoning lane/);
+  assert.match(childCtx.system, /granted domain tools are available here/);
 
   const parentCtx = await assembleContext({
     db: handle.db,
@@ -348,6 +350,9 @@ test("assembleContext injects agent id and parent routing for children", async (
   assert.match(parentCtx.system, /Your agent id is routing-parent/);
   assert.match(parentCtx.system, /You are a root agent/);
   assert.match(parentCtx.system, /You may message the user/);
+  assert.match(parentCtx.system, /You are on the conversation lane/);
+  assert.match(parentCtx.system, /steer_reasoning/);
+  assert.match(parentCtx.system, /They are not missing from your agent/);
 });
 
 test("child may still send_message and dispatch_message to the user", async () => {

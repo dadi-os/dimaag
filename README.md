@@ -89,7 +89,7 @@ Transcript is in-process and shared. Conversation starts on inbound message, rea
 
 Mid-wake **scratchpads** hold assistant + tool_result pairs until `yield` (or a bare exit). Each iteration clears older tool_result bodies: the last `[runtime].scratchpad_keep_tool_results` turns stay full, and a `[runtime].scratchpad_tool_result_max_chars` budget can clear further so long wakes stay near a working-set size. There is no per-wake step limit — wakes run until yield. Cleared results say to call the tool again if needed.
 
-Assembled context always includes an identity/routing block: agent id, parent (or root), and guidance that children should prefer their parent for progress and blockers rather than messaging the user. Roots may message the user. This is prompt guidance only — `send_message` / `dispatch_message` do not enforce it.
+Assembled context always includes a lane block (conversation vs reasoning — conversation must `steer_reasoning` for domain work and must not claim grants are missing) and an identity/routing block: agent id, parent (or root), and guidance that children should prefer their parent for progress and blockers rather than messaging the user. Roots may message the user. This is prompt guidance only — `send_message` / `dispatch_message` do not enforce it.
 
 ## Tools
 

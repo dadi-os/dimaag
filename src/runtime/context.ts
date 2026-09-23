@@ -23,6 +23,29 @@ const OLDER_HISTORY_HINT =
   "Older turns beyond the live window are available via dimaag_get_logs.";
 
 /**
+ * laneBlock tells the model which lane it is on. Conversation never sees
+ * granted domain tools; without this text it invents "tools are missing."
+ */
+function laneBlock(lane: Lane): string {
+  if (lane === "conversation") {
+    return [
+      "You are on the conversation lane.",
+      "Your only tools here are dispatch_message, steer_reasoning, list_agents, and yield.",
+      "Granted domain tools (browser_*, terminal_*, chaavi_*, dimaag_spawn_agent, dimaag_grant_tool, and the rest) live on the reasoning lane. They are not missing from your agent — they are simply not bound to this lane.",
+      "When work needs those tools, call steer_reasoning with a concrete instruction (what to do, and which browser_id or terminal_id when known). Do not tell the user or another agent that you lack tools, grants, or spawn capability because you cannot see them here.",
+      "A not_found on a browser_id or terminal_id means that session is not running — steer reasoning to bring it back (or ask your parent) — it is not a missing-tool problem.",
+      "Compose and send with dispatch_message; end the turn with yield.",
+    ].join("\n");
+  }
+  return [
+    "You are on the reasoning lane.",
+    "Your granted domain tools are available here, along with send_message, list_agents, and yield. Use the granted tools to do the work.",
+    "A not_found on a browser_id or terminal_id means that session is not running (often after a host or process restart). Bring it back if you hold the pool spawn tool, or report that exact error to your parent — do not claim your tools are missing.",
+    "To speak to someone, call send_message with an intent; conversation will compose. End the turn with yield.",
+  ].join("\n");
+}
+
+/**
  * routingBlock states this agent's id and parent so both lanes know who to
  * address. Guidance lives in the prompt — messaging tools do not enforce it.
  */
@@ -75,7 +98,7 @@ export async function assembleContext(opts: {
     });
     system = `${system}\n\nYour active direct children:\n${lines.join("\n")}`;
   }
-  system = `${system}\n\n${routingBlock(agent.id, agent.parentAgentId)}\n\n${OLDER_HISTORY_HINT}`;
+  system = `${system}\n\n${laneBlock(opts.lane)}\n\n${routingBlock(agent.id, agent.parentAgentId)}\n\n${OLDER_HISTORY_HINT}`;
 
   const entries = opts.transcript.transcriptFor(opts.agentId);
   const windowed =
