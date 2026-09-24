@@ -286,6 +286,6 @@ test("worker granted execute_shell and read_file sees those plus send_message an
   });
   assert.deepEqual(
     ctx.tools.map((tool) => tool.name).sort(),
-    ["terminal_execute_shell", "terminal_read_file", SEND_MESSAGE, LIST_AGENTS, "yield"].sort(),
+    ["terminal_execute_shell", "terminal_read_file", SEND_MESSAGE, LIST_AGENTS, "wait", "yield"].sort(),
   );
 });

@@ -520,7 +520,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
   });
   assert.deepEqual(
     childCtx.tools.map((tool) => tool.name),
-    [SEND_MESSAGE, LIST_AGENTS, "yield"],
+    [SEND_MESSAGE, LIST_AGENTS, "wait", "yield"],
   );
 });
 
@@ -1230,6 +1230,7 @@ test("list_agents is in both lanes for an agent with no grants", async () => {
   assert.deepEqual(reasoning.tools.map((tool) => tool.name), [
     SEND_MESSAGE,
     LIST_AGENTS,
+    "wait",
     "yield",
   ]);
   assert.ok(conversation.tools.map((tool) => tool.name).includes(LIST_AGENTS));
