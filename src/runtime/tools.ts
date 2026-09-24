@@ -14,6 +14,7 @@ import {
   LIST_AGENTS,
   SEND_MESSAGE,
   STEER_REASONING,
+  WAIT,
   YIELD,
 } from "../types/domain.js";
 import { findTool } from "../tools/registry.js";
@@ -82,6 +83,29 @@ export const yieldInputSchema: Record<string, unknown> = {
   additionalProperties: false,
 };
 
+/** Upper bound on a single in-lane wait; longer or cross-agent delays use scheduling. */
+export const WAIT_MAX_SECONDS = 300;
+
+const WAIT_POLL_MS = 250;
+
+export const waitInputSchema: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    seconds: {
+      type: "integer",
+      minimum: 1,
+      maximum: WAIT_MAX_SECONDS,
+      description: `How long to pause before reasoning resumes, 1–${WAIT_MAX_SECONDS}s`,
+    },
+    reason: {
+      type: "string",
+      description: "What you are waiting for, for the log",
+    },
+  },
+  required: ["seconds"],
+  additionalProperties: false,
+};
+
 export const listAgentsInputSchema: Record<string, unknown> = {
   type: "object",
   properties: {
@@ -129,6 +153,15 @@ export const yieldTool: DwarTool = {
   input_schema: yieldInputSchema,
 };
 
+/** Pause the reasoning lane in place for a set duration, then resume. */
+export const waitTool: DwarTool = {
+  name: WAIT,
+  description:
+    "Pause your reasoning lane for a number of seconds, then resume automatically where you left off. Use when you must wait for something to settle — a page to load, a job or another agent to finish, a reply you expect shortly — instead of burning turns polling. Unlike yield, this does NOT end your turn: reasoning continues after the pause with no model calls spent while waiting. Unlike dimaag_schedule_message, it waits here rather than sending a message to another agent later. A steer or terminate cuts the wait short. Max " +
+    `${WAIT_MAX_SECONDS}s; for longer or cross-agent delays, use scheduling.`,
+  input_schema: waitInputSchema,
+};
+
 /** Look up agents by exact id or list the roster (id, name alias, parent, active). */
 export const listAgentsTool: DwarTool = {
   name: LIST_AGENTS,
@@ -159,6 +192,13 @@ const steerInput = z
 
 const yieldInput = z.object({}).strict();
 
+const waitInput = z
+  .object({
+    seconds: z.number().int().min(1).max(WAIT_MAX_SECONDS),
+    reason: z.string().min(1).optional(),
+  })
+  .strict();
+
 const listAgentsInput = z
   .object({
     id: agentIdSchema.optional(),
@@ -166,14 +206,38 @@ const listAgentsInput = z
   })
   .strict();
 
-/** Dispatch a tool_use block for the caller's lane; map Zod/4xx to tool errors. */
+/** Map an unexpected throw into a tool error so the lane transcript stays valid. */
+export function unexpectedToolError(err: unknown): ToolExecResult {
+  if (err instanceof DimaagError) {
+    return fail(`${err.type}: ${err.message}`);
+  }
+  if (err instanceof Error) {
+    return fail(err.message);
+  }
+  return fail(String(err));
+}
+
+/** Dispatch a tool_use block for the caller's lane; map Zod/4xx to tool errors.
+ * A caller that just failed waits an adaptive backoff before its next call runs. */
 export async function executeTool(
   ctx: ToolContext,
   call: DwarToolUseBlock,
 ): Promise<ToolExecResult> {
-  const result = await dispatchTool(ctx, call);
+  if (ctx.callerId !== null) {
+    const wait = ctx.toolDebounce.delayBeforeNext(ctx.callerId);
+    if (wait > 0) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+  let result: ToolExecResult;
+  try {
+    result = await dispatchTool(ctx, call);
+  } catch (err) {
+    result = unexpectedToolError(err);
+  }
   if (ctx.callerId !== null) {
     ctx.sessions.observe(ctx.callerId, call.name, call.input, result.isError);
+    ctx.toolDebounce.record(ctx.callerId, result.isError);
   }
   return result;
 }
@@ -194,6 +258,9 @@ async function dispatchTool(
     if (ctx.lane === "reasoning") {
       if (call.name === SEND_MESSAGE) {
         return await runSendMessage(ctx, call.input);
+      }
+      if (call.name === WAIT) {
+        return await runWait(ctx, call.input);
       }
       const definition = findTool(call.name);
       if (!definition) {
@@ -218,11 +285,29 @@ async function dispatchTool(
     if (err instanceof ZodError) {
       return fail(err.issues.map((issue) => issue.message).join("; "));
     }
-    if (err instanceof DimaagError && err.statusCode < 500) {
-      return fail(err.message);
-    }
-    throw err;
+    return unexpectedToolError(err);
   }
+}
+
+/**
+ * Pause the reasoning lane in place, polling so a steer or terminate cuts the wait
+ * short. No model calls run while waiting; the loop resumes on return.
+ */
+async function runWait(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {
+  if (ctx.callerId === null) {
+    return failWithoutAgentIdentity();
+  }
+  const input = waitInput.parse(raw);
+  const agentId = ctx.callerId;
+  const totalMs = input.seconds * 1000;
+  const deadline = Date.now() + totalMs;
+  while (Date.now() < deadline) {
+    if (ctx.steer.isTerminate(agentId) || ctx.steer.hasItems(agentId)) {
+      return ok({ waited_seconds: Math.round((totalMs - (deadline - Date.now())) / 1000), interrupted: true });
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(WAIT_POLL_MS, deadline - Date.now())));
+  }
+  return ok({ waited_seconds: input.seconds, interrupted: false, reason: input.reason ?? null });
 }
 
 async function runSendMessage(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {

@@ -7,8 +7,11 @@ import { LaneLocks } from "../src/runtime/locks.js";
 import { IntentQueue } from "../src/runtime/intents.js";
 import { executeTool } from "../src/runtime/tools.js";
 import { HostSessions } from "../src/runtime/sessions.js";
+import { ToolDebounce } from "../src/runtime/tool-debounce.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import { STEER_REASONING } from "../src/types/domain.js";
+
+const noDebounce = new ToolDebounce({ base_ms: 1, max_ms: 1 });
 
 function toolUse(name: string, input: unknown): DwarChatResponse {
   return {
@@ -71,6 +74,7 @@ test("steer_reasoning starts a run when reasoning is idle", async () => {
       locks,
       transcript: new TranscriptStore(),
       sessions: new HostSessions(),
+      toolDebounce: noDebounce,
       enqueueConversation: () => {},
       enqueueReasoning: (id) => {
         started.push(id);
@@ -105,6 +109,7 @@ test("steer_reasoning does not start a second run while reasoning is busy", asyn
       locks,
       transcript: new TranscriptStore(),
       sessions: new HostSessions(),
+      toolDebounce: noDebounce,
       enqueueConversation: () => {},
       enqueueReasoning: (id) => {
         started.push(id);
@@ -204,6 +209,7 @@ test("steer_reasoning accepts terminate without instruction", async () => {
       locks,
       transcript: new TranscriptStore(),
       sessions: new HostSessions(),
+      toolDebounce: noDebounce,
       enqueueConversation: () => {},
       enqueueReasoning: () => {},
     },

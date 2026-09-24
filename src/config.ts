@@ -25,6 +25,8 @@ const fileSchema = z.object({
     transcript_window_messages: z.number().int().positive(),
     scratchpad_keep_tool_results: z.number().int().positive(),
     scratchpad_tool_result_max_chars: z.number().int().positive(),
+    tool_debounce_base_ms: z.number().int().positive(),
+    tool_debounce_max_ms: z.number().int().positive(),
   }),
   dwar: z.object({
     timeout_ms: z.number().int().positive(),

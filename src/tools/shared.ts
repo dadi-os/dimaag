@@ -18,6 +18,7 @@ import type { NasClient } from "../nas/client.js";
 import type { YaadClient } from "../yaad/client.js";
 import type { HathGateway } from "../runtime/hath.js";
 import type { HostSessions } from "../runtime/sessions.js";
+import type { ToolDebounce } from "../runtime/tool-debounce.js";
 import { toolId } from "./sync.js";
 
 export type ToolExecResult = {
@@ -50,6 +51,7 @@ export type ToolContext = {
   transcript: TranscriptStore;
   events: EventBus;
   sessions: HostSessions;
+  toolDebounce: ToolDebounce;
   enqueueConversation: (agentId: string) => void;
   enqueueReasoning: (agentId: string) => void;
 };

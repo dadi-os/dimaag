@@ -13,10 +13,11 @@ export async function browserToolCall<T>(
     const fields = typeof audit === "function" ? audit(data) : audit;
     return ok(shape(data), fields);
   } catch (err) {
+    const fields = typeof audit === "function" ? {} : audit;
     if (err instanceof DimaagError) {
-      const fields = typeof audit === "function" ? {} : audit;
       return { content: `${err.type}: ${err.message}`, isError: true, audit: fields };
     }
-    throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    return { content: message, isError: true, audit: fields };
   }
 }

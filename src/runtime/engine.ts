@@ -28,6 +28,7 @@ import { LaneLocks } from "./locks.js";
 import { runReasoningLoop } from "./reasoning.js";
 import { SteerQueue } from "./steer.js";
 import { HostSessions } from "./sessions.js";
+import { ToolDebounce } from "./tool-debounce.js";
 import { executeTool, type ToolContext, type ToolExecResult } from "./tools.js";
 import type { ToolCallerKind } from "../tools/shared.js";
 import { TranscriptStore } from "./transcript.js";
@@ -78,6 +79,10 @@ export function createRuntime(opts: {
   const hath = new HathGateway(events, opts.config.hath.timeout_ms);
   const browsers = new BrowserDriver(opts.nas, opts.config);
   const sessions = new HostSessions();
+  const toolDebounce = new ToolDebounce({
+    base_ms: opts.config.runtime.tool_debounce_base_ms,
+    max_ms: opts.config.runtime.tool_debounce_max_ms,
+  });
   const reasoningScratchpads = new Map<string, DwarMessage[]>();
   const conversationScratchpads = new Map<string, DwarMessage[]>();
   let pending = 0;
@@ -174,6 +179,7 @@ export function createRuntime(opts: {
       transcript,
       events,
       sessions,
+      toolDebounce,
       enqueueConversation,
       enqueueReasoning,
     };
@@ -219,6 +225,11 @@ export function createRuntime(opts: {
         message,
         at: new Date().toISOString(),
       });
+      if (lane === "reasoning") {
+        scratchpadFor(reasoningScratchpads, agentId).length = 0;
+      } else {
+        scratchpadFor(conversationScratchpads, agentId).length = 0;
+      }
     } finally {
       release?.();
       if (lane === "reasoning") {

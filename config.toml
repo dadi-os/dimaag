@@ -7,6 +7,10 @@ transcript_window_messages = 40
 scratchpad_keep_tool_results = 5
 # Soft char budget on scratchpad tool_result payloads before clearing older ones further.
 scratchpad_tool_result_max_chars = 80000
+# Backoff after a failed tool call before the agent's next call; doubles per
+# consecutive failure and resets on the first success.
+tool_debounce_base_ms = 1200
+tool_debounce_max_ms = 15000
 
 [dwar]
 timeout_ms = 330000

@@ -8,6 +8,7 @@ import {
   LIST_AGENTS,
   SEND_MESSAGE,
   STEER_REASONING,
+  WAIT,
   YIELD,
 } from "../types/domain.js";
 import {
@@ -15,6 +16,7 @@ import {
   listAgentsTool,
   sendMessageTool,
   steerReasoningTool,
+  waitTool,
   yieldTool,
 } from "./tools.js";
 import type { TranscriptStore } from "./transcript.js";
@@ -40,8 +42,9 @@ function laneBlock(lane: Lane): string {
   }
   return [
     "You are on the reasoning lane.",
-    "Your granted domain tools are available here, along with send_message, list_agents, and yield. Use only the tools listed in this request — do not invent tool names.",
+    "Your granted domain tools are available here, along with send_message, list_agents, wait, and yield. Use only the tools listed in this request — do not invent tool names.",
     "If a tool returns an error, do not repeat the same call with the same arguments. Change approach, or send_message to escalate.",
+    "When you must wait for something to settle (a page, a job, a reply expected shortly), call wait to pause instead of looping and burning turns; a steer or terminate cuts it short.",
     "If you lack a capability you need, message your parent to request the grant and state your case. Keep task dialogue with whoever contracted or messaged you about the job.",
     "A not_found on a browser or terminal session means that session is not running — bring it back if you hold the pool tools, or report that exact error. That is not a missing-grant problem.",
     "To speak to someone, call send_message with an intent; conversation will compose. End the turn with yield.",
@@ -160,10 +163,10 @@ async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTo
     description: `${grant.description}\n\n${grant.usage}`,
     input_schema: grant.inputSchema,
   }));
-  return [...granted, sendMessageTool, listAgentsTool, yieldTool];
+  return [...granted, sendMessageTool, listAgentsTool, waitTool, yieldTool];
 }
 
-export const embeddedReasoningTools = [SEND_MESSAGE, LIST_AGENTS, YIELD] as const;
+export const embeddedReasoningTools = [SEND_MESSAGE, LIST_AGENTS, WAIT, YIELD] as const;
 export const embeddedConversationTools = [
   DISPATCH_MESSAGE,
   STEER_REASONING,
