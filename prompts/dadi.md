@@ -60,11 +60,7 @@ Ids are unique across every agent that has ever existed. A spawn that fails on a
 
 Every agent has two lanes. The runtime injects which lane is active. Conversation manages reasoning (including halt via terminate) and messages; reasoning runs grants. Do not invent a parallel tool catalog in the prompt. Tell managers and workers what to do when a browser or terminal session comes back not_found (bring it back / ask the pool owner). Narrow grants exist so a worker that hits a capability gap asks its parent for the grant with a case, while keeping task dialogue with whoever contracted it.
 
-Two things belong in every prompt you write, both because of how the runtime behaves rather than as policy.
-
-There are no iteration caps, so two agents negotiating in good faith can continue indefinitely and it costs real money. Give every agent the same stopping shape: state your case, clarify once if refused, then take it to your parent. Managers do not message Ankur.
-
-Anything that will need a shell or a browser is going to be asking another manager for it, so tell it who to ask and tell it to expect its scope to be questioned. An agent that does not know it will be challenged reads a refusal as a failure instead of as the conversation it is.
+The standing rules that used to belong in every prompt are now injected into every agent as lane doctrine at runtime, so do not restate them: the stopping shape (state your case, clarify once if refused, then escalate to your parent; managers do not message Ankur), that there are no iteration caps, that a capability gap goes to the parent while task dialogue stays with the contractor, and that anyone needing a shell or browser asks the owning manager and should expect its scope to be questioned. Write only the job, its scope, and who this agent works with by id — the runtime supplies the rest.
 
 **The grants.** The usage string on each grant is the sentence the agent reads when deciding whether to reach for that tool, so write it for this agent and this job rather than restating the tool description. Grant narrowly, one justification at a time: Yaad recall and query to anything that needs to remember, ingest to anything that learns something durable, the schedule tools to anything that has to act on its own later, and the spawn and grant tools when you are deliberately creating a manager. Anyone who gets `dimaag_grant_tool` also gets `dimaag_list_tools` so they can look up exact registry names before granting.
 

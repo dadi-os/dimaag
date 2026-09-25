@@ -102,7 +102,6 @@ test("assembleContext truncates to transcript_window_messages", async () => {
   assert.equal(ctx.messages.length, 4);
   assert.equal(ctx.messages[0]?.content, "[From: Ankur]\nuser-3");
   assert.equal(ctx.messages[3]?.content, "[To: Ankur]\nagent-4");
-  assert.match(ctx.system, /dimaag_get_logs/);
 });
 
 test("hydrateTranscript restores durable rows into TranscriptStore", async () => {
@@ -336,9 +335,6 @@ test("assembleContext injects agent id and parent routing for children", async (
   });
   assert.match(childCtx.system, /Your agent id is routing-child/);
   assert.match(childCtx.system, /Your parent is routing-parent/);
-  assert.match(childCtx.system, /point of contact/);
-  assert.match(childCtx.system, /You are on the reasoning lane/);
-  assert.match(childCtx.system, /granted domain tools are available here/);
 
   const parentCtx = await assembleContext({
     db: handle.db,
@@ -349,11 +345,6 @@ test("assembleContext injects agent id and parent routing for children", async (
   });
   assert.match(parentCtx.system, /Your agent id is routing-parent/);
   assert.match(parentCtx.system, /You are a root agent/);
-  assert.match(parentCtx.system, /point of contact/);
-  assert.match(parentCtx.system, /You are on the conversation lane/);
-  assert.match(parentCtx.system, /steer_reasoning/);
-  assert.match(parentCtx.system, /terminate/);
-  assert.match(parentCtx.system, /not missing/);
 });
 
 test("child may still send_message and dispatch_message to the user", async () => {

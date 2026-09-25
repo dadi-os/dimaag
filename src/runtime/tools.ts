@@ -12,12 +12,14 @@ import type { DwarTool, DwarToolUseBlock } from "../types/domain.js";
 import {
   DISPATCH_MESSAGE,
   LIST_AGENTS,
+  RECORD_THOUGHT,
   SEND_MESSAGE,
   STEER_REASONING,
   WAIT,
   YIELD,
 } from "../types/domain.js";
 import { findTool } from "../tools/registry.js";
+import { insertMessage, messageToTranscriptEntry } from "../db/messages.js";
 import {
   fail,
   ok,
@@ -106,6 +108,18 @@ export const waitInputSchema: Record<string, unknown> = {
   additionalProperties: false,
 };
 
+export const recordThoughtInputSchema: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    text: {
+      type: "string",
+      description: "The thought to keep — what you did, what you learned, a workaround worth reusing",
+    },
+  },
+  required: ["text"],
+  additionalProperties: false,
+};
+
 export const listAgentsInputSchema: Record<string, unknown> = {
   type: "object",
   properties: {
@@ -162,6 +176,14 @@ export const waitTool: DwarTool = {
   input_schema: waitInputSchema,
 };
 
+/** Save a durable note to yourself; persists across wakes, delivered to no one. */
+export const recordThoughtTool: DwarTool = {
+  name: RECORD_THOUGHT,
+  description:
+    "Save a thought to your own durable memory — a note to your future self, delivered to no one. Use it to keep what you worked out this wake: what you did, what you learned, a workaround or site quirk worth reusing. It persists across wakes and reappears in your later context as your own prior thought. Record before you yield when the wake produced something worth remembering.",
+  input_schema: recordThoughtInputSchema,
+};
+
 /** Look up agents by exact id or list the roster (id, name alias, parent, active). */
 export const listAgentsTool: DwarTool = {
   name: LIST_AGENTS,
@@ -198,6 +220,8 @@ const waitInput = z
     reason: z.string().min(1).optional(),
   })
   .strict();
+
+const recordThoughtInput = z.object({ text: z.string().min(1) }).strict();
 
 const listAgentsInput = z
   .object({
@@ -262,6 +286,9 @@ async function dispatchTool(
       if (call.name === WAIT) {
         return await runWait(ctx, call.input);
       }
+      if (call.name === RECORD_THOUGHT) {
+        return await runRecordThought(ctx, call.input);
+      }
       const definition = findTool(call.name);
       if (!definition) {
         return fail(`unknown reasoning tool: ${call.name}`);
@@ -308,6 +335,25 @@ async function runWait(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> 
     await new Promise((resolve) => setTimeout(resolve, Math.min(WAIT_POLL_MS, deadline - Date.now())));
   }
   return ok({ waited_seconds: input.seconds, interrupted: false, reason: input.reason ?? null });
+}
+
+/**
+ * Persist a thought as a durable message from the agent to itself and ingest it
+ * into the transcript. No delivery and no lane wake — it only reappears as the
+ * agent's own prior thought in later context.
+ */
+async function runRecordThought(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {
+  if (ctx.callerId === null) {
+    return failWithoutAgentIdentity();
+  }
+  const input = recordThoughtInput.parse(raw);
+  const row = await insertMessage(ctx.db, {
+    fromAgentId: ctx.callerId,
+    toAgentId: ctx.callerId,
+    content: input.text,
+  });
+  ctx.transcript.ingest(messageToTranscriptEntry(row));
+  return ok({ recorded: true });
 }
 
 async function runSendMessage(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> {

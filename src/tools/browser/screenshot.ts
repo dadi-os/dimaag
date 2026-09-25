@@ -18,7 +18,7 @@ const input = z
 export const screenshot = defineTool({
   name: "browser_screenshot",
   description:
-    "Capture a PNG and return a Dwar image description (pixels never enter the transcript). scope=page screenshots the tab via Playwright; scope=display captures the whole virtual monitor via Nas (popups, download bars). Prefer browser_accessibility_tree for structured UI work — screenshots are a fallback for canvas, captchas, and visual verification.",
+    "Capture a PNG and return a Dwar image description (pixels never enter the transcript). scope=page screenshots the tab via Playwright; scope=display captures the whole virtual monitor via Nas (popups, download bars). Prefer browser_accessibility_tree for structured UI work — reach for a screenshot for canvas, captchas, and visual verification, and whenever the accessibility tree fails or is missing the content you need on a JS-rendered page.",
   input,
   inputSchema: {
     type: "object",
