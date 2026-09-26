@@ -73,7 +73,7 @@ Every `agents` row is an agent. Dadi is not a row — it is `POST /dadi`. Agent 
 
 ## Dadi
 
-`POST /dadi` is the router. Policy lives in `prompts/dadi.md`. Dimaag sends that prompt (plus the top-level roster, active and dormant) as `system` to Dwar `POST /chat/complete` — a promptless inference call — with one `decide` tool (`reuse` | `spawn` | `modify`). Code applies the decision. Spawn creates a top-level agent with an immutable kebab-case `id` and only the tools in `decide.grants` (omitted or empty = none). Reuse of a dormant root wakes it and delivers. Modify can change any agent's `system_prompt` and/or `active` (ids cannot be renamed). Routed utterances are delivered once onto the thread as `from_agent_id` null. Dadi does not speak and does not hold worker tools.
+`POST /dadi` is the router. Policy lives in `prompts/dadi.md`. Dimaag sends that prompt (plus the full agent roster as a tree, active and dormant) as `system` to Dwar `POST /chat/complete` — a promptless inference call — with one `decide` tool (`reuse` | `spawn` | `modify`). Code applies the decision. Spawn creates a top-level agent with an immutable kebab-case `id` and only the tools in `decide.grants` (omitted or empty = none). Reuse targets any agent at any depth; reuse of a dormant agent wakes it and delivers. Modify can change any agent's `system_prompt` and/or `active` (ids cannot be renamed). Routed utterances are delivered once onto the thread as `from_agent_id` null. Dadi does not speak and does not hold worker tools.
 
 SSE: `dadi_started` / `dadi_finished` / `dadi_failed`. After a route, the thread's `lane_*` and `message` events take over.
 
@@ -160,6 +160,7 @@ Each worker drives one Nas Chromium over CDP (`playwright-core` `connectOverCDP`
 | `browser_accessibility_tree` | worker | bounded tree + refs; truncated flag |
 | `browser_click` / `browser_type` / `browser_select` | worker | by ref; `stale_ref` if missing/ambiguous |
 | `browser_wait_for` | worker | text, ref, and/or network_idle |
+| `browser_upload_file` | worker | absolute host `paths` onto a file input or the chooser a ref opens; CDP `DOM.setFileInputFiles` so Chromium reads the host file itself; returns attached names + sizes |
 | `browser_screenshot` | worker | `page` (Playwright) or `display` (Nas monitor) → Dwar describe |
 | `browser_extract_text` | worker | visible body text, bounded |
 

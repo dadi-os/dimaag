@@ -366,6 +366,10 @@ async function withRetry(config: Config, fn: () => Promise<unknown>): Promise<un
   throw mapNasError(lastError);
 }
 
+/**
+ * isRetryable retries network failures and 5xx responses. A 409 (busy terminal or edit-match
+ * conflict) is never retried; the caller decides what to do about it.
+ */
 function isRetryable(err: unknown): boolean {
   if (!axios.isAxiosError(err)) {
     return false;
@@ -373,7 +377,6 @@ function isRetryable(err: unknown): boolean {
   if (!err.response) {
     return true;
   }
-  // Do not retry busy / edit-match conflicts — caller must decide.
   if (err.response.status === 409) {
     return false;
   }

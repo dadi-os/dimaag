@@ -3,10 +3,19 @@
  * Ephemeral like TranscriptStore — lost on process restart.
  */
 
-import { chromium, type Browser, type CDPSession, type Page } from "playwright-core";
+import { randomUUID } from "node:crypto";
+import { posix } from "node:path";
+import {
+  chromium,
+  type Browser,
+  type CDPSession,
+  type ElementHandle,
+  type Page,
+} from "playwright-core";
 import type { Config } from "../config.js";
 import { DimaagError } from "../errors.js";
 import type { NasClient } from "../nas/client.js";
+import type { RuntimeLog } from "../runtime/engine.js";
 
 type Connection = {
   browser: Browser;
@@ -35,6 +44,12 @@ export type TabInfo = {
   focused: boolean;
 };
 
+/** A file as the page's file input reports it after an upload. */
+export type UploadedFile = {
+  name: string;
+  size: number;
+};
+
 export type SnapshotResult = {
   tree: string;
   truncated: boolean;
@@ -50,6 +65,7 @@ export class BrowserDriver {
   constructor(
     private readonly nas: NasClient,
     private readonly config: Config,
+    private readonly log: RuntimeLog,
   ) {}
 
   /** Cache the CDP URL from spawn without connecting yet. */
@@ -70,7 +86,7 @@ export class BrowserDriver {
     if (!conn) {
       return;
     }
-    void conn.browser.close().catch(() => {});
+    void conn.browser.close().catch((err) => this.logCleanup(err, "browser connection close", `browser ${browserId}`));
   }
 
   /** Detach kept WebAuthn CDP sessions for one Nas browser. */
@@ -81,7 +97,7 @@ export class BrowserDriver {
         continue;
       }
       this.webauthn.delete(key);
-      void state.session.detach().catch(() => {});
+      void state.session.detach().catch((err) => this.logCleanup(err, "webauthn session detach", key));
     }
   }
 
@@ -100,7 +116,7 @@ export class BrowserDriver {
     if (existing) {
       this.dropWebAuthn(browserId);
       this.connections.delete(browserId);
-      void existing.browser.close().catch(() => {});
+      void existing.browser.close().catch((err) => this.logCleanup(err, "stale browser connection close", `browser ${browserId}`));
     }
     const browser = await chromium.connectOverCDP(cdpUrl);
     this.connections.set(browserId, { browser, cdpUrl });
@@ -168,31 +184,14 @@ export class BrowserDriver {
       };
       return info.targetInfo.targetId;
     } finally {
-      await session.detach().catch(() => {});
+      await session.detach();
     }
   }
 
   private async targetInfos(browser: Browser): Promise<
     Array<{ targetId: string; type: string; url: string; title: string; attached: boolean }>
   > {
-    let session: CDPSession;
-    try {
-      session = await browser.newBrowserCDPSession();
-    } catch {
-      // Fallback: derive from open pages only.
-      const pages = browser.contexts().flatMap((ctx) => ctx.pages());
-      const out = [];
-      for (const page of pages) {
-        out.push({
-          targetId: await this.pageTargetId(page),
-          type: "page",
-          url: page.url(),
-          title: await page.title().catch(() => ""),
-          attached: true,
-        });
-      }
-      return out;
-    }
+    const session = await browser.newBrowserCDPSession();
     try {
       const result = (await session.send("Target.getTargets")) as {
         targetInfos: Array<{
@@ -211,7 +210,7 @@ export class BrowserDriver {
         attached: t.attached === true,
       }));
     } finally {
-      await session.detach().catch(() => {});
+      await session.detach();
     }
   }
 
@@ -241,7 +240,6 @@ export class BrowserDriver {
       const attached = targets.filter((t) => t.attached);
       const preferred = attached[attached.length - 1] ?? targets[targets.length - 1];
       if (!preferred) {
-        // No page yet — open a blank one.
         const context = browser.contexts()[0] ?? (await browser.newContext());
         const page = await context.newPage();
         this.applyTimeouts(page);
@@ -259,18 +257,16 @@ export class BrowserDriver {
 
   async listTabs(browserId: number): Promise<TabInfo[]> {
     return this.withBrowser(browserId, async (browser) => {
-      const pages = await this.pageMap(browser);
       const targets = (await this.targetInfos(browser)).filter((t) => t.type === "page");
       const focusedId =
         [...targets].reverse().find((t) => t.attached)?.targetId ??
         targets[targets.length - 1]?.targetId;
       const out: TabInfo[] = [];
       for (const t of targets) {
-        const page = pages.get(t.targetId);
         out.push({
           tab_id: t.targetId,
-          url: page ? page.url() : t.url,
-          title: page ? await page.title().catch(() => t.title) : t.title,
+          url: t.url,
+          title: t.title,
           focused: t.targetId === focusedId,
         });
       }
@@ -379,12 +375,103 @@ export class BrowserDriver {
   ): Promise<{ tab_id: string }> {
     const resolved = await this.resolvePage(browserId, tabId);
     const locator = await this.locatorForRef(resolved.page, ref);
-    try {
-      await locator.selectOption({ value });
-    } catch {
-      await locator.selectOption({ label: value });
-    }
+    await locator.selectOption([{ value }, { label: value }]);
     return { tab_id: resolved.tabId };
+  }
+
+  /**
+   * Attach host files to a file input. Chromium runs on the Nas host and reads `paths` itself
+   * over CDP, so they are absolute host paths, never paths inside Dimaag. A ref on a file input
+   * receives the files directly; any other ref is clicked and the file chooser it opens receives
+   * them. Resolves with the files as the input reports them after the change.
+   */
+  async uploadFile(
+    browserId: number,
+    tabId: string | undefined,
+    ref: string,
+    paths: readonly string[],
+  ): Promise<{ tab_id: string; files: UploadedFile[] }> {
+    for (const path of paths) {
+      await this.requireHostFile(path);
+    }
+    const resolved = await this.resolvePage(browserId, tabId);
+    const page = resolved.page;
+    const locator = await this.locatorForRef(page, ref);
+    const isFileInput = await locator.evaluate(
+      (el) => el instanceof HTMLInputElement && el.type === "file",
+    );
+    let input: ElementHandle<HTMLInputElement>;
+    if (isFileInput) {
+      const handle = await locator.elementHandle();
+      if (!handle) {
+        throw new DimaagError(409, "stale_ref", `ref ${ref} is gone; take a fresh accessibility_tree`);
+      }
+      input = handle as ElementHandle<HTMLInputElement>;
+    } else {
+      const [chooser] = await Promise.all([page.waitForEvent("filechooser"), locator.click()]);
+      input = chooser.element() as ElementHandle<HTMLInputElement>;
+    }
+    const multiple = await input.evaluate((el) => el.multiple);
+    if (paths.length > 1 && !multiple) {
+      throw new DimaagError(
+        422,
+        "invalid_request",
+        `the file input behind ${ref} accepts one file; ${paths.length} were given`,
+      );
+    }
+
+    const marker = randomUUID();
+    await input.evaluate((el, value) => el.setAttribute("data-dadi-upload", value), marker);
+    const session = await page.context().newCDPSession(page);
+    try {
+      const { root } = await session.send("DOM.getDocument", { depth: 0 });
+      const { nodeId } = await session.send("DOM.querySelector", {
+        nodeId: root.nodeId,
+        selector: `[data-dadi-upload="${marker}"]`,
+      });
+      if (nodeId === 0) {
+        throw new DimaagError(
+          422,
+          "invalid_request",
+          `the file input behind ${ref} is inside a frame; navigate to the frame's URL and upload there`,
+        );
+      }
+      await session.send("DOM.setFileInputFiles", { files: [...paths], nodeId });
+    } finally {
+      await session.detach();
+    }
+
+    const files = await input.evaluate((el) => {
+      el.removeAttribute("data-dadi-upload");
+      return Array.from(el.files ?? []).map((file) => ({
+        name: file.name,
+        size: file.size,
+      }));
+    });
+    const expected = paths.map((path) => posix.basename(path));
+    const attached = files.map((file) => file.name);
+    if (
+      attached.length !== expected.length ||
+      expected.some((name, i) => attached[i] !== name) ||
+      files.some((file) => file.size === 0)
+    ) {
+      throw new DimaagError(
+        502,
+        "internal_error",
+        `upload did not attach as given: expected ${JSON.stringify(expected)}, input holds ${JSON.stringify(files)}`,
+      );
+    }
+    return { tab_id: resolved.tabId, files };
+  }
+
+  /** Fail with not_found unless `path` is an absolute path to an existing file on the Nas host. */
+  private async requireHostFile(path: string): Promise<void> {
+    const dir = posix.dirname(path);
+    const pattern = posix.basename(path).replace(/[\\*?[\]{}]/g, "\\$&");
+    const listed = await this.nas.glob({ pattern, cwd: dir, limit: 1 });
+    if (listed.paths.length === 0) {
+      throw new DimaagError(404, "not_found", `no file at ${path} on the host`);
+    }
   }
 
   async waitFor(
@@ -503,7 +590,7 @@ export class BrowserDriver {
       this.webauthn.set(key, state);
       return state;
     } catch (err) {
-      await session.detach().catch(() => {});
+      await session.detach();
       throw err;
     }
   }
@@ -537,13 +624,19 @@ export class BrowserDriver {
     });
   }
 
+  /** Log a teardown failure on a connection or session that is being discarded anyway. */
+  private logCleanup(err: unknown, what: string, subject: string): void {
+    const message = err instanceof Error ? err.message : String(err);
+    this.log.warn({ subject, error: message }, `${what} failed`);
+  }
+
   private forgetWebAuthn(key: string): void {
     const state = this.webauthn.get(key);
     if (!state) {
       return;
     }
     this.webauthn.delete(key);
-    void state.session.detach().catch(() => {});
+    void state.session.detach().catch((err) => this.logCleanup(err, "webauthn session detach", key));
   }
 }
 
@@ -685,7 +778,6 @@ const SNAPSHOT_SCRIPT = `(() => {
     }
 
     const childDepth = emitted ? depth + 1 : depth;
-    // Skip descending into leaves we already summarized fully.
     if (tag === "input" || tag === "textarea" || tag === "select" || tag === "img") {
       return;
     }

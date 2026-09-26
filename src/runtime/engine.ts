@@ -83,9 +83,9 @@ export function createRuntime(opts: {
   const steer = new SteerQueue();
   const intents = new IntentQueue();
   const transcript = new TranscriptStore();
-  const events = new EventBus();
+  const events = new EventBus(opts.log);
   const hath = new HathGateway(events, opts.config.hath.timeout_ms);
-  const browsers = new BrowserDriver(opts.nas, opts.config);
+  const browsers = new BrowserDriver(opts.nas, opts.config, opts.log);
   const sessions = new HostSessions();
   const toolDebounce = new ToolDebounce({
     base_ms: opts.config.runtime.tool_debounce_base_ms,

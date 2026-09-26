@@ -2,7 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { eq, isNull } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { agentIdSchema } from "../agent-id.js";
@@ -30,7 +30,7 @@ const decideTool: DwarTool = {
       },
       thread_id: {
         type: "string",
-        description: "Existing top-level thread to reuse, or any agent to modify",
+        description: "Listed agent to reuse (any depth), or any agent to modify",
       },
       id: {
         type: "string",
@@ -141,11 +141,11 @@ async function routeDadi(
   content: string,
 ): Promise<Record<string, unknown>> {
   const policy = readFileSync(join(app.config.serviceRoot, "prompts/dadi.md"), "utf8");
-  const roster = await listTopLevelThreads(app);
+  const roster = await listAgentTree(app);
   const system =
     roster.length > 0
-      ? `${policy}\n\nTop-level threads:\n${roster.join("\n")}`
-      : `${policy}\n\nThere are no top-level threads yet. Spawn one when the utterance is work.`;
+      ? `${policy}\n\nAgents (children indented under their parent):\n${roster.join("\n")}`
+      : `${policy}\n\nThere are no agents yet. Spawn one when the utterance is work.`;
 
   const response = await app.dwar.complete(
     {
@@ -173,9 +173,6 @@ async function routeDadi(
 
   if (parsed.data.action === "reuse") {
     const thread = await requireAgent(app.db, parsed.data.thread_id);
-    if (thread.parentAgentId !== null) {
-      throw new DimaagError(422, "invalid_request", "reuse is limited to top-level threads");
-    }
     if (!thread.active) {
       const now = new Date();
       await app.db
@@ -305,21 +302,37 @@ async function deliverRouted(
   };
 }
 
-/** listTopLevelThreads returns root agents for the classification prompt (active and dormant). */
-async function listTopLevelThreads(app: FastifyInstance): Promise<string[]> {
+/**
+ * listAgentTree returns every agent (active and dormant) for the classification prompt,
+ * depth-first from the roots with each child indented under its parent.
+ */
+async function listAgentTree(app: FastifyInstance): Promise<string[]> {
   const rows = await app.db
     .select({
       id: agents.id,
+      parentAgentId: agents.parentAgentId,
       active: agents.active,
       systemPrompt: agents.systemPrompt,
     })
     .from(agents)
-    .where(isNull(agents.parentAgentId));
-  return rows.map((row) => {
-    const purpose = row.systemPrompt.trim().split(/\n/)[0] ?? "";
-    const brief = purpose.length > 120 ? `${purpose.slice(0, 117)}…` : purpose;
-    const status = row.active ? "active" : "dormant";
-    const head = `- ${row.id} [${status}]`;
-    return brief ? `${head}: ${brief}` : head;
-  });
+    .orderBy(asc(agents.id));
+  const children = new Map<string | null, typeof rows>();
+  for (const row of rows) {
+    const siblings = children.get(row.parentAgentId) ?? [];
+    siblings.push(row);
+    children.set(row.parentAgentId, siblings);
+  }
+  const lines: string[] = [];
+  const visit = (parentId: string | null, depth: number) => {
+    for (const row of children.get(parentId) ?? []) {
+      const purpose = row.systemPrompt.trim().split(/\n/)[0] ?? "";
+      const brief = purpose.length > 120 ? `${purpose.slice(0, 117)}…` : purpose;
+      const status = row.active ? "active" : "dormant";
+      const head = `${"  ".repeat(depth)}- ${row.id} [${status}]`;
+      lines.push(brief ? `${head}: ${brief}` : head);
+      visit(row.id, depth + 1);
+    }
+  };
+  visit(null, 0);
+  return lines;
 }

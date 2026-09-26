@@ -1,9 +1,10 @@
 /**
  * In-process pub/sub for runtime events (messages, lane lifecycle, agent changes).
- * Subscriber errors are swallowed so a broken listener cannot take down a lane run.
+ * A listener that throws is logged and skipped, so a broken subscriber cannot take down a lane run.
  */
 
 import type { Lane } from "../types/domain.js";
+import type { RuntimeLog } from "./engine.js";
 
 export type RuntimeEvent =
   | {
@@ -56,6 +57,8 @@ export type RuntimeEvent =
 type Listener = (event: RuntimeEvent) => void;
 
 export class EventBus {
+  constructor(private readonly log: RuntimeLog) {}
+
   private readonly listeners = new Set<Listener>();
 
   subscribe(listener: Listener): () => void {
@@ -69,7 +72,9 @@ export class EventBus {
     for (const listener of this.listeners) {
       try {
         listener(event);
-      } catch {
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.log.error({ event: event.type, error: message }, "runtime event listener failed");
       }
     }
   }

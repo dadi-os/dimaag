@@ -45,6 +45,7 @@ const BROWSER_TOOLS = [
   "browser_wait_for",
   "browser_screenshot",
   "browser_extract_text",
+  "browser_upload_file",
 ] as const;
 
 test("browser tools are registered", async () => {
@@ -52,7 +53,7 @@ test("browser tools are registered", async () => {
   for (const name of BROWSER_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 65);
+  assert.equal(allTools().length, 66);
   await assert.doesNotReject(() => syncTools(handle.db));
 });
 
@@ -152,4 +153,73 @@ test("close_browser calls Nas and drops the local connection entry", async () =>
   });
   assert.equal(closed.isError, false, closed.content);
   assert.deepEqual(nas.closeBrowserCalls, [10]);
+});
+
+test("upload_file fails not_found for a missing host file before touching the browser", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+    tools: ["browser_upload_file"],
+  });
+  const nas = mockNas({ glob: () => ({ paths: [], truncated: false }) });
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas,
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
+    type: "tool_use",
+    id: "up1",
+    name: "browser_upload_file",
+    input: {
+      browser_id: 10,
+      ref: "e3",
+      paths: ["/var/lib/dadi/career/applications/2027/tesla/swe-intern/v1/Ankur Desai [final].pdf"],
+    },
+  });
+  assert.equal(result.isError, true);
+  assert.match(result.content, /^not_found: no file at .*Ankur Desai \[final\]\.pdf on the host$/);
+  assert.deepEqual(nas.globCalls, [
+    {
+      pattern: "Ankur Desai \\[final\\].pdf",
+      cwd: "/var/lib/dadi/career/applications/2027/tesla/swe-intern/v1",
+      limit: 1,
+    },
+  ]);
+  assert.equal(nas.listBrowsersCalls, 0);
+});
+
+test("upload_file rejects relative paths", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, {
+    name: "thread",
+    systemPrompt: "do the job",
+    tools: ["browser_upload_file"],
+  });
+  const nas = mockNas({});
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas,
+    config,
+    log: silentLog,
+  });
+  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
+    type: "tool_use",
+    id: "up2",
+    name: "browser_upload_file",
+    input: { browser_id: 10, ref: "e3", paths: ["resume.pdf"] },
+  });
+  assert.equal(result.isError, true);
+  assert.match(result.content, /paths must be absolute/);
+  assert.equal(nas.globCalls.length, 0);
 });

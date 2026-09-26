@@ -8,7 +8,7 @@ import { test } from "node:test";
 import axios from "axios";
 import { BrowserDriver } from "../src/browser/driver.js";
 import { createNasClient } from "../src/nas/client.js";
-import { testConfig } from "./helpers.js";
+import { silentLog, testConfig } from "./helpers.js";
 
 const nasUrl = process.env.NAS_URL;
 
@@ -59,7 +59,7 @@ test("integration: snapshot refs, actions, tabs, truncate, stale_ref", async (t)
     },
   };
 
-  const driver = new BrowserDriver(nas, config);
+  const driver = new BrowserDriver(nas, config, silentLog);
   driver.remember(browserId, cdpUrl);
 
   try {
@@ -112,7 +112,7 @@ test("integration: snapshot refs, actions, tabs, truncate, stale_ref", async (t)
     await assert.rejects(
       () => driver.click(browserId, tabId, buttonRef),
       (err: unknown) => {
-        assert.ok(err && typeof err === "object" && "browser_type" in err);
+        assert.ok(err && typeof err === "object" && "type" in err);
         assert.equal((err as { type: string }).type, "stale_ref");
         return true;
       },
@@ -124,5 +124,78 @@ test("integration: snapshot refs, actions, tabs, truncate, stale_ref", async (t)
     } catch {
       // best-effort — Nas may already have torn the browser down
     }
+  }
+});
+
+test("integration: upload_file attaches a host file directly and through a file chooser", async (t) => {
+  if (!nasUrl) {
+    t.skip("NAS_URL not set");
+    return;
+  }
+
+  const config = testConfig();
+  const http = axios.create({
+    baseURL: nasUrl,
+    timeout: Math.max(config.nas.timeout_ms, 120_000),
+    headers: { "content-type": "application/json" },
+  });
+  const wsBase = nasUrl.replace(/^http/, "ws");
+  const created = await http.post("/browsers", {});
+  const browserId = created.data.id as number;
+  const cdpUrl = String(created.data.cdp_url).replace(/^ws:\/\/[^/]+/, wsBase);
+
+  const hostDir = "/tmp/dimaag-upload-test";
+  const hostPath = `${hostDir}/Resume [v1].txt`;
+  const content = "upload integration test\n";
+  await http.post("/fs/write", { path: hostPath, content });
+
+  const nas = {
+    ...createNasClient(config),
+    glob: async (body: { pattern: string; cwd?: string; limit?: number }) => {
+      const res = await http.post("/fs/glob", body);
+      return res.data;
+    },
+  };
+  const driver = new BrowserDriver(nas, config, silentLog);
+  driver.remember(browserId, cdpUrl);
+
+  try {
+    const pageHtml = encodeURIComponent(`<!doctype html><html><body>
+      <input id="direct" type="file" />
+      <button id="pick" onclick="document.getElementById('hidden').click()">Upload resume</button>
+      <input id="hidden" type="file" style="display:none" />
+    </body></html>`);
+    const nav = await driver.navigate(browserId, undefined, `data:text/html,${pageHtml}`);
+    const tabId = nav.tab_id;
+    const snap = await driver.accessibilityTree(browserId, tabId);
+    const directRef = snap.tree.match(/\[(e\d+)\] input type="file"/)?.[1];
+    const pickRef = snap.tree.match(/button \[(e\d+)\] "Upload resume"/)?.[1];
+    assert.ok(directRef && pickRef, snap.tree);
+    assert.doesNotMatch(snap.tree, /name="hidden"/);
+
+    const direct = await driver.uploadFile(browserId, tabId, directRef, [hostPath]);
+    assert.deepEqual(direct.files, [{ name: "Resume [v1].txt", size: Buffer.byteLength(content) }]);
+
+    const chosen = await driver.uploadFile(browserId, tabId, pickRef, [hostPath]);
+    assert.deepEqual(chosen.files, [{ name: "Resume [v1].txt", size: Buffer.byteLength(content) }]);
+
+    const { page } = await driver.resolvePage(browserId, tabId);
+    const names = await page.evaluate(() =>
+      ["direct", "hidden"].map(
+        (id) => (document.getElementById(id) as HTMLInputElement).files?.[0]?.name ?? null,
+      ),
+    );
+    assert.deepEqual(names, ["Resume [v1].txt", "Resume [v1].txt"]);
+
+    await assert.rejects(
+      () => driver.uploadFile(browserId, tabId, directRef, [`${hostDir}/missing.pdf`]),
+      (err: unknown) => {
+        assert.equal((err as { type: string }).type, "not_found");
+        return true;
+      },
+    );
+  } finally {
+    driver.drop(browserId);
+    await http.delete(`/browsers/${browserId}`);
   }
 });

@@ -40,7 +40,7 @@ after(async () => {
 });
 
 test("EventBus.subscribe receives emitted events; unsubscribe stops delivery", () => {
-  const bus = new EventBus();
+  const bus = new EventBus(silentLog);
   const agentId = randomUUID();
   const seen: RuntimeEvent[] = [];
   const unsubscribe = bus.subscribe((event) => {
@@ -65,8 +65,14 @@ test("EventBus.subscribe receives emitted events; unsubscribe stops delivery", (
   assert.equal(seen.length, 1);
 });
 
-test("a throwing listener does not block others or the emitter", () => {
-  const bus = new EventBus();
+test("a throwing listener is logged and does not block others or the emitter", () => {
+  const errors: Array<{ obj: unknown; msg?: string }> = [];
+  const bus = new EventBus({
+    ...silentLog,
+    error: (obj, msg) => {
+      errors.push(msg === undefined ? { obj } : { obj, msg });
+    },
+  });
   const seen: RuntimeEvent[] = [];
   bus.subscribe(() => {
     throw new Error("subscriber blew up");
@@ -84,6 +90,12 @@ test("a throwing listener does not block others or the emitter", () => {
   });
   assert.equal(seen.length, 1);
   assert.equal(seen[0]?.type, "lane_started");
+  assert.deepEqual(errors, [
+    {
+      obj: { event: "lane_started", error: "subscriber blew up" },
+      msg: "runtime event listener failed",
+    },
+  ]);
 });
 
 test("POST /messages emits a message event", async () => {
@@ -205,7 +217,7 @@ test("deliverAgentMessage merges extraPayload into both message log rows", async
     systemPrompt: "target",
   });
   const transcript = new TranscriptStore();
-  const events = new EventBus();
+  const events = new EventBus(silentLog);
   const seen: RuntimeEvent[] = [];
   events.subscribe((event) => {
     if (event.type === "message") {

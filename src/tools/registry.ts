@@ -12,6 +12,7 @@ import { screenshot } from "./browser/screenshot.js";
 import { selectOption } from "./browser/select.js";
 import { spawnBrowser } from "./browser/spawn-browser.js";
 import { typeText } from "./browser/type.js";
+import { uploadFile } from "./browser/upload-file.js";
 import { waitFor } from "./browser/wait-for.js";
 import { spawnAgent } from "./dimaag/spawn-agent.js";
 import { modifyAgent } from "./dimaag/modify-agent.js";
@@ -117,6 +118,7 @@ const definitions = [
   accessibilityTree,
   click,
   typeText,
+  uploadFile,
   selectOption,
   waitFor,
   screenshot,

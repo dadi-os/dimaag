@@ -87,8 +87,9 @@ export const fillSecret = defineTool({
             command: `rm -f ${shellQuote(stagedPath)}`,
           });
           stagedPath = undefined;
-        } catch {
-          leftover = ` secret staging file may remain; retry after terminal idle (${stagedPath})`;
+        } catch (cleanupErr) {
+          const reason = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+          leftover = ` secret staging file may remain at ${stagedPath} (cleanup failed: ${reason}); retry after terminal idle`;
         }
       }
       if (err instanceof DimaagError) {

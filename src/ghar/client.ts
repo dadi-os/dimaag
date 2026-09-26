@@ -208,6 +208,10 @@ async function withRetry(config: Config, fn: () => Promise<unknown>): Promise<un
   throw mapGharError(lastError);
 }
 
+/**
+ * isRetryable retries network failures and 5xx responses, except a device timeout (504):
+ * a second attempt can double-apply a toggle.
+ */
 function isRetryable(err: unknown): boolean {
   if (!axios.isAxiosError(err)) {
     return false;
@@ -215,7 +219,6 @@ function isRetryable(err: unknown): boolean {
   if (!err.response) {
     return true;
   }
-  // Do not retry device timeouts — a second attempt can double-apply toggles.
   if (err.response.status === 504) {
     return false;
   }

@@ -365,16 +365,16 @@ test("POST /dadi with invalid decide input is 502 dwar", async () => {
   await app.close();
 });
 
-test("POST /dadi reuse of a nested agent is 422", async () => {
+test("POST /dadi reuse delivers to a nested agent and lists it under its parent", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const parentId = await insertWorker(handle.db, {
-    name: "parent",
-    systemPrompt: "owns children",
+    name: "career-manager",
+    systemPrompt: "owns the job search",
     tools: [],
   });
   const childId = await insertWorker(handle.db, {
-    name: "child",
-    systemPrompt: "nested",
+    name: "application-manager",
+    systemPrompt: "owns the application bots",
     parentAgentId: parentId,
     tools: [],
   });
@@ -392,23 +392,35 @@ test("POST /dadi reuse of a nested agent is 422", async () => {
       usage: { input_tokens: 1, output_tokens: 1 },
     }),
   });
-  const { app, runtime } = await appWith(dwar);
+  const { app, runtime, dwar: captured } = await appWith(dwar);
 
   const res = await app.inject({
     method: "POST",
     url: "/dadi",
-    payload: { content: "reuse nested" },
+    payload: { content: "apply to this job" },
   });
-  assert.equal(res.statusCode, 422);
-  const body = res.json() as { error: { type: string; message: string } };
-  assert.equal(body.error.type, "invalid_request");
-  assert.match(body.error.message, /top-level/);
+  assert.equal(res.statusCode, 201);
+  const body = res.json() as { action: string; thread_id: string; created: boolean };
+  assert.equal(body.action, "routed");
+  assert.equal(body.created, false);
+  assert.equal(body.thread_id, childId);
+
+  const system = captured.completeCalls[0]?.system ?? "";
+  assert.match(
+    system,
+    new RegExp(`- ${parentId} \\[active\\]: owns the job search\n  - ${childId} \\[active\\]`),
+  );
+
+  const delivered = runtime.transcript.transcriptFor(childId);
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0]?.fromAgentId, null);
+  assert.equal(delivered[0]?.content, "apply to this job");
 
   await runtime.waitUntilIdle();
   await app.close();
 });
 
-test("POST /dadi reuse of a dormant nested agent is still 422", async () => {
+test("POST /dadi reuse of a dormant nested agent wakes it and delivers", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const parentId = await insertWorker(handle.db, {
     name: "parent",
@@ -436,19 +448,27 @@ test("POST /dadi reuse of a dormant nested agent is still 422", async () => {
       usage: { input_tokens: 1, output_tokens: 1 },
     }),
   });
-  const { app, runtime } = await appWith(dwar);
+  const { app, runtime, dwar: captured } = await appWith(dwar);
+  const seen: RuntimeEvent[] = [];
+  runtime.events.subscribe((event) => {
+    seen.push(event);
+  });
 
   const res = await app.inject({
     method: "POST",
     url: "/dadi",
     payload: { content: "reuse dormant nested" },
   });
-  assert.equal(res.statusCode, 422);
-  const body = res.json() as { error: { type: string; message: string } };
-  assert.equal(body.error.type, "invalid_request");
-  assert.match(body.error.message, /top-level/);
+  assert.equal(res.statusCode, 201);
+  assert.match(captured.completeCalls[0]?.system ?? "", new RegExp(`  - ${childId} \\[dormant\\]`));
   const [child] = await handle.db.select().from(agents).where(eq(agents.id, childId));
-  assert.equal(child?.active, false);
+  assert.equal(child?.active, true);
+  assert.ok(
+    seen.some((event) => event.type === "agent_modified" && event.agent_id === childId),
+  );
+  const delivered = runtime.transcript.transcriptFor(childId);
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0]?.content, "reuse dormant nested");
 
   await runtime.waitUntilIdle();
   await app.close();

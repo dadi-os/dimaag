@@ -42,7 +42,7 @@ function deliverDeps(transcript: TranscriptStore) {
   return {
     db: handle.db,
     transcript,
-    events: new EventBus(),
+    events: new EventBus(silentLog),
     enqueueConversation: () => {},
   };
 }

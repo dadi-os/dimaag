@@ -46,7 +46,7 @@ test("Hath tools are registered", async () => {
   for (const name of HATH_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 65);
+  assert.equal(allTools().length, 66);
   await assert.doesNotReject(() => syncTools(handle.db));
 });
 
