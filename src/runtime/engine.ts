@@ -10,6 +10,7 @@
 import { eq } from "drizzle-orm";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
+import { DimaagError } from "../errors.js";
 import { writeAgentLog } from "../db/logs.js";
 import { agents } from "../db/schema.js";
 import { BrowserDriver } from "../browser/driver.js";
@@ -18,8 +19,15 @@ import type { DwarClient } from "../dwar/client.js";
 import type { GharClient } from "../ghar/client.js";
 import type { NasClient } from "../nas/client.js";
 import type { YaadClient } from "../yaad/client.js";
-import type { DwarChatResponse, DwarMessage, DwarToolUseBlock, Lane } from "../types/domain.js";
-import { assembleContext } from "./context.js";
+import type {
+  DwarChatRequest,
+  DwarChatResponse,
+  DwarMessage,
+  DwarToolUseBlock,
+  Lane,
+} from "../types/domain.js";
+import { arrivalsSince, assembleContext } from "./context.js";
+import { deliverAgentMessage } from "./deliver.js";
 import { runConversationLoop } from "./conversation.js";
 import { EventBus } from "./events.js";
 import { HathGateway } from "./hath.js";
@@ -227,6 +235,9 @@ export function createRuntime(opts: {
       });
       if (lane === "reasoning") {
         scratchpadFor(reasoningScratchpads, agentId).length = 0;
+        await reportReasoningFailure(agentId, message).catch((reportErr: unknown) => {
+          opts.log.error({ err: reportErr, agentId }, "reasoning failure report failed");
+        });
       } else {
         scratchpadFor(conversationScratchpads, agentId).length = 0;
       }
@@ -240,6 +251,30 @@ export function createRuntime(opts: {
     }
   }
 
+  /**
+   * reportReasoningFailure tells the failed agent's parent (or Ankur, for a root
+   * agent) that its wake died, as a durable message that also wakes the
+   * recipient — otherwise a crashed wake is indistinguishable from a slow one
+   * and the parent polls a dead worker.
+   */
+  async function reportReasoningFailure(agentId: string, message: string): Promise<void> {
+    const [agent] = await opts.db
+      .select({ parentAgentId: agents.parentAgentId })
+      .from(agents)
+      .where(eq(agents.id, agentId));
+    if (!agent) {
+      throw new DimaagError(404, "not_found", `agent ${agentId} not found`);
+    }
+    await deliverAgentMessage(
+      { db: opts.db, transcript, events, enqueueConversation },
+      {
+        fromAgentId: agentId,
+        toAgentId: agent.parentAgentId,
+        content: `[runtime] My reasoning lane failed and this wake stopped before finishing: ${message}. Work after my last update was not done; wake me with a message to retry.`,
+      },
+    );
+  }
+
   function laneHelpers(agentId: string, lane: Lane) {
     const assemble = () =>
       assembleContext({
@@ -248,6 +283,7 @@ export function createRuntime(opts: {
         lane,
         transcript,
         transcriptWindowMessages: opts.config.runtime.transcript_window_messages,
+        transcriptWindowStep: opts.config.runtime.transcript_window_step_messages,
       });
     const exec = (call: DwarToolUseBlock) => executeTool(toolContext(agentId, lane), call);
     const logThought = (response: DwarChatResponse) =>
@@ -290,6 +326,7 @@ export function createRuntime(opts: {
   function scratchpadClearOpts() {
     return {
       keep: opts.config.runtime.scratchpad_keep_tool_results,
+      batch: opts.config.runtime.scratchpad_clear_batch_tool_results,
       maxChars: opts.config.runtime.scratchpad_tool_result_max_chars,
     };
   }
@@ -301,7 +338,8 @@ export function createRuntime(opts: {
       scratchpad: scratchpadFor(reasoningScratchpads, agentId),
       scratchpadClear: scratchpadClearOpts(),
       assemble: helpers.assemble,
-      reason: opts.dwar.reason,
+      arrivalsSince: (afterSeq: number) => arrivalsSince(transcript, agentId, afterSeq),
+      reason: (request: DwarChatRequest) => opts.dwar.reason(request, `dimaag/${agentId}`),
       executeTool: helpers.exec,
       steer,
       logThought: helpers.logThought,
@@ -317,7 +355,7 @@ export function createRuntime(opts: {
       scratchpad: scratchpadFor(conversationScratchpads, agentId),
       scratchpadClear: scratchpadClearOpts(),
       assemble: helpers.assemble,
-      converse: opts.dwar.converse,
+      converse: (request: DwarChatRequest) => opts.dwar.converse(request, `dimaag/${agentId}`),
       executeTool: helpers.exec,
       intents,
       logThought: helpers.logThought,

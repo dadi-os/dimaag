@@ -68,7 +68,6 @@ export const modifyAgent = defineTool({
       {
         agent_id: target.id,
         old_system_prompt: oldPrompt,
-        new_system_prompt: newPrompt,
         active,
       },
       {

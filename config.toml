@@ -1,10 +1,18 @@
 [runtime]
 # How long a request waits for a busy lane lock before failing.
 lane_queue_timeout_ms = 30000
-# Max message turns included in each Dwar call (rolling window).
+# Min message turns included in each Dwar call (rolling window).
 transcript_window_messages = 40
+# The window's start advances in steps of this many turns (so a call sees
+# window..window+step-1 turns) instead of sliding by one, which keeps the
+# provider's cached prefix intact as new messages arrive.
+transcript_window_step_messages = 20
 # Mid-wake scratchpad: keep the last N tool-result user turns fully intact.
 scratchpad_keep_tool_results = 5
+# Let this many extra full tool-result turns pile up past the keep count, then
+# clear them together, so the cached prefix is rewritten once per batch
+# instead of on every step.
+scratchpad_clear_batch_tool_results = 5
 # Soft char budget on scratchpad tool_result payloads before clearing older ones further.
 scratchpad_tool_result_max_chars = 80000
 # Backoff after a failed tool call before the agent's next call; doubles per

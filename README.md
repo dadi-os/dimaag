@@ -87,7 +87,11 @@ Every agent has both lanes. **Reasoning** is the executor (tool-calling against 
 
 Transcript is in-process and shared. Conversation starts on inbound message, reasoning finish, or `send_message`. `steer_reasoning` queues instructions for the next reasoning step.
 
-Mid-wake **scratchpads** hold assistant + tool_result pairs until `yield` (or a bare exit). Each iteration clears older tool_result bodies: the last `[runtime].scratchpad_keep_tool_results` turns stay full, and a `[runtime].scratchpad_tool_result_max_chars` budget can clear further so long wakes stay near a working-set size. There is no per-wake step limit — wakes run until yield. Cleared results say to call the tool again if needed.
+Mid-wake **scratchpads** hold assistant + tool_result pairs until `yield` (or a bare exit). Older tool_result bodies are cleared in batches: full results may grow to `[runtime].scratchpad_keep_tool_results` + `scratchpad_clear_batch_tool_results`, then all but the newest keep-count are cleared at once, and a `[runtime].scratchpad_tool_result_max_chars` budget can clear further so long wakes stay near a working-set size. A cleared result keeps its first 240 chars and says it was already seen. There is no per-wake step limit — wakes run until yield.
+
+The reasoning lane fixes its transcript at wake start. Messages that arrive mid-wake join the scratchpad as one `[Arrived during this wake]` turn, and steers (and conversation-lane intents) are appended to the scratchpad, so they stay in view for the rest of the wake and earlier turns never change — Dwar caches the history prefix, so a byte-stable history is what keeps long wakes cheap. A reasoning wake that throws is reported to the agent's parent (Ankur for a root agent) as a `[runtime]` message, which also wakes the parent.
+
+Every Dwar call sends `X-Dadi-Caller` (`dimaag/<agent id>`, `dimaag/dadi`, `dimaag/attachments`) so Dwar's inference log attributes tokens; `thought` logs carry the full usage including cache reads and writes.
 
 Assembled context always includes a lane block (conversation manages reasoning via `steer_reasoning`, including `terminate` to halt the next tool call; conversation must not claim grants are missing) and an identity/routing block: agent id, parent (or root), point-of-contact messaging for the job, and grant escalation to the parent when the agent is a child. This is prompt guidance only — `send_message` / `dispatch_message` do not enforce it.
 
@@ -204,7 +208,7 @@ The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the app
 
 ## Persistence
 
-`agents`, `agent_logs`, `messages`, and `scheduled_messages` survive restart. `messages` is the source of truth for human↔agent chat and the rolling lane transcript (last `[runtime].transcript_window_messages` turns, default 40). Older turns remain in `agent_logs` / `dimaag_get_logs`. Scratchpads (with mid-wake tool-result clearing), locks, steer/intent queues, host `sessions`, and the event stream do not survive. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
+`agents`, `agent_logs`, `messages`, and `scheduled_messages` survive restart. `messages` is the source of truth for human↔agent chat and the rolling lane transcript (at least the last `[runtime].transcript_window_messages` turns, default 40; the window's start advances in steps of `transcript_window_step_messages` so the cached prefix survives new messages). Older turns remain in `agent_logs` / `dimaag_get_logs`. Scratchpads (with mid-wake tool-result clearing), locks, steer/intent queues, host `sessions`, and the event stream do not survive. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
 
 Schedule tools (`dimaag_schedule_message`, `dimaag_list_schedules`, `dimaag_cancel_schedule`) persist one-shot and recurring deliveries; the in-process scheduler ticks from `[schedule].tick_seconds` in `config.toml` (wall clock uses `TIMEZONE` in `constants.ts`).
 

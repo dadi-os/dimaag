@@ -6,7 +6,7 @@ import { migrate } from "../src/db/migrate.js";
 import { hydrateTranscript, listHumanMessages, listThreads } from "../src/db/messages.js";
 import { agentLogs, messages } from "../src/db/schema.js";
 import { writeAgentLog } from "../src/db/logs.js";
-import { assembleContext } from "../src/runtime/context.js";
+import { arrivalsSince, assembleContext } from "../src/runtime/context.js";
 import { deliverAgentMessage, deliverUserMessage } from "../src/runtime/deliver.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { EventBus } from "../src/runtime/events.js";
@@ -98,10 +98,112 @@ test("assembleContext truncates to transcript_window_messages", async () => {
     lane: "conversation",
     transcript,
     transcriptWindowMessages: 4,
+    transcriptWindowStep: 1,
   });
   assert.equal(ctx.messages.length, 4);
   assert.equal(ctx.messages[0]?.content, "[From: Ankur]\nuser-3");
   assert.equal(ctx.messages[3]?.content, "[To: Ankur]\nagent-4");
+});
+
+test("assembleContext advances the window in steps so the prefix survives new messages", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const agentId = await insertWorker(handle.db, {
+    name: "step-window-worker",
+    systemPrompt: "system",
+    tools: [],
+  });
+  const transcript = new TranscriptStore();
+  const deps = deliverDeps(transcript);
+  const assemble = () =>
+    assembleContext({
+      db: handle.db,
+      agentId,
+      lane: "reasoning",
+      transcript,
+      transcriptWindowMessages: 4,
+      transcriptWindowStep: 3,
+    });
+  for (let i = 0; i < 10; i++) {
+    await deliverUserMessage(deps, agentId, `m-${i}`);
+  }
+
+  const first = await assemble();
+  assert.equal(first.messages.length, 4);
+  await deliverUserMessage(deps, agentId, "m-10");
+  const second = await assemble();
+  assert.equal(second.messages.length, 5);
+  assert.deepEqual(second.messages.slice(0, 4), first.messages);
+  await deliverUserMessage(deps, agentId, "m-11");
+  await deliverUserMessage(deps, agentId, "m-12");
+  const third = await assemble();
+  assert.equal(third.messages.length, 4);
+  assert.equal(third.messages[0]?.content, "[From: Ankur]\nm-9");
+  assert.equal(third.throughSeq, transcript.transcriptFor(agentId).at(-1)?.seq);
+});
+
+test("messages arriving mid-wake join the scratchpad after it and never rewrite earlier turns", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const agentId = await insertWorker(handle.db, {
+    name: "arrival-worker",
+    systemPrompt: "system",
+    tools: [],
+  });
+  const transcript = new TranscriptStore();
+  const deps = deliverDeps(transcript);
+  await deliverUserMessage(deps, agentId, "find Oliver Chen");
+
+  const { runReasoningLoop } = await import("../src/runtime/reasoning.js");
+  const { SteerQueue } = await import("../src/runtime/steer.js");
+  const requests: { messages: unknown[] }[] = [];
+  let turn = 0;
+  await runReasoningLoop({
+    agentId,
+    scratchpad: [],
+    scratchpadClear: { keep: 5, batch: 5, maxChars: 80_000 },
+    assemble: () =>
+      assembleContext({
+        db: handle.db,
+        agentId,
+        lane: "reasoning",
+        transcript,
+        transcriptWindowMessages: 40,
+        transcriptWindowStep: 20,
+      }),
+    arrivalsSince: (afterSeq) => arrivalsSince(transcript, agentId, afterSeq),
+    reason: async (request) => {
+      requests.push(structuredClone(request));
+      turn += 1;
+      if (turn === 1) {
+        await deliverUserMessage(deps, agentId, "status?");
+        await deliverAgentMessage(deps, {
+          fromAgentId: agentId,
+          toAgentId: null,
+          content: "on it",
+        });
+      }
+      const name = turn < 3 ? "wait" : "yield";
+      return {
+        content: [{ type: "tool_use", id: `c${turn}`, name, input: {} }],
+        stop_reason: "tool_use",
+        usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+      };
+    },
+    executeTool: async () => ({ content: "{}", isError: false, audit: {} }),
+    steer: new SteerQueue(),
+    logThought: async () => {},
+    logToolCall: async () => {},
+    logToolResult: async () => {},
+  });
+
+  assert.equal(requests.length, 3);
+  const [first, second, third] = requests as { messages: { role: string; content: unknown }[] }[];
+  assert.deepEqual(second!.messages.slice(0, first!.messages.length), first!.messages);
+  assert.deepEqual(third!.messages.slice(0, second!.messages.length), second!.messages);
+  const last = second!.messages.at(-1)!;
+  assert.equal(last.role, "user");
+  assert.ok(typeof last.content === "string");
+  assert.ok(last.content.indexOf("status?") < last.content.indexOf("on it"));
+  assert.ok(first!.messages.every((m) => !JSON.stringify(m).includes("status?")));
 });
 
 test("hydrateTranscript restores durable rows into TranscriptStore", async () => {
@@ -332,6 +434,7 @@ test("assembleContext injects agent id and parent routing for children", async (
     lane: "reasoning",
     transcript: new TranscriptStore(),
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   assert.match(childCtx.system, /Your agent id is routing-child/);
   assert.match(childCtx.system, /Your parent is routing-parent/);
@@ -342,6 +445,7 @@ test("assembleContext injects agent id and parent routing for children", async (
     lane: "conversation",
     transcript: new TranscriptStore(),
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   assert.match(parentCtx.system, /Your agent id is routing-parent/);
   assert.match(parentCtx.system, /You are a root agent/);

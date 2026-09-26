@@ -1,5 +1,6 @@
 import type { DwarChatRequest, DwarChatResponse, DwarMessage, DwarToolUseBlock } from "../types/domain.js";
 import { YIELD } from "../types/domain.js";
+import type { AssembledContext } from "./context.js";
 import type { SteerQueue } from "./steer.js";
 import { formatSteerTurn } from "./steer.js";
 import { clearOldToolResults, type ClearOldToolResultsOpts } from "./scratchpad.js";
@@ -9,7 +10,8 @@ export type ReasoningLoopDeps = {
   agentId: string;
   scratchpad: DwarMessage[];
   scratchpadClear: ClearOldToolResultsOpts;
-  assemble: () => Promise<DwarChatRequest>;
+  assemble: () => Promise<AssembledContext>;
+  arrivalsSince: (afterSeq: number) => { turn: DwarMessage | null; throughSeq: number };
   reason: (request: DwarChatRequest) => Promise<DwarChatResponse>;
   executeTool: (call: DwarToolUseBlock) => Promise<ToolExecResult>;
   steer: SteerQueue;
@@ -24,15 +26,22 @@ const TERMINATED = "terminated by conversation lane";
  * Reasoning-lane scratchpad loop. Dwar forces tool use; text may accompany tools as
  * internal working output. The only clean exit is the embedded yield tool. A bare
  * response with no tools is a degraded exit; pending steers still continue the loop.
- * Scratchpad holds mid-turn tool results only — cleared when the turn ends so
- * prior yields cannot few-shot the next wake. Each iteration clears older
+ * Scratchpad holds this wake's tool calls and results, steers, and mid-wake
+ * arrivals — cleared when the turn ends so prior yields cannot few-shot the next wake. Each iteration clears older
  * tool_result bodies so long wakes stay near a working-set size.
  *
  * When conversation sets terminate, this wake stops in its tracks: no further
  * tool calls run (in-flight model output is discarded before execution).
+ *
+ * The transcript is fixed at wake start. Messages that arrive mid-wake and
+ * steers are appended to the scratchpad where they happened, so earlier turns
+ * never change (keeping the provider cache warm) and steers stay in view for
+ * the rest of the wake instead of for a single call.
  */
 export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
   const scratchpad = deps.scratchpad;
+  let transcript: DwarMessage[] | null = null;
+  let seenThrough = 0;
 
   for (;;) {
     if (deps.steer.isTerminate(deps.agentId)) {
@@ -44,11 +53,21 @@ export async function runReasoningLoop(deps: ReasoningLoopDeps): Promise<void> {
 
     clearOldToolResults(scratchpad, deps.scratchpadClear);
     const assembled = await deps.assemble();
-    const messages: DwarMessage[] = [...assembled.messages, ...scratchpad];
+    if (transcript === null) {
+      transcript = assembled.messages;
+      seenThrough = assembled.throughSeq;
+    } else {
+      const arrived = deps.arrivalsSince(seenThrough);
+      if (arrived.turn !== null) {
+        scratchpad.push(arrived.turn);
+      }
+      seenThrough = arrived.throughSeq;
+    }
     const steers = deps.steer.drain(deps.agentId);
     if (steers.length > 0) {
-      messages.push({ role: "user", content: formatSteerTurn(steers) });
+      scratchpad.push({ role: "user", content: formatSteerTurn(steers) });
     }
+    const messages: DwarMessage[] = [...transcript, ...scratchpad];
 
     if (deps.steer.isTerminate(deps.agentId)) {
       deps.steer.takeTerminate(deps.agentId);

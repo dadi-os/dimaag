@@ -72,6 +72,7 @@ test("assembleContext for a worker includes Yaad tools, send_message, and yield 
     lane: "reasoning",
     transcript: new TranscriptStore(),
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   const names = new Set(ctx.tools.map((tool) => tool.name));
   for (const name of [...granted, SEND_MESSAGE, LIST_AGENTS, "yield"]) {

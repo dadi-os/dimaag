@@ -588,6 +588,7 @@ const SNAPSHOT_SCRIPT = `(() => {
     if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
       return true;
     }
+    if (style.display === "contents") return false;
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return true;
     return false;

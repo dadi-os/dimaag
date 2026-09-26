@@ -28,11 +28,7 @@ export const extractText = defineTool({
   async handler(ctx, parsed) {
     return browserToolCall(
       () => ctx.browsers.extractText(parsed.browser_id, parsed.tab_id, parsed.max_bytes),
-      (response) => ({
-        text: response.text,
-        truncated: response.truncated,
-        url: response.url,
-      }),
+      (response) => `url: ${response.url}\ntruncated: ${response.truncated}\n${response.text}`,
       (response) => ({ browser_id: parsed.browser_id, tab_id: response.tab_id }),
     );
   },

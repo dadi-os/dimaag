@@ -81,6 +81,7 @@ test("a recorded thought reappears as the agent's own [Thought] in context", asy
     lane: "reasoning",
     transcript: runtime.transcript,
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   const thought = ctx.messages.find(
     (m) => typeof m.content === "string" && m.content.includes("SSO button"),

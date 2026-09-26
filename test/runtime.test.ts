@@ -14,7 +14,7 @@ import { executeTool } from "../src/runtime/tools.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import { buildApp } from "../src/app.js";
 import { migrate } from "../src/db/migrate.js";
-import { agents, agentTools, scheduledMessages, tools } from "../src/db/schema.js";
+import { agents, agentTools, messages, scheduledMessages, tools } from "../src/db/schema.js";
 import { writeAgentLog } from "../src/db/logs.js";
 import { toolId } from "../src/tools/sync.js";
 import { allTools, findTool } from "../src/tools/registry.js";
@@ -149,7 +149,8 @@ test("modify_agent on a direct child is allowed", async () => {
     input: { agent_id: childId, system_prompt: "new prompt" },
   });
   assert.equal(result.isError, false);
-  assert.equal(JSON.parse(result.content).new_system_prompt, "new prompt");
+  assert.equal(result.audit.new_system_prompt, "new prompt");
+  assert.equal(JSON.parse(result.content).new_system_prompt, undefined);
   assert.equal(result.audit.old_system_prompt, "old prompt");
 });
 
@@ -185,8 +186,7 @@ test("modify_agent updates prompt on self and a direct child", async () => {
   assert.equal(self.isError, false);
   const selfBody = JSON.parse(self.content);
   assert.equal(selfBody.old_system_prompt, "boss prompt");
-  assert.equal(selfBody.new_system_prompt, "boss prompt v2");
-  assert.equal(self.audit.old_system_prompt, "boss prompt");
+    assert.equal(self.audit.old_system_prompt, "boss prompt");
   assert.equal(self.audit.new_system_prompt, "boss prompt v2");
   const [parent] = await handle.db.select().from(agents).where(eq(agents.id, parentId));
   assert.equal(parent?.systemPrompt, "boss prompt v2");
@@ -199,7 +199,7 @@ test("modify_agent updates prompt on self and a direct child", async () => {
     input: { agent_id: childId, system_prompt: "child prompt v2" },
   });
   assert.equal(child.isError, false);
-  assert.equal(JSON.parse(child.content).new_system_prompt, "child prompt v2");
+  assert.equal(child.audit.new_system_prompt, "child prompt v2");
   const [row] = await handle.db.select().from(agents).where(eq(agents.id, childId));
   assert.equal(row?.systemPrompt, "child prompt v2");
   assert.equal(row?.id, "worker");
@@ -290,7 +290,7 @@ test("modify_agent accepts active alone", async () => {
   });
   assert.equal(result.isError, false);
   const body = JSON.parse(result.content);
-  assert.equal(body.new_system_prompt, "keep me");
+  assert.equal(result.audit.new_system_prompt, "keep me");
   assert.equal(body.active, false);
 });
 
@@ -307,6 +307,7 @@ test("reasoning context has send_message, list_agents, and no dispatch_message",
     lane: "reasoning",
     transcript: new TranscriptStore(),
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes(SEND_MESSAGE));
@@ -474,6 +475,7 @@ test("conversation tools are dispatch_message, steer_reasoning, list_agents, yie
     lane: "conversation",
     transcript: new TranscriptStore(),
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes(DISPATCH_MESSAGE));
@@ -517,6 +519,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
     lane: "reasoning",
     transcript: new TranscriptStore(),
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   assert.deepEqual(
     childCtx.tools.map((tool) => tool.name),
@@ -557,6 +560,7 @@ test("grant_tool on a direct child succeeds and appears in assembleContext", asy
     lane: "reasoning",
     transcript: new TranscriptStore(),
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   const names = ctx.tools.map((tool) => tool.name);
   assert.ok(names.includes("dimaag_modify_agent"));
@@ -1136,6 +1140,7 @@ test("revoke_tool removes a grant and fails when the child does not hold it", as
     lane: "reasoning",
     transcript: new TranscriptStore(),
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   assert.equal(
     ctx.tools.map((tool) => tool.name).includes("dimaag_modify_agent"),
@@ -1181,6 +1186,7 @@ test("an agent can grant a tool it does not itself hold", async () => {
     lane: "reasoning",
     transcript: new TranscriptStore(),
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   assert.equal(
     parentCtx.tools.map((tool) => tool.name).includes("dimaag_modify_agent"),
@@ -1203,6 +1209,7 @@ test("an agent can grant a tool it does not itself hold", async () => {
     lane: "reasoning",
     transcript: new TranscriptStore(),
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   assert.ok(childCtx.tools.map((tool) => tool.name).includes("dimaag_modify_agent"));
 });
@@ -1219,6 +1226,7 @@ test("list_agents is in both lanes for an agent with no grants", async () => {
     lane: "reasoning",
     transcript: new TranscriptStore(),
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   const conversation = await assembleContext({
     db: handle.db,
@@ -1226,6 +1234,7 @@ test("list_agents is in both lanes for an agent with no grants", async () => {
     lane: "conversation",
     transcript: new TranscriptStore(),
     transcriptWindowMessages: 40,
+    transcriptWindowStep: 20,
   });
   assert.deepEqual(reasoning.tools.map((tool) => tool.name), [
     SEND_MESSAGE,
@@ -1635,4 +1644,43 @@ test("executeTool denies registry tools without grant or when inactive", async (
   });
   assert.equal(inactive.isError, true);
   assert.match(inactive.content, /inactive/);
+});
+
+
+test("a failed reasoning wake is reported to the parent and wakes it", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const parentId = await insertAgent(handle.db, { id: "failure-parent", systemPrompt: "parent" });
+  const childId = await insertAgent(handle.db, {
+    id: "failure-child",
+    systemPrompt: "child",
+    parentAgentId: parentId,
+  });
+  const conversed: string[] = [];
+  const runtime = createRuntime({
+    db: handle.db,
+    dwar: mockDwar({
+      reason: async () => {
+        throw new Error("Dwar is unreachable");
+      },
+      converse: async (request) => {
+        conversed.push(JSON.stringify(request.messages));
+        return endTurn();
+      },
+    }),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+
+  runtime.enqueueReasoning(childId);
+  await runtime.waitUntilIdle();
+
+  const sent = await handle.db.select().from(messages).where(eq(messages.fromAgentId, childId));
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]?.toAgentId, parentId);
+  assert.ok(sent[0]!.content.includes("Dwar is unreachable"));
+  assert.ok(conversed.some((body) => body.includes("Dwar is unreachable")));
 });

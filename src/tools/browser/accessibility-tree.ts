@@ -32,11 +32,7 @@ export const accessibilityTree = defineTool({
   async handler(ctx, parsed) {
     return browserToolCall(
       () => ctx.browsers.accessibilityTree(parsed.browser_id, parsed.tab_id, parsed.max_bytes),
-      (response) => ({
-        tree: response.tree,
-        truncated: response.truncated,
-        url: response.url,
-      }),
+      (response) => `url: ${response.url}\ntruncated: ${response.truncated}\n${response.tree}`,
       (response) => ({ browser_id: parsed.browser_id, tab_id: response.tab_id }),
     );
   },

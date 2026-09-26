@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Config } from "../config.js";
 import { DWAR_BASE_URL } from "../constants.js";
 import { DimaagError } from "../errors.js";
-import type { DwarChatRequest, DwarChatResponse } from "../types/domain.js";
+import type { DwarChatRequest, DwarChatResponse, DwarUsage } from "../types/domain.js";
 
 const chatBlockSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string() }),
@@ -18,21 +18,22 @@ const chatBlockSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+const usageSchema = z.object({
+  input_tokens: z.number(),
+  output_tokens: z.number(),
+  cache_read_input_tokens: z.number(),
+  cache_creation_input_tokens: z.number(),
+});
+
 const chatResponseSchema = z.object({
   content: z.array(chatBlockSchema),
   stop_reason: z.enum(["end_turn", "tool_use", "max_tokens", "error"]),
-  usage: z.object({
-    input_tokens: z.number(),
-    output_tokens: z.number(),
-  }),
+  usage: usageSchema,
 });
 
 const describeResponseSchema = z.object({
   description: z.string().min(1),
-  usage: z.object({
-    input_tokens: z.number(),
-    output_tokens: z.number(),
-  }),
+  usage: usageSchema,
 });
 
 export type DwarDescribeImageRequest = {
@@ -42,16 +43,21 @@ export type DwarDescribeImageRequest = {
 
 export type DwarDescribeImageResponse = {
   description: string;
-  usage: { input_tokens: number; output_tokens: number };
+  usage: DwarUsage;
 };
 
-/** Dwar surface used by Dimaag: lane chat, promptless complete, and image captioning. */
+/**
+ * Dwar surface used by Dimaag: lane chat, promptless complete, and image captioning.
+ * `caller` is sent as X-Dadi-Caller (`dimaag/<agent id>`, `dimaag/dadi`, …) so Dwar's
+ * inference log attributes each call's tokens to whoever spent them.
+ */
 export type DwarClient = {
-  reason: (request: DwarChatRequest) => Promise<DwarChatResponse>;
-  converse: (request: DwarChatRequest) => Promise<DwarChatResponse>;
-  complete: (request: DwarChatRequest) => Promise<DwarChatResponse>;
+  reason: (request: DwarChatRequest, caller: string) => Promise<DwarChatResponse>;
+  converse: (request: DwarChatRequest, caller: string) => Promise<DwarChatResponse>;
+  complete: (request: DwarChatRequest, caller: string) => Promise<DwarChatResponse>;
   describeImage: (
     request: DwarDescribeImageRequest,
+    caller: string,
   ) => Promise<DwarDescribeImageResponse>;
 };
 
@@ -63,9 +69,13 @@ export function createDwarClient(config: Config): DwarClient {
     headers: { "content-type": "application/json" },
   });
 
-  async function postChat(path: string, request: DwarChatRequest): Promise<DwarChatResponse> {
+  async function postChat(
+    path: string,
+    request: DwarChatRequest,
+    caller: string,
+  ): Promise<DwarChatResponse> {
     const data = await withRetry(config, () =>
-      http.post(path, request).then((res) => res.data),
+      http.post(path, request, { headers: { "x-dadi-caller": caller } }).then((res) => res.data),
     );
     const parsed = chatResponseSchema.safeParse(data);
     if (!parsed.success) {
@@ -100,13 +110,16 @@ export function createDwarClient(config: Config): DwarClient {
 
   async function describeImage(
     request: DwarDescribeImageRequest,
+    caller: string,
   ): Promise<DwarDescribeImageResponse> {
     const body: Record<string, unknown> = { image: request.image };
     if (request.prompt !== undefined) {
       body.prompt = request.prompt;
     }
     const data = await withRetry(config, () =>
-      http.post("/image/describe", body).then((res) => res.data),
+      http
+        .post("/image/describe", body, { headers: { "x-dadi-caller": caller } })
+        .then((res) => res.data),
     );
     const parsed = describeResponseSchema.safeParse(data);
     if (!parsed.success) {
@@ -116,9 +129,9 @@ export function createDwarClient(config: Config): DwarClient {
   }
 
   return {
-    reason: (request) => postChat("/chat/reasoning", request),
-    converse: (request) => postChat("/chat/conversation", request),
-    complete: (request) => postChat("/chat/complete", request),
+    reason: (request, caller) => postChat("/chat/reasoning", request, caller),
+    converse: (request, caller) => postChat("/chat/conversation", request, caller),
+    complete: (request, caller) => postChat("/chat/complete", request, caller),
     describeImage,
   };
 }

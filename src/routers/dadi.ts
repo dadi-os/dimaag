@@ -147,11 +147,14 @@ async function routeDadi(
       ? `${policy}\n\nTop-level threads:\n${roster.join("\n")}`
       : `${policy}\n\nThere are no top-level threads yet. Spawn one when the utterance is work.`;
 
-  const response = await app.dwar.complete({
-    system,
-    messages: [{ role: "user", content }],
-    tools: [decideTool],
-  });
+  const response = await app.dwar.complete(
+    {
+      system,
+      messages: [{ role: "user", content }],
+      tools: [decideTool],
+    },
+    "dimaag/dadi",
+  );
   const call = response.content.find(
     (block): block is DwarToolUseBlock => block.type === "tool_use" && block.name === "decide",
   );

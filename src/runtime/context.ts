@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { agentTools, agents, tools } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
@@ -21,7 +21,7 @@ import {
   waitTool,
   yieldTool,
 } from "./tools.js";
-import type { TranscriptStore } from "./transcript.js";
+import type { TranscriptEntry, TranscriptStore } from "./transcript.js";
 
 /**
  * lineageBlock states runtime facts the model cannot know on its own: this
@@ -37,12 +37,17 @@ function lineageBlock(agentId: string, parentAgentId: string | null): string {
   return `Your agent id is ${agentId}.\n${parentLine}`;
 }
 
+/** An assembled lane request plus the newest transcript seq it includes (0 when empty). */
+export type AssembledContext = DwarChatRequest & { throughSeq: number };
+
 /**
  * One assembler for both lanes. dimaag's system is agent-specific only —
  * charter (the agent's stored prompt), lineage facts, then its active children.
  * The lane doctrine is appended by Dwar as a cached block, so nothing lane- or
- * tool-related is built here. Message history is truncated to the last
- * `transcriptWindowMessages` turns; only the tool set differs across lanes.
+ * tool-related is built here. Message history keeps at least the last
+ * `transcriptWindowMessages` turns; its start only advances in steps of
+ * `transcriptWindowStep` so the provider's cached prefix survives new messages.
+ * Only the tool set differs across lanes.
  */
 export async function assembleContext(opts: {
   db: Db;
@@ -50,7 +55,8 @@ export async function assembleContext(opts: {
   lane: Lane;
   transcript: TranscriptStore;
   transcriptWindowMessages: number;
-}): Promise<DwarChatRequest> {
+  transcriptWindowStep: number;
+}): Promise<AssembledContext> {
   const agentRows = await opts.db.select().from(agents).where(eq(agents.id, opts.agentId));
   const agent = agentRows[0];
   if (!agent) {
@@ -78,36 +84,56 @@ export async function assembleContext(opts: {
   }
 
   const entries = opts.transcript.transcriptFor(opts.agentId);
-  const windowed =
-    entries.length > opts.transcriptWindowMessages
-      ? entries.slice(entries.length - opts.transcriptWindowMessages)
-      : entries;
-  const dwarMessages: DwarMessage[] = windowed.map((row) => {
-    if (row.fromAgentId === opts.agentId && row.toAgentId === opts.agentId) {
-      return {
-        role: "assistant" as const,
-        content: `[Thought]\n${row.content}`,
-      };
-    }
-    if (row.toAgentId === opts.agentId) {
-      const fromLabel = row.fromAgentId === null ? "Ankur" : row.fromAgentId;
-      return {
-        role: "user" as const,
-        content: `[From: ${fromLabel}]\n${row.content}`,
-      };
-    }
-    const toLabel = row.toAgentId === null ? "Ankur" : row.toAgentId;
-    return {
-      role: "assistant" as const,
-      content: `[To: ${toLabel}]\n${row.content}`,
-    };
+  const overflow = entries.length - opts.transcriptWindowMessages;
+  const start =
+    overflow > 0 ? Math.floor(overflow / opts.transcriptWindowStep) * opts.transcriptWindowStep : 0;
+  const dwarMessages: DwarMessage[] = entries.slice(start).map((row) => {
+    const labelled = labelEntry(row, opts.agentId);
+    return { role: labelled.role, content: `${labelled.label}\n${row.content}` };
   });
 
   return {
     system,
     messages: dwarMessages,
     tools: await toolsForLane(opts.db, opts.agentId, opts.lane),
+    throughSeq: entries.at(-1)?.seq ?? 0,
   };
+}
+
+/**
+ * arrivalsSince folds transcript entries newer than `afterSeq` into one user
+ * turn, so messages that land mid-wake join the scratchpad at the point they
+ * arrived instead of rewriting the history above it. `turn` is null when
+ * nothing arrived; `throughSeq` is the newest seq seen.
+ */
+export function arrivalsSince(
+  transcript: TranscriptStore,
+  agentId: string,
+  afterSeq: number,
+): { turn: DwarMessage | null; throughSeq: number } {
+  const fresh = transcript.transcriptFor(agentId).filter((row) => row.seq > afterSeq);
+  if (fresh.length === 0) {
+    return { turn: null, throughSeq: afterSeq };
+  }
+  const lines = fresh.map((row) => `${labelEntry(row, agentId).label}\n${row.content}`);
+  return {
+    turn: { role: "user", content: `[Arrived during this wake]\n\n${lines.join("\n\n")}` },
+    throughSeq: fresh.at(-1)!.seq,
+  };
+}
+
+/** labelEntry gives a transcript row its turn role and `[From:]`/`[To:]`/`[Thought]` label from this agent's point of view. */
+function labelEntry(
+  row: TranscriptEntry,
+  agentId: string,
+): { role: "user" | "assistant"; label: string } {
+  if (row.fromAgentId === agentId && row.toAgentId === agentId) {
+    return { role: "assistant", label: "[Thought]" };
+  }
+  if (row.toAgentId === agentId) {
+    return { role: "user", label: `[From: ${row.fromAgentId === null ? "Ankur" : row.fromAgentId}]` };
+  }
+  return { role: "assistant", label: `[To: ${row.toAgentId === null ? "Ankur" : row.toAgentId}]` };
 }
 
 async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTool[]> {
@@ -123,7 +149,8 @@ async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTo
     })
     .from(agentTools)
     .innerJoin(tools, eq(agentTools.toolId, tools.id))
-    .where(eq(agentTools.agentId, agentId));
+    .where(eq(agentTools.agentId, agentId))
+    .orderBy(asc(tools.name));
   const granted: DwarTool[] = grants.map((grant) => ({
     name: grant.name,
     description: `${grant.description}\n\n${grant.usage}`,

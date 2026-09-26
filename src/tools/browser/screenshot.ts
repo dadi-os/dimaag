@@ -57,11 +57,14 @@ export const screenshot = defineTool({
           url = shot.url;
         }
         const data = png.toString("base64");
-        const { description } = await ctx.dwar.describeImage({
-          image: { media_type: "image/png", data },
-          prompt:
-            "Describe this browser screenshot for an agent that cannot see pixels. Note visible text, controls, dialogs, and anything unusual.",
-        });
+        const { description } = await ctx.dwar.describeImage(
+          {
+            image: { media_type: "image/png", data },
+            prompt:
+              "Describe this browser screenshot for an agent that cannot see pixels. Note visible text, controls, dialogs, and anything unusual. Start directly with what is on screen — no preamble about the request, the user, or what they want.",
+          },
+          `dimaag/${ctx.callerId ?? ctx.callerKind}`,
+        );
         return {
           description: description.trim(),
           scope: parsed.scope,

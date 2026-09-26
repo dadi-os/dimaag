@@ -89,10 +89,15 @@ export type DwarChatRequest = {
 export type DwarChatResponse = {
   content: DwarResponseBlock[];
   stop_reason: "end_turn" | "tool_use" | "max_tokens" | "error";
-  usage: {
-    input_tokens: number;
-    output_tokens: number;
-  };
+  usage: DwarUsage;
+};
+
+/** Token accounting Dwar returns per call; cache fields make prompt-cache hits visible in agent_logs. */
+export type DwarUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
 };
 
 export const SEND_MESSAGE = "send_message";

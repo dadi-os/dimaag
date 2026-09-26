@@ -334,7 +334,7 @@ async function runWait(ctx: ToolContext, raw: unknown): Promise<ToolExecResult> 
     }
     await new Promise((resolve) => setTimeout(resolve, Math.min(WAIT_POLL_MS, deadline - Date.now())));
   }
-  return ok({ waited_seconds: input.seconds, interrupted: false, reason: input.reason ?? null });
+  return ok({ waited_seconds: input.seconds, interrupted: false });
 }
 
 /**

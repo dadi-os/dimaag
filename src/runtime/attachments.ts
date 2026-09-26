@@ -73,9 +73,10 @@ export async function patchMessageContent(
     }
 
     if (DESCRIBABLE_IMAGE_TYPES.has(mediaType)) {
-      const { description } = await dwar.describeImage({
-        image: { media_type: mediaType, data: raw.toString("base64") },
-      });
+      const { description } = await dwar.describeImage(
+        { image: { media_type: mediaType, data: raw.toString("base64") } },
+        "dimaag/attachments",
+      );
       const label = att.filename?.trim()
         ? `Image (${att.filename.trim()})`
         : "Image";

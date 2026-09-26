@@ -22,8 +22,9 @@ export type ConversationLoopDeps = {
  * Conversation-lane tool loop. Dwar forces tool use; text may accompany tools as
  * narration. The only clean exit is the embedded yield tool. A bare response with
  * no tools is treated as a degraded exit (provider failure), not the happy path.
- * Scratchpad holds mid-turn tool results only — cleared when the turn ends so
- * prior yields cannot few-shot the next wake. Each iteration clears older
+ * Scratchpad holds this turn's tool calls and results plus drained intents, so an
+ * intent stays in view until the turn ends — then it is cleared so prior yields
+ * cannot few-shot the next wake. Each iteration clears older
  * tool_result bodies so long wakes stay near a working-set size.
  * Skips the provider call when the assembled history is empty or ends on an
  * assistant turn with no drained intent — providers reject those requests.
@@ -34,11 +35,11 @@ export async function runConversationLoop(deps: ConversationLoopDeps): Promise<v
   for (;;) {
     clearOldToolResults(scratchpad, deps.scratchpadClear);
     const assembled = await deps.assemble();
-    const messages: DwarMessage[] = [...assembled.messages, ...scratchpad];
     const intents = deps.intents.drain(deps.agentId);
     if (intents.length > 0) {
-      messages.push({ role: "user", content: formatIntentTurn(intents) });
+      scratchpad.push({ role: "user", content: formatIntentTurn(intents) });
     }
+    const messages: DwarMessage[] = [...assembled.messages, ...scratchpad];
     const last = messages[messages.length - 1];
     if (!last || last.role !== "user") {
       scratchpad.length = 0;

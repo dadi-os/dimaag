@@ -31,8 +31,9 @@ test("a steer arriving mid-loop is applied on the next iteration", async () => {
   await runReasoningLoop({
     agentId,
     scratchpad,
-    scratchpadClear: { keep: 5, maxChars: 80_000 },
-    assemble: async () => ({ system: "sys", messages: [], tools: [] }),
+    scratchpadClear: { keep: 5, batch: 0, maxChars: 80_000 },
+    assemble: async () => ({ system: "sys", messages: [], tools: [], throughSeq: 0 }),
+    arrivalsSince: (afterSeq) => ({ turn: null, throughSeq: afterSeq }),
     reason: async (request) => {
       calls.push(request);
       turn += 1;
@@ -56,6 +57,44 @@ test("a steer arriving mid-loop is applied on the next iteration", async () => {
     typeof message.content === "string" ? message.content : "",
   );
   assert.ok(texts.some((text) => text.includes(STEER_TURN_PREFIX) && text.includes("check the voice PR")));
+});
+
+test("a steer stays in view for the rest of the wake, not just the next call", async () => {
+  const steer = new SteerQueue();
+  const agentId = "agent-steer-persist";
+  const calls: DwarChatRequest[] = [];
+  let turn = 0;
+
+  await runReasoningLoop({
+    agentId,
+    scratchpad: [],
+    scratchpadClear: { keep: 5, batch: 5, maxChars: 80_000 },
+    assemble: async () => ({ system: "sys", messages: [], tools: [], throughSeq: 0 }),
+    arrivalsSince: (afterSeq) => ({ turn: null, throughSeq: afterSeq }),
+    reason: async (request) => {
+      calls.push(structuredClone(request));
+      turn += 1;
+      if (turn === 1) {
+        steer.append(agentId, "use the google pivot");
+      }
+      return turn < 4
+        ? { ...toolUse("wait", { seconds: 1 }), content: [{ type: "tool_use", id: `w${turn}`, name: "wait", input: { seconds: 1 } }] }
+        : toolUse("yield", {});
+    },
+    executeTool: async () => ({ content: "{}", isError: false, audit: {} }),
+    steer,
+    logThought: async () => {},
+    logToolCall: async () => {},
+    logToolResult: async () => {},
+  });
+
+  assert.equal(calls.length, 4);
+  for (const later of calls.slice(1)) {
+    const texts = later.messages.map((message) =>
+      typeof message.content === "string" ? message.content : "",
+    );
+    assert.ok(texts.some((text) => text.includes("use the google pivot")));
+  }
 });
 
 test("steer_reasoning starts a run when reasoning is idle", async () => {
@@ -136,8 +175,9 @@ test("steer_reasoning with terminate stops the next tool call from running", asy
   await runReasoningLoop({
     agentId,
     scratchpad: [],
-    scratchpadClear: { keep: 5, maxChars: 80_000 },
-    assemble: async () => ({ system: "sys", messages: [], tools: [] }),
+    scratchpadClear: { keep: 5, batch: 0, maxChars: 80_000 },
+    assemble: async () => ({ system: "sys", messages: [], tools: [], throughSeq: 0 }),
+    arrivalsSince: (afterSeq) => ({ turn: null, throughSeq: afterSeq }),
     reason: async () => {
       turn += 1;
       if (turn === 1) {
@@ -169,8 +209,9 @@ test("steer_reasoning terminate mid-batch blocks remaining domain tools", async 
   await runReasoningLoop({
     agentId,
     scratchpad: [],
-    scratchpadClear: { keep: 5, maxChars: 80_000 },
-    assemble: async () => ({ system: "sys", messages: [], tools: [] }),
+    scratchpadClear: { keep: 5, batch: 0, maxChars: 80_000 },
+    assemble: async () => ({ system: "sys", messages: [], tools: [], throughSeq: 0 }),
+    arrivalsSince: (afterSeq) => ({ turn: null, throughSeq: afterSeq }),
     reason: async () => ({
       content: [
         { type: "tool_use", id: "a", name: "send_message", input: { to_agent_id: null, intent: "one" } },
