@@ -8,11 +8,11 @@ const input = z
   })
   .strict();
 
-/** Apply module and/or OS updates via Nas POST /pull_updates. */
+/** Start module and/or OS updates via Nas POST /pull_updates (runs in the background). */
 export const pullUpdates = defineTool({
   name: "nas_pull_updates",
   description:
-    "Pull and apply updates. scope=modules updates app containers; scope=os runs bootc upgrade (podman only); scope=all does both. Does not reboot — check reboot_required.",
+    "Start updates in the background and return the run immediately (state=running). scope=modules updates app containers (Dimaag may restart); scope=os runs bootc upgrade (podman only); scope=all does both. When an OS deployment is staged the box reboots on its own. Poll nas_get_update_status for the outcome; fails with busy if a run is already in flight.",
   input,
   inputSchema: {
     type: "object",

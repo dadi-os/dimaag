@@ -591,7 +591,10 @@ export function mockNas(opts: {
       return { status: "ok" };
     },
     async pullUpdates(scope) {
-      return { status: "ok", scope, reboot_required: false };
+      return { state: "running", scope, started_at: "2026-01-01T00:00:00Z", reboot_required: false };
+    },
+    async getUpdateStatus() {
+      return { state: "idle", reboot_required: false };
     },
     async stackUp() {
       return { status: "ok" };

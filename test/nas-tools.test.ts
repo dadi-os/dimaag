@@ -48,6 +48,7 @@ const NAS_TOOLS = [
   "terminal_edit_file",
   "terminal_glob",
   "terminal_grep",
+  "nas_get_update_status",
 ] as const;
 
 const NAS_DESTRUCTIVE = [
@@ -63,7 +64,7 @@ test("Nas terminal tools and destructive ops are registered", async () => {
   for (const name of [...NAS_TOOLS, ...NAS_DESTRUCTIVE]) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 66);
+  assert.equal(allTools().length, 67);
   await assert.doesNotReject(() => syncTools(handle.db));
 });
 

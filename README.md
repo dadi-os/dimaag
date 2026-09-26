@@ -174,7 +174,8 @@ Host ops via Nas HTTP. System logs are Loki (`nas_get_logs`); agent cognition is
 | `nas_get_status` | `GET /status` |
 | `nas_get_logs` | `GET /logs` |
 | `nas_restart_module` | `POST /modules/{name}/restart` |
-| `nas_pull_updates` | `POST /pull_updates` |
+| `nas_pull_updates` | `POST /pull_updates` (202, runs in background) |
+| `nas_get_update_status` | `GET /pull_updates` |
 | `nas_stack_up` | `POST /stack/up` |
 | `nas_stack_down` | `POST /stack/down` |
 | `nas_provision` | `POST /provision` |

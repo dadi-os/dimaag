@@ -37,6 +37,7 @@ import { getStatus as nasGetStatus } from "./nas/get-status.js";
 import { getLogs as nasGetLogs } from "./nas/get-logs.js";
 import { restartModule } from "./nas/restart-module.js";
 import { pullUpdates } from "./nas/pull-updates.js";
+import { getUpdateStatus as nasGetUpdateStatus } from "./nas/get-update-status.js";
 import { stackUp } from "./nas/stack-up.js";
 import { stackDown } from "./nas/stack-down.js";
 import { provision } from "./nas/provision.js";
@@ -127,6 +128,7 @@ const definitions = [
   nasGetLogs,
   restartModule,
   pullUpdates,
+  nasGetUpdateStatus,
   stackUp,
   stackDown,
   provision,

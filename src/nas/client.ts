@@ -153,11 +153,14 @@ const listClientsResponseSchema = z
   })
   .passthrough();
 
-const pullUpdatesResponseSchema = z
+const updateRunSchema = z
   .object({
-    status: z.string(),
-    scope: z.string(),
+    state: z.enum(["idle", "running", "succeeded", "rebooting", "failed"]),
+    scope: z.enum(["modules", "os", "all"]).optional(),
+    started_at: z.string().optional(),
+    finished_at: z.string().optional(),
     reboot_required: z.boolean(),
+    error: z.string().optional(),
   })
   .passthrough();
 
@@ -187,7 +190,7 @@ const nasLogEntrySchema = z
 export type NasStatus = z.infer<typeof nasStatusSchema>;
 export type NasLogEntry = z.infer<typeof nasLogEntrySchema>;
 export type PullUpdatesScope = "modules" | "os" | "all";
-export type PullUpdatesResponse = z.infer<typeof pullUpdatesResponseSchema>;
+export type UpdateRun = z.infer<typeof updateRunSchema>;
 
 export type NasLogsParams = {
   services?: string;
@@ -218,7 +221,8 @@ export type NasClient = {
   getStatus: () => Promise<NasStatus>;
   getLogs: (params?: NasLogsParams) => Promise<{ entries: NasLogEntry[] }>;
   restartModule: (name: string) => Promise<{ status: string }>;
-  pullUpdates: (scope: PullUpdatesScope) => Promise<PullUpdatesResponse>;
+  pullUpdates: (scope: PullUpdatesScope) => Promise<UpdateRun>;
+  getUpdateStatus: () => Promise<UpdateRun>;
   stackUp: () => Promise<{ status: string }>;
   stackDown: () => Promise<{ status: string }>;
   provision: (nodeName: string) => Promise<{ bundle: string }>;
@@ -318,7 +322,8 @@ export function createNasClient(config: Config): NasClient {
     restartModule: (name) =>
       post(`/modules/${encodeURIComponent(name)}/restart`, {}, statusOkSchema),
     pullUpdates: (scope) =>
-      post("/pull_updates", { scope }, pullUpdatesResponseSchema),
+      post("/pull_updates", { scope }, updateRunSchema),
+    getUpdateStatus: () => get("/pull_updates", updateRunSchema),
     stackUp: () => post("/stack/up", {}, statusOkSchema),
     stackDown: () => post("/stack/down", {}, statusOkSchema),
     provision: (nodeName) =>
