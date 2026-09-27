@@ -18,7 +18,7 @@ const input = z
 export const fillPasskey = defineTool({
   name: "chaavi_fill_passkey",
   description:
-    "Fill a Chaavi passkey into a Nas browser so the next WebAuthn request on that tab can sign in. Call this before clicking the site's passkey button. The key never appears in the result. Use when chaavi_list_items shows hasPasskey. Do not use chaavi_fill_login for passkeys.",
+    "Fill a Chaavi passkey into a Nas browser so the next WebAuthn request on that tab can sign in. Only a request the site starts after this call can use it, so call it before the step that makes the site ask for the passkey: before clicking the site's passkey button, and on Google before submitting the email. If the site is already asking (a passkey, phone or QR prompt is showing), call it, then use the site's \"Try again\" or reload the sign-in step so it asks again. Each call replaces the tab's previous passkey. The key never appears in the result. Use when chaavi_list_items shows hasPasskey. Do not use chaavi_fill_login for passkeys.",
   input,
   inputSchema: {
     type: "object",

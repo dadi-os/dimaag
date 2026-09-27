@@ -539,8 +539,11 @@ export class BrowserDriver {
   }
 
   /**
-   * Load a passkey into a Chromium virtual authenticator on this tab.
-   * The CDP session stays open so the authenticator survives until the browser drops.
+   * Load a passkey into a fresh Chromium virtual authenticator on this tab.
+   * Any earlier authenticator session for the tab is dropped first: its WebAuthn
+   * environment does not outlive later browser work, so reusing it fails. The new
+   * CDP session stays open so the authenticator survives until the browser drops.
+   * Only WebAuthn requests the page starts after this call can use the passkey.
    */
   async addPasskey(
     browserId: number,
@@ -549,9 +552,10 @@ export class BrowserDriver {
   ): Promise<{ tab_id: string }> {
     const resolved = await this.resolvePage(browserId, tabId);
     const key = `${browserId}:${resolved.tabId}`;
+    this.forgetWebAuthn(key);
     try {
-      const state = await this.ensureWebAuthn(resolved.page, key);
-      await this.replaceCredential(state, cred);
+      const state = await this.startWebAuthn(resolved.page, key);
+      await this.addCredential(state, cred);
       return { tab_id: resolved.tabId };
     } catch (err) {
       this.forgetWebAuthn(key);
@@ -563,12 +567,8 @@ export class BrowserDriver {
     }
   }
 
-  /** Enable WebAuthn CDP on the page and add one internal authenticator. */
-  private async ensureWebAuthn(page: Page, key: string): Promise<WebAuthnState> {
-    const existing = this.webauthn.get(key);
-    if (existing) {
-      return existing;
-    }
+  /** Open a CDP session on the page, enable WebAuthn, and add one internal authenticator. */
+  private async startWebAuthn(page: Page, key: string): Promise<WebAuthnState> {
     const session = await page.context().newCDPSession(page);
     try {
       await cdpSend(session, "WebAuthn.enable");
@@ -595,22 +595,8 @@ export class BrowserDriver {
     }
   }
 
-  /** Replace any stored credential with the same id, then add this one. */
-  private async replaceCredential(state: WebAuthnState, cred: PasskeyInject): Promise<void> {
-    const listed = await cdpSend<{ credentials: Array<{ credentialId: string }> }>(
-      state.session,
-      "WebAuthn.getCredentials",
-      { authenticatorId: state.authenticatorId },
-    );
-    for (const existing of listed.credentials) {
-      if (existing.credentialId !== cred.credentialId) {
-        continue;
-      }
-      await cdpSend(state.session, "WebAuthn.removeCredential", {
-        authenticatorId: state.authenticatorId,
-        credentialId: cred.credentialId,
-      });
-    }
+  /** Add the passkey to a freshly started authenticator. */
+  private async addCredential(state: WebAuthnState, cred: PasskeyInject): Promise<void> {
     await cdpSend(state.session, "WebAuthn.addCredential", {
       authenticatorId: state.authenticatorId,
       credential: {

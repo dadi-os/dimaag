@@ -119,7 +119,7 @@ Grantable vault tools. Metadata may reach the model; passwords, passkey keys, an
 | `chaavi_list_items` | `GET /v1/items` | find a vault item id by name or site uri (`hasPasskey`, no secrets) |
 | `chaavi_create_login` | `POST /v1/logins` | create a login with a generated password; never invent or `browser_type` a password |
 | `chaavi_fill_login` | `POST /v1/items/:id/login` | type a login into a Nas browser; never `browser_type` a password |
-| `chaavi_fill_passkey` | `POST /v1/items/:id/passkey` | fill a passkey into a Nas browser virtual authenticator; click the site's passkey button after |
+| `chaavi_fill_passkey` | `POST /v1/items/:id/passkey` | fill a passkey into a fresh Nas browser virtual authenticator (replacing the tab's previous one) before the site asks for it — before its passkey button, or on Google before submitting the email; if it is already asking, fill then retry the prompt |
 | `chaavi_fill_secret` | `POST /v1/items/:id/secret` | run a host command with the secret in `env_name`; output is redacted |
 
 ### Terminal (shell + files)
