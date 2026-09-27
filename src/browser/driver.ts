@@ -658,7 +658,7 @@ function cdpSend<T>(
   method: string,
   params?: Record<string, unknown>,
 ): Promise<T> {
-  const send = session.send as unknown as (
+  const send = session.send.bind(session) as unknown as (
     method: string,
     params?: Record<string, unknown>,
   ) => Promise<T>;

@@ -24,6 +24,7 @@ import {
   silentLog,
   testConfig,
   toolUse,
+  yieldTurn,
 } from "./helpers.js";
 
 const config = testConfig();
@@ -324,9 +325,12 @@ test("Yaad unreachable maps to isError and the lane continues", async () => {
       if (reasonCalls === 1) {
         return toolUse("yaad_recall", { query: "anything" }, "fail-call");
       }
-      return endTurn("recovered");
+      if (reasonCalls === 2) {
+        return endTurn("recall failed; Yaad is unreachable, so I will stop here");
+      }
+      return yieldTurn("recovered");
     },
-    converse: async () => endTurn(),
+    converse: async () => yieldTurn(),
   });
   const yaad = mockYaad({
     recall: () => {
@@ -343,6 +347,6 @@ test("Yaad unreachable maps to isError and the lane continues", async () => {
   });
   runtime.enqueueReasoning(workerId);
   await runtime.waitUntilIdle();
-  assert.ok(reasonCalls >= 2, "lane should continue after a failed tool call");
+  assert.equal(reasonCalls, 3, "lane continues after a failed tool call and after a text-only turn");
   assert.equal(yaad.recallCalls.length, 1);
 });

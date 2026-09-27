@@ -64,19 +64,29 @@ export const silentLog = {
   warn() {},
 };
 
+const usage = {
+  input_tokens: 1,
+  output_tokens: 1,
+  cache_read_input_tokens: 0,
+  cache_creation_input_tokens: 0,
+};
+
+/** A turn with no tool call. In a lane loop it continues; it never ends the lane. */
 export function endTurn(text = "ok"): DwarChatResponse {
   return {
+    provider: "anthropic",
     content: [{ type: "text", text }],
     stop_reason: "end_turn",
-    usage: { input_tokens: 1, output_tokens: 1 },
+    usage,
   };
 }
 
 export function toolUse(name: string, input: unknown, id = "call-1"): DwarChatResponse {
   return {
+    provider: "anthropic",
     content: [{ type: "tool_use", id, name, input }],
     stop_reason: "tool_use",
-    usage: { input_tokens: 1, output_tokens: 1 },
+    usage,
   };
 }
 
@@ -144,18 +154,7 @@ export function mockDwar(opts: {
       if (opts.complete) {
         return opts.complete(request);
       }
-      return {
-        content: [
-          {
-            type: "tool_use",
-            id: "decide-1",
-            name: "decide",
-            input: { action: "spawn", id: "thread", system_prompt: "do the job" },
-          },
-        ],
-        stop_reason: "tool_use",
-        usage: { input_tokens: 1, output_tokens: 1 },
-      };
+      return toolUse("decide", { action: "spawn", id: "thread", system_prompt: "do the job" }, "decide-1");
     },
     async describeImage(request) {
       describeCalls.push(request);

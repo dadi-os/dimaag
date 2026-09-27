@@ -8,12 +8,22 @@ import { DimaagError } from "../errors.js";
 import type { DwarChatRequest, DwarChatResponse, DwarUsage } from "../types/domain.js";
 
 const chatBlockSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("text"), text: z.string() }),
+  z.object({
+    type: z.literal("text"),
+    text: z.string(),
+    thought_signature: z.string().nullish(),
+  }),
+  z.object({
+    type: z.literal("thinking"),
+    thinking: z.string(),
+    signature: z.string().nullish(),
+  }),
+  z.object({ type: z.literal("redacted_thinking"), data: z.string() }),
   z.object({
     type: z.literal("tool_use"),
     id: z.string(),
     name: z.string(),
-    input: z.unknown(),
+    input: z.record(z.string(), z.unknown()),
     thought_signature: z.string().nullish(),
   }),
 ]);
@@ -26,6 +36,7 @@ const usageSchema = z.object({
 });
 
 const chatResponseSchema = z.object({
+  provider: z.enum(["anthropic", "gemini"]),
   content: z.array(chatBlockSchema),
   stop_reason: z.enum(["end_turn", "tool_use", "max_tokens", "error"]),
   usage: usageSchema,
@@ -81,31 +92,7 @@ export function createDwarClient(config: Config): DwarClient {
     if (!parsed.success) {
       throw new DimaagError(502, "dwar", "Dwar chat response is malformed");
     }
-    return {
-      stop_reason: parsed.data.stop_reason,
-      usage: parsed.data.usage,
-      content: parsed.data.content.map((block) => {
-        if (block.type === "text") {
-          return { type: "text" as const, text: block.text };
-        }
-        const out: {
-          type: "tool_use";
-          id: string;
-          name: string;
-          input: unknown;
-          thought_signature?: string;
-        } = {
-          type: "tool_use",
-          id: block.id,
-          name: block.name,
-          input: block.input,
-        };
-        if (block.thought_signature) {
-          out.thought_signature = block.thought_signature;
-        }
-        return out;
-      }),
-    };
+    return parsed.data;
   }
 
   async function describeImage(

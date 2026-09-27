@@ -70,7 +70,7 @@ export const idParam = z.object({ id: agentIdSchema }).strict();
 
 export const logsQuery = z
   .object({
-    event: z.enum(["thought", "tool_call", "tool_result", "message"]).optional(),
+    event: z.enum(["response", "tool_result", "message"]).optional(),
     limit: z.coerce.number().int().positive().max(200).optional(),
   })
   .strict();

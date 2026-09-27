@@ -141,7 +141,7 @@ test("assembleContext advances the window in steps so the prefix survives new me
   assert.equal(third.throughSeq, transcript.transcriptFor(agentId).at(-1)?.seq);
 });
 
-test("messages arriving mid-wake join the scratchpad after it and never rewrite earlier turns", async () => {
+test("messages arriving mid-wake join the wake after it and never rewrite earlier turns", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const agentId = await insertWorker(handle.db, {
     name: "arrival-worker",
@@ -154,12 +154,13 @@ test("messages arriving mid-wake join the scratchpad after it and never rewrite 
 
   const { runReasoningLoop } = await import("../src/runtime/reasoning.js");
   const { SteerQueue } = await import("../src/runtime/steer.js");
+  const { Wake } = await import("../src/runtime/wake.js");
   const requests: { messages: unknown[] }[] = [];
   let turn = 0;
   await runReasoningLoop({
     agentId,
-    scratchpad: [],
-    scratchpadClear: { keep: 5, batch: 5, maxChars: 80_000 },
+    lane: "reasoning",
+    wake: new Wake(),
     assemble: () =>
       assembleContext({
         db: handle.db,
@@ -170,7 +171,7 @@ test("messages arriving mid-wake join the scratchpad after it and never rewrite 
         transcriptWindowStep: 20,
       }),
     arrivalsSince: (afterSeq) => arrivalsSince(transcript, agentId, afterSeq),
-    reason: async (request) => {
+    call: async (request) => {
       requests.push(structuredClone(request));
       turn += 1;
       if (turn === 1) {
@@ -183,15 +184,15 @@ test("messages arriving mid-wake join the scratchpad after it and never rewrite 
       }
       const name = turn < 3 ? "wait" : "yield";
       return {
-        content: [{ type: "tool_use", id: `c${turn}`, name, input: {} }],
+        provider: "anthropic" as const,
+        content: [{ type: "tool_use" as const, id: `c${turn}`, name, input: {} }],
         stop_reason: "tool_use",
         usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
       };
     },
     executeTool: async () => ({ content: "{}", isError: false, audit: {} }),
     steer: new SteerQueue(),
-    logThought: async () => {},
-    logToolCall: async () => {},
+    logResponse: async () => {},
     logToolResult: async () => {},
   });
 

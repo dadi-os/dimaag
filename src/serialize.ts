@@ -19,8 +19,7 @@ function parseLane(value: string): Lane {
 
 function parseLogEvent(value: string): LogEvent {
   if (
-    value === "thought" ||
-    value === "tool_call" ||
+    value === "response" ||
     value === "tool_result" ||
     value === "message"
   ) {

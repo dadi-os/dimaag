@@ -19,13 +19,7 @@ import type { DwarClient } from "../dwar/client.js";
 import type { GharClient } from "../ghar/client.js";
 import type { NasClient } from "../nas/client.js";
 import type { YaadClient } from "../yaad/client.js";
-import type {
-  DwarChatRequest,
-  DwarChatResponse,
-  DwarMessage,
-  DwarToolUseBlock,
-  Lane,
-} from "../types/domain.js";
+import type { DwarChatRequest, DwarChatResponse, DwarToolUseBlock, Lane } from "../types/domain.js";
 import { arrivalsSince, assembleContext } from "./context.js";
 import { deliverAgentMessage } from "./deliver.js";
 import { runConversationLoop } from "./conversation.js";
@@ -40,6 +34,7 @@ import { ToolDebounce } from "./tool-debounce.js";
 import { executeTool, type ToolContext, type ToolExecResult } from "./tools.js";
 import type { ToolCallerKind } from "../tools/shared.js";
 import { TranscriptStore } from "./transcript.js";
+import { WakeStore } from "./wake.js";
 import { createScheduler, type Scheduler } from "./scheduler.js";
 
 export type RuntimeLog = {
@@ -91,8 +86,7 @@ export function createRuntime(opts: {
     base_ms: opts.config.runtime.tool_debounce_base_ms,
     max_ms: opts.config.runtime.tool_debounce_max_ms,
   });
-  const reasoningScratchpads = new Map<string, DwarMessage[]>();
-  const conversationScratchpads = new Map<string, DwarMessage[]>();
+  const wakes = new WakeStore();
   let pending = 0;
   const idleWaiters: Array<() => void> = [];
 
@@ -118,25 +112,16 @@ export function createRuntime(opts: {
     });
   }
 
-  function scratchpadFor(map: Map<string, DwarMessage[]>, agentId: string): DwarMessage[] {
-    let pad = map.get(agentId);
-    if (!pad) {
-      pad = [];
-      map.set(agentId, pad);
-    }
-    return pad;
-  }
-
   /**
    * Always schedule a conversation run. The lane lock serializes concurrent wakes;
    * dropping here would lose a second user message that arrives while busy.
    */
   function enqueueConversation(agentId: string): void {
-    track(runLane(agentId, "conversation"));
+    track(runLane(agentId, "conversation", wakes.hold(agentId)));
   }
 
   function enqueueReasoning(agentId: string): void {
-    track(runLane(agentId, "reasoning"));
+    track(runLane(agentId, "reasoning", wakes.hold(agentId)));
   }
 
   const scheduler = createScheduler({
@@ -193,8 +178,12 @@ export function createRuntime(opts: {
     };
   }
 
-  /** Acquire the lane lock and run reasoning or conversation. */
-  async function runLane(agentId: string, lane: Lane): Promise<void> {
+  /**
+   * Acquire the lane lock and run reasoning or conversation. `releaseWake` is
+   * this run's hold on the agent's shared wake, taken when the run was queued
+   * and released last, after any follow-up run has taken its own hold.
+   */
+  async function runLane(agentId: string, lane: Lane, releaseWake: () => void): Promise<void> {
     let release: (() => void) | undefined;
     try {
       release = await locks.acquire(agentId, lane, opts.config.runtime.lane_queue_timeout_ms);
@@ -234,12 +223,9 @@ export function createRuntime(opts: {
         at: new Date().toISOString(),
       });
       if (lane === "reasoning") {
-        scratchpadFor(reasoningScratchpads, agentId).length = 0;
         await reportReasoningFailure(agentId, message).catch((reportErr: unknown) => {
           opts.log.error({ err: reportErr, agentId }, "reasoning failure report failed");
         });
-      } else {
-        scratchpadFor(conversationScratchpads, agentId).length = 0;
       }
     } finally {
       release?.();
@@ -248,6 +234,7 @@ export function createRuntime(opts: {
           enqueueReasoning(agentId);
         }
       }
+      releaseWake();
     }
   }
 
@@ -286,81 +273,61 @@ export function createRuntime(opts: {
         transcriptWindowStep: opts.config.runtime.transcript_window_step_messages,
       });
     const exec = (call: DwarToolUseBlock) => executeTool(toolContext(agentId, lane), call);
-    const logThought = (response: DwarChatResponse) =>
+    const logResponse = (response: DwarChatResponse) =>
       writeAgentLog(opts.db, {
         agentId,
         lane,
-        event: "thought",
+        event: "response",
         payload: {
+          provider: response.provider,
           stop_reason: response.stop_reason,
           content: response.content,
           usage: response.usage,
         },
       });
-    const logToolCall = (call: DwarToolUseBlock, result: ToolExecResult) =>
-      writeAgentLog(opts.db, {
-        agentId,
-        lane,
-        event: "tool_call",
-        payload: {
-          id: call.id,
-          name: call.name,
-          input: call.input,
-          ...result.audit,
-        },
-      });
-    const logToolResult = (toolUseId: string, result: ToolExecResult) =>
+    const logToolResult = (call: DwarToolUseBlock, result: ToolExecResult) =>
       writeAgentLog(opts.db, {
         agentId,
         lane,
         event: "tool_result",
         payload: {
-          tool_use_id: toolUseId,
+          tool_use_id: call.id,
+          name: call.name,
           content: result.content,
           is_error: result.isError,
+          ...result.audit,
         },
       });
-    return { assemble, exec, logThought, logToolCall, logToolResult };
+    return { assemble, exec, logResponse, logToolResult };
   }
 
-  function scratchpadClearOpts() {
+  function stepDeps(agentId: string, lane: Lane) {
+    const helpers = laneHelpers(agentId, lane);
     return {
-      keep: opts.config.runtime.scratchpad_keep_tool_results,
-      batch: opts.config.runtime.scratchpad_clear_batch_tool_results,
-      maxChars: opts.config.runtime.scratchpad_tool_result_max_chars,
+      agentId,
+      lane,
+      wake: wakes.get(agentId),
+      assemble: helpers.assemble,
+      arrivalsSince: (afterSeq: number) => arrivalsSince(transcript, agentId, afterSeq),
+      executeTool: helpers.exec,
+      logResponse: helpers.logResponse,
+      logToolResult: helpers.logToolResult,
     };
   }
 
   function reasoningDeps(agentId: string) {
-    const helpers = laneHelpers(agentId, "reasoning");
     return {
-      agentId,
-      scratchpad: scratchpadFor(reasoningScratchpads, agentId),
-      scratchpadClear: scratchpadClearOpts(),
-      assemble: helpers.assemble,
-      arrivalsSince: (afterSeq: number) => arrivalsSince(transcript, agentId, afterSeq),
-      reason: (request: DwarChatRequest) => opts.dwar.reason(request, `dimaag/${agentId}`),
-      executeTool: helpers.exec,
+      ...stepDeps(agentId, "reasoning"),
+      call: (request: DwarChatRequest) => opts.dwar.reason(request, `dimaag/${agentId}`),
       steer,
-      logThought: helpers.logThought,
-      logToolCall: helpers.logToolCall,
-      logToolResult: helpers.logToolResult,
     };
   }
 
   function conversationDeps(agentId: string) {
-    const helpers = laneHelpers(agentId, "conversation");
     return {
-      agentId,
-      scratchpad: scratchpadFor(conversationScratchpads, agentId),
-      scratchpadClear: scratchpadClearOpts(),
-      assemble: helpers.assemble,
-      converse: (request: DwarChatRequest) => opts.dwar.converse(request, `dimaag/${agentId}`),
-      executeTool: helpers.exec,
+      ...stepDeps(agentId, "conversation"),
+      call: (request: DwarChatRequest) => opts.dwar.converse(request, `dimaag/${agentId}`),
       intents,
-      logThought: helpers.logThought,
-      logToolCall: helpers.logToolCall,
-      logToolResult: helpers.logToolResult,
     };
   }
 

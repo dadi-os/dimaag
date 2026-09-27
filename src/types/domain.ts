@@ -1,6 +1,11 @@
 export type Lane = "reasoning" | "conversation";
 
-export type LogEvent = "thought" | "tool_call" | "tool_result" | "message";
+/**
+ * response: one model call's full output, blocks in provider order (thinking,
+ * text, tool_use), logged before its tools run. tool_result: one tool's outcome,
+ * with the tool name and audit fields. message: a delivered message.
+ */
+export type LogEvent = "response" | "tool_result" | "message";
 
 /** Nas browsers/terminals this agent recently drove. Empty after process restart. */
 export type AgentSessions = {
@@ -44,9 +49,27 @@ export type ScheduledMessageRecord = {
   created_at: string;
 };
 
+export type DwarProvider = "anthropic" | "gemini";
+
 export type DwarTextBlock = {
   type: "text";
   text: string;
+  /** Opaque provider state (Gemini signs a trailing text part). Round-trip unchanged. */
+  thought_signature?: string | null | undefined;
+};
+
+/** Model thinking: Anthropic thinking, or a Gemini thought summary. */
+export type DwarThinkingBlock = {
+  type: "thinking";
+  thinking: string;
+  /** Opaque provider signature. Round-trip unchanged. */
+  signature?: string | null | undefined;
+};
+
+/** Anthropic thinking the provider encrypted. Round-trip unchanged. */
+export type DwarRedactedThinkingBlock = {
+  type: "redacted_thinking";
+  data: string;
 };
 
 export type DwarToolUseBlock = {
@@ -55,7 +78,7 @@ export type DwarToolUseBlock = {
   name: string;
   input: unknown;
   /** Opaque provider state (Gemini thought signatures). Round-trip unchanged. */
-  thought_signature?: string;
+  thought_signature?: string | null | undefined;
 };
 
 export type DwarToolResultBlock = {
@@ -65,13 +88,21 @@ export type DwarToolResultBlock = {
   is_error: boolean;
 };
 
-export type DwarContentBlock = DwarTextBlock | DwarToolUseBlock | DwarToolResultBlock;
+export type DwarResponseBlock =
+  | DwarTextBlock
+  | DwarThinkingBlock
+  | DwarRedactedThinkingBlock
+  | DwarToolUseBlock;
 
-export type DwarResponseBlock = DwarTextBlock | DwarToolUseBlock;
+export type DwarContentBlock = DwarResponseBlock | DwarToolResultBlock;
 
 export type DwarMessage = {
   role: "user" | "assistant";
   content: string | DwarContentBlock[];
+  /** Which provider and lane produced an assistant turn; Dwar replays its own
+   * provider's turns verbatim and translates the other's. */
+  provider?: DwarProvider;
+  lane?: Lane;
 };
 
 export type DwarTool = {
@@ -84,9 +115,12 @@ export type DwarChatRequest = {
   system: string;
   messages: DwarMessage[];
   tools: DwarTool[];
+  /** auto lets the model think and write around tool calls; any forces a call every turn. */
+  tool_choice: "auto" | "any";
 };
 
 export type DwarChatResponse = {
+  provider: DwarProvider;
   content: DwarResponseBlock[];
   stop_reason: "end_turn" | "tool_use" | "max_tokens" | "error";
   usage: DwarUsage;

@@ -14,7 +14,7 @@ import { executeTool } from "../src/runtime/tools.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import { buildApp } from "../src/app.js";
 import { migrate } from "../src/db/migrate.js";
-import { agents, agentTools, messages, scheduledMessages, tools } from "../src/db/schema.js";
+import { agentLogs, agents, agentTools, messages, scheduledMessages, tools } from "../src/db/schema.js";
 import { writeAgentLog } from "../src/db/logs.js";
 import { toolId } from "../src/tools/sync.js";
 import { allTools, findTool } from "../src/tools/registry.js";
@@ -65,7 +65,7 @@ test("two concurrent messages to one agent serialize on its conversation lock", 
       }
       await new Promise((resolve) => setTimeout(resolve, 40));
       active -= 1;
-      return endTurn();
+      return yieldTurn();
     },
   });
   const runtime = createRuntime({ db: handle.db, dwar, ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(), yaad: mockYaad(), config, log: silentLog });
@@ -354,8 +354,8 @@ test("a steer with reasoning idle starts a Dwar reasoning call", async () => {
     systemPrompt: "steer",
   });
   const dwar = mockDwar({
-    reason: async () => endTurn("steered"),
-    converse: async () => endTurn(),
+    reason: async () => yieldTurn("steered"),
+    converse: async () => yieldTurn(),
   });
   const runtime = createRuntime({ db: handle.db, dwar, ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(), yaad: mockYaad(), config, log: silentLog });
   await executeTool(runtime.toolContext(callerId, "conversation"), {
@@ -380,7 +380,7 @@ test("reasoning exit without send_message does not wake conversation", async () 
   });
   const dwar = mockDwar({
     reason: async () => yieldTurn("r-yield"),
-    converse: async () => endTurn(),
+    converse: async () => yieldTurn(),
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -1531,19 +1531,19 @@ test("dimaag_get_logs defaults to caller and allows direct children only", async
   await writeAgentLog(handle.db, {
     agentId: parentId,
     lane: "reasoning",
-    event: "thought",
+    event: "response",
     payload: { text: "parent thought" },
   });
   await writeAgentLog(handle.db, {
     agentId: childId,
     lane: "reasoning",
-    event: "thought",
+    event: "response",
     payload: { text: "child thought" },
   });
   await writeAgentLog(handle.db, {
     agentId: strangerId,
     lane: "reasoning",
-    event: "thought",
+    event: "response",
     payload: { text: "stranger thought" },
   });
   const runtime = createRuntime({
@@ -1664,7 +1664,7 @@ test("a failed reasoning wake is reported to the parent and wakes it", async () 
       },
       converse: async (request) => {
         conversed.push(JSON.stringify(request.messages));
-        return endTurn();
+        return yieldTurn();
       },
     }),
     yaad: mockYaad(),
@@ -1683,4 +1683,50 @@ test("a failed reasoning wake is reported to the parent and wakes it", async () 
   assert.equal(sent[0]?.toAgentId, parentId);
   assert.ok(sent[0]!.content.includes("Dwar is unreachable"));
   assert.ok(conversed.some((body) => body.includes("Dwar is unreachable")));
+});
+
+test("a lane logs each model turn whole before its tools run, and each result with its tool name", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const workerId = await insertWorker(handle.db, { name: "log-shape", systemPrompt: "work", tools: [] });
+  let turn = 0;
+  const dwar = mockDwar({
+    reason: async () => {
+      turn += 1;
+      if (turn === 1) {
+        return {
+          ...toolUse(LIST_AGENTS, {}, "la-1"),
+          content: [
+            { type: "thinking", thinking: "who is my parent?", signature: "sig-1" },
+            { type: "text", text: "Listing agents to find the parent." },
+            { type: "tool_use", id: "la-1", name: LIST_AGENTS, input: {} },
+          ],
+        };
+      }
+      if (turn === 2) {
+        return endTurn("No parent needed; done.");
+      }
+      return yieldTurn("log-yield");
+    },
+  });
+  const runtime = createRuntime({ db: handle.db, dwar, ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(), yaad: mockYaad(), config, log: silentLog });
+  runtime.enqueueReasoning(workerId);
+  await runtime.waitUntilIdle();
+
+  assert.ok(dwar.reasoningCalls.every((request) => request.tool_choice === "auto"));
+  const rows = await handle.db
+    .select()
+    .from(agentLogs)
+    .where(eq(agentLogs.agentId, workerId))
+    .orderBy(asc(agentLogs.createdAt));
+  assert.deepEqual(
+    rows.map((row) => row.event),
+    ["response", "tool_result", "response", "response", "tool_result"],
+  );
+  const first = rows[0]!.payload as { provider: string; content: Array<{ type: string }> };
+  assert.equal(first.provider, "anthropic");
+  assert.deepEqual(first.content.map((block) => block.type), ["thinking", "text", "tool_use"]);
+  const result = rows[1]!.payload as { tool_use_id: string; name: string; is_error: boolean };
+  assert.equal(result.tool_use_id, "la-1");
+  assert.equal(result.name, LIST_AGENTS);
+  assert.equal(result.is_error, false);
 });

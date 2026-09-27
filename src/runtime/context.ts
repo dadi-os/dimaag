@@ -38,7 +38,7 @@ function lineageBlock(agentId: string, parentAgentId: string | null): string {
 }
 
 /** An assembled lane request plus the newest transcript seq it includes (0 when empty). */
-export type AssembledContext = DwarChatRequest & { throughSeq: number };
+export type AssembledContext = Omit<DwarChatRequest, "tool_choice"> & { throughSeq: number };
 
 /**
  * One assembler for both lanes. dimaag's system is agent-specific only —

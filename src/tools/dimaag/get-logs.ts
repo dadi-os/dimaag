@@ -9,7 +9,7 @@ import { ok, fail, failWithoutAgentIdentity, requireAgent } from "../shared.js";
 const input = z
   .object({
     agent_id: agentIdSchema.optional(),
-    event: z.enum(["thought", "tool_call", "tool_result", "message"]).optional(),
+    event: z.enum(["response", "tool_result", "message"]).optional(),
     limit: z.number().int().min(1).max(200).optional(),
   })
   .strict();
@@ -18,7 +18,7 @@ const input = z
 export const getLogs = defineTool({
   name: "dimaag_get_logs",
   description:
-    "Read cognition audit logs (thoughts, tool calls, tool results, messages) for yourself or a direct child. Defaults to the caller when agent_id is omitted. Not system HTTP logs — use nas_get_logs for those.",
+    "Read cognition audit logs for yourself or a direct child: response rows hold one model turn in order (thinking, text, tool calls), tool_result rows hold each tool's name and outcome, message rows hold delivered messages. Defaults to the caller when agent_id is omitted. Not system HTTP logs — use nas_get_logs for those.",
   input,
   inputSchema: {
     type: "object",
@@ -30,7 +30,7 @@ export const getLogs = defineTool({
       },
       event: {
         type: "string",
-        enum: ["thought", "tool_call", "tool_result", "message"],
+        enum: ["response", "tool_result", "message"],
       },
       limit: { type: "integer", minimum: 1, maximum: 200 },
     },

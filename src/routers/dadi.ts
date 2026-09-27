@@ -152,6 +152,7 @@ async function routeDadi(
       system,
       messages: [{ role: "user", content }],
       tools: [decideTool],
+      tool_choice: "any",
     },
     "dimaag/dadi",
   );

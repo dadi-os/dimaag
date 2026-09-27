@@ -36,6 +36,13 @@
       "when": 1789900000000,
       "tag": "0004_kebab_agent_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790471660001,
+      "tag": "0005_response_log_event",
+      "breakpoints": true
     }
   ]
 }

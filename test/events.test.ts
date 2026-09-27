@@ -627,7 +627,7 @@ test("GET /logs returns across agents; event filters; limit above cap is 422", a
   await writeAgentLog(handle.db, {
     agentId: otherId,
     lane: "reasoning",
-    event: "thought",
+    event: "response",
     payload: { note: "from-other" },
   });
   await writeAgentLog(handle.db, {

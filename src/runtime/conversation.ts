@@ -1,86 +1,43 @@
-import type { DwarChatRequest, DwarChatResponse, DwarMessage, DwarToolUseBlock } from "../types/domain.js";
-import { YIELD } from "../types/domain.js";
 import type { IntentQueue } from "./intents.js";
 import { formatIntentTurn } from "./intents.js";
-import { clearOldToolResults, type ClearOldToolResultsOpts } from "./scratchpad.js";
-import type { ToolExecResult } from "./tools.js";
+import { laneRequest, runStep, syncWake, type StepDeps } from "./step.js";
 
-export type ConversationLoopDeps = {
-  agentId: string;
-  scratchpad: DwarMessage[];
-  scratchpadClear: ClearOldToolResultsOpts;
-  assemble: () => Promise<DwarChatRequest>;
-  converse: (request: DwarChatRequest) => Promise<DwarChatResponse>;
-  executeTool: (call: DwarToolUseBlock) => Promise<ToolExecResult>;
+/** Step deps plus the intent queue reasoning's send_message writes to. */
+export type ConversationLoopDeps = StepDeps & {
   intents: IntentQueue;
-  logThought: (response: DwarChatResponse) => Promise<void>;
-  logToolCall: (call: DwarToolUseBlock, result: ToolExecResult) => Promise<void>;
-  logToolResult: (toolUseId: string, result: ToolExecResult) => Promise<void>;
 };
 
 /**
- * Conversation-lane tool loop. Dwar forces tool use; text may accompany tools as
- * narration. The only clean exit is the embedded yield tool. A bare response with
- * no tools is treated as a degraded exit (provider failure), not the happy path.
- * Scratchpad holds this turn's tool calls and results plus drained intents, so an
- * intent stays in view until the turn ends — then it is cleared so prior yields
- * cannot few-shot the next wake. Each iteration clears older
- * tool_result bodies so long wakes stay near a working-set size.
- * Skips the provider call when the assembled history is empty or ends on an
- * assistant turn with no drained intent — providers reject those requests.
+ * Conversation-lane loop over the agent's shared wake. It sees exactly what
+ * reasoning sees — including reasoning's thinking, tool calls and results — so
+ * status it reports comes from what actually happened. Reasoning's send_message
+ * intents join the wake as conversation-only turns. A turn with no tool call
+ * continues; the only clean exit is the embedded yield tool.
+ * Skips the provider call when the visible history is empty or ends on an
+ * assistant turn — providers reject those requests, and nothing is waiting.
  */
 export async function runConversationLoop(deps: ConversationLoopDeps): Promise<void> {
-  const scratchpad = deps.scratchpad;
-
   for (;;) {
-    clearOldToolResults(scratchpad, deps.scratchpadClear);
     const assembled = await deps.assemble();
+    syncWake(deps, assembled);
     const intents = deps.intents.drain(deps.agentId);
     if (intents.length > 0) {
-      scratchpad.push({ role: "user", content: formatIntentTurn(intents) });
-    }
-    const messages: DwarMessage[] = [...assembled.messages, ...scratchpad];
-    const last = messages[messages.length - 1];
-    if (!last || last.role !== "user") {
-      scratchpad.length = 0;
-      return;
-    }
-
-    const response = await deps.converse({
-      system: assembled.system,
-      messages,
-      tools: assembled.tools,
-    });
-    await deps.logThought(response);
-
-    const uses = response.content.filter(
-      (block): block is DwarToolUseBlock => block.type === "tool_use",
-    );
-    if (uses.length === 0) {
-      scratchpad.length = 0;
-      return;
-    }
-
-    scratchpad.push({ role: "assistant", content: response.content });
-    const results = [];
-    let yielded = false;
-    for (const call of uses) {
-      if (call.name === YIELD) {
-        yielded = true;
-      }
-      const result = await deps.executeTool(call);
-      await deps.logToolCall(call, result);
-      await deps.logToolResult(call.id, result);
-      results.push({
-        type: "tool_result" as const,
-        tool_use_id: call.id,
-        content: result.content,
-        is_error: result.isError,
+      deps.wake.push({
+        message: { role: "user", content: formatIntentTurn(intents) },
+        only: "conversation",
       });
     }
-    scratchpad.push({ role: "user", content: results });
-    if (yielded) {
-      scratchpad.length = 0;
+
+    const request = laneRequest(deps, assembled);
+    const last = request.messages[request.messages.length - 1];
+    if (!last || last.role !== "user") {
+      return;
+    }
+
+    const response = await deps.call(request);
+    await deps.logResponse(response);
+
+    if (await runStep(deps, response, () => false)) {
       return;
     }
   }

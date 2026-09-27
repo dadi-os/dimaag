@@ -24,7 +24,7 @@ import { toolId } from "./sync.js";
 export type ToolExecResult = {
   content: string;
   isError: boolean;
-  /** Extra fields merged into the durable tool_call audit log. */
+  /** Extra fields merged into the durable tool_result log row. */
   audit: Record<string, unknown>;
 };
 

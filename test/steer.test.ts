@@ -10,14 +10,16 @@ import { HostSessions } from "../src/runtime/sessions.js";
 import { ToolDebounce } from "../src/runtime/tool-debounce.js";
 import { TranscriptStore } from "../src/runtime/transcript.js";
 import { STEER_REASONING } from "../src/types/domain.js";
+import { Wake } from "../src/runtime/wake.js";
 
 const noDebounce = new ToolDebounce({ base_ms: 1, max_ms: 1 });
 
 function toolUse(name: string, input: unknown): DwarChatResponse {
   return {
+    provider: "anthropic",
     content: [{ type: "tool_use", id: "call-1", name, input }],
     stop_reason: "tool_use",
-    usage: { input_tokens: 1, output_tokens: 1 },
+    usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
   };
 }
 
@@ -26,15 +28,14 @@ test("a steer arriving mid-loop is applied on the next iteration", async () => {
   const agentId = "agent-1";
   const calls: DwarChatRequest[] = [];
   let turn = 0;
-  const scratchpad: DwarChatRequest["messages"] = [];
 
   await runReasoningLoop({
     agentId,
-    scratchpad,
-    scratchpadClear: { keep: 5, batch: 0, maxChars: 80_000 },
+    lane: "reasoning",
+    wake: new Wake(),
     assemble: async () => ({ system: "sys", messages: [], tools: [], throughSeq: 0 }),
     arrivalsSince: (afterSeq) => ({ turn: null, throughSeq: afterSeq }),
-    reason: async (request) => {
+    call: async (request) => {
       calls.push(request);
       turn += 1;
       if (turn === 1) {
@@ -45,8 +46,7 @@ test("a steer arriving mid-loop is applied on the next iteration", async () => {
     },
     executeTool: async () => ({ content: "{}", isError: false, audit: {} }),
     steer,
-    logThought: async () => {},
-    logToolCall: async () => {},
+    logResponse: async () => {},
     logToolResult: async () => {},
   });
 
@@ -67,11 +67,11 @@ test("a steer stays in view for the rest of the wake, not just the next call", a
 
   await runReasoningLoop({
     agentId,
-    scratchpad: [],
-    scratchpadClear: { keep: 5, batch: 5, maxChars: 80_000 },
+    lane: "reasoning",
+    wake: new Wake(),
     assemble: async () => ({ system: "sys", messages: [], tools: [], throughSeq: 0 }),
     arrivalsSince: (afterSeq) => ({ turn: null, throughSeq: afterSeq }),
-    reason: async (request) => {
+    call: async (request) => {
       calls.push(structuredClone(request));
       turn += 1;
       if (turn === 1) {
@@ -83,8 +83,7 @@ test("a steer stays in view for the rest of the wake, not just the next call", a
     },
     executeTool: async () => ({ content: "{}", isError: false, audit: {} }),
     steer,
-    logThought: async () => {},
-    logToolCall: async () => {},
+    logResponse: async () => {},
     logToolResult: async () => {},
   });
 
@@ -174,11 +173,11 @@ test("steer_reasoning with terminate stops the next tool call from running", asy
 
   await runReasoningLoop({
     agentId,
-    scratchpad: [],
-    scratchpadClear: { keep: 5, batch: 0, maxChars: 80_000 },
+    lane: "reasoning",
+    wake: new Wake(),
     assemble: async () => ({ system: "sys", messages: [], tools: [], throughSeq: 0 }),
     arrivalsSince: (afterSeq) => ({ turn: null, throughSeq: afterSeq }),
-    reason: async () => {
+    call: async () => {
       turn += 1;
       if (turn === 1) {
         steer.requestTerminate(agentId);
@@ -191,8 +190,7 @@ test("steer_reasoning with terminate stops the next tool call from running", asy
       return { content: "{}", isError: false, audit: {} };
     },
     steer,
-    logThought: async () => {},
-    logToolCall: async () => {},
+    logResponse: async () => {},
     logToolResult: async () => {},
   });
 
@@ -208,17 +206,18 @@ test("steer_reasoning terminate mid-batch blocks remaining domain tools", async 
 
   await runReasoningLoop({
     agentId,
-    scratchpad: [],
-    scratchpadClear: { keep: 5, batch: 0, maxChars: 80_000 },
+    lane: "reasoning",
+    wake: new Wake(),
     assemble: async () => ({ system: "sys", messages: [], tools: [], throughSeq: 0 }),
     arrivalsSince: (afterSeq) => ({ turn: null, throughSeq: afterSeq }),
-    reason: async () => ({
+    call: async () => ({
+      provider: "anthropic",
       content: [
         { type: "tool_use", id: "a", name: "send_message", input: { to_agent_id: null, intent: "one" } },
         { type: "tool_use", id: "b", name: "send_message", input: { to_agent_id: null, intent: "two" } },
       ],
       stop_reason: "tool_use",
-      usage: { input_tokens: 1, output_tokens: 1 },
+      usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
     }),
     executeTool: async (call) => {
       executed.push(call.name);
@@ -226,8 +225,7 @@ test("steer_reasoning terminate mid-batch blocks remaining domain tools", async 
       return { content: "{}", isError: false, audit: {} };
     },
     steer,
-    logThought: async () => {},
-    logToolCall: async () => {},
+    logResponse: async () => {},
     logToolResult: async () => {},
   });
 
