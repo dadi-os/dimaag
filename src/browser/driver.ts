@@ -22,11 +22,6 @@ type Connection = {
   cdpUrl: string;
 };
 
-type WebAuthnState = {
-  session: CDPSession;
-  authenticatorId: string;
-};
-
 /** PKCS#8 passkey loaded into a Chromium virtual authenticator. Never log these fields. */
 export type PasskeyInject = {
   credentialId: string;
@@ -60,7 +55,8 @@ export type SnapshotResult = {
 export class BrowserDriver {
   private readonly connections = new Map<number, Connection>();
   private readonly cdpUrls = new Map<number, string>();
-  private readonly webauthn = new Map<string, WebAuthnState>();
+  private readonly pageSessions = new WeakMap<Page, CDPSession>();
+  private readonly authenticators = new WeakMap<Page, string>();
 
   constructor(
     private readonly nas: NasClient,
@@ -80,25 +76,12 @@ export class BrowserDriver {
 
   /** Close the Playwright connection but keep the remembered CDP URL for reconnect. */
   private detach(browserId: number): void {
-    this.dropWebAuthn(browserId);
     const conn = this.connections.get(browserId);
     this.connections.delete(browserId);
     if (!conn) {
       return;
     }
     void conn.browser.close().catch((err) => this.logCleanup(err, "browser connection close", `browser ${browserId}`));
-  }
-
-  /** Detach kept WebAuthn CDP sessions for one Nas browser. */
-  private dropWebAuthn(browserId: number): void {
-    const prefix = `${browserId}:`;
-    for (const [key, state] of this.webauthn) {
-      if (!key.startsWith(prefix)) {
-        continue;
-      }
-      this.webauthn.delete(key);
-      void state.session.detach().catch((err) => this.logCleanup(err, "webauthn session detach", key));
-    }
   }
 
   dropAll(): void {
@@ -114,7 +97,6 @@ export class BrowserDriver {
       return existing.browser;
     }
     if (existing) {
-      this.dropWebAuthn(browserId);
       this.connections.delete(browserId);
       void existing.browser.close().catch((err) => this.logCleanup(err, "stale browser connection close", `browser ${browserId}`));
     }
@@ -123,7 +105,6 @@ export class BrowserDriver {
     browser.on("disconnected", () => {
       if (this.connections.get(browserId)?.browser === browser) {
         this.connections.delete(browserId);
-        this.dropWebAuthn(browserId);
       }
     });
     return browser;
@@ -176,16 +157,27 @@ export class BrowserDriver {
     page.setDefaultNavigationTimeout(this.config.browser.navigation_timeout_ms);
   }
 
-  private async pageTargetId(page: Page): Promise<string> {
-    const session = await page.context().newCDPSession(page);
-    try {
-      const info = (await session.send("Target.getTargetInfo")) as {
-        targetInfo: { targetId: string };
-      };
-      return info.targetInfo.targetId;
-    } finally {
-      await session.detach();
+  /**
+   * The page's CDP session, opened on first use and kept until the page or connection closes.
+   * Chromium disables a tab's WebAuthn virtual authenticator when any CDP session on that tab
+   * detaches, so page-level CDP work shares this session instead of opening and detaching its own.
+   */
+  private async pageSession(page: Page): Promise<CDPSession> {
+    const kept = this.pageSessions.get(page);
+    if (kept) {
+      return kept;
     }
+    const session = await page.context().newCDPSession(page);
+    this.pageSessions.set(page, session);
+    return session;
+  }
+
+  private async pageTargetId(page: Page): Promise<string> {
+    const session = await this.pageSession(page);
+    const info = (await session.send("Target.getTargetInfo")) as {
+      targetInfo: { targetId: string };
+    };
+    return info.targetInfo.targetId;
   }
 
   private async targetInfos(browser: Browser): Promise<
@@ -288,12 +280,8 @@ export class BrowserDriver {
   }
 
   async closeTab(browserId: number, tabId: string): Promise<void> {
-    try {
-      const { page } = await this.resolvePage(browserId, tabId);
-      await page.close();
-    } finally {
-      this.forgetWebAuthn(`${browserId}:${tabId}`);
-    }
+    const { page } = await this.resolvePage(browserId, tabId);
+    await page.close();
   }
 
   async navigate(
@@ -422,24 +410,20 @@ export class BrowserDriver {
 
     const marker = randomUUID();
     await input.evaluate((el, value) => el.setAttribute("data-dadi-upload", value), marker);
-    const session = await page.context().newCDPSession(page);
-    try {
-      const { root } = await session.send("DOM.getDocument", { depth: 0 });
-      const { nodeId } = await session.send("DOM.querySelector", {
-        nodeId: root.nodeId,
-        selector: `[data-dadi-upload="${marker}"]`,
-      });
-      if (nodeId === 0) {
-        throw new DimaagError(
-          422,
-          "invalid_request",
-          `the file input behind ${ref} is inside a frame; navigate to the frame's URL and upload there`,
-        );
-      }
-      await session.send("DOM.setFileInputFiles", { files: [...paths], nodeId });
-    } finally {
-      await session.detach();
+    const session = await this.pageSession(page);
+    const { root } = await session.send("DOM.getDocument", { depth: 0 });
+    const { nodeId } = await session.send("DOM.querySelector", {
+      nodeId: root.nodeId,
+      selector: `[data-dadi-upload="${marker}"]`,
+    });
+    if (nodeId === 0) {
+      throw new DimaagError(
+        422,
+        "invalid_request",
+        `the file input behind ${ref} is inside a frame; navigate to the frame's URL and upload there`,
+      );
     }
+    await session.send("DOM.setFileInputFiles", { files: [...paths], nodeId });
 
     const files = await input.evaluate((el) => {
       el.removeAttribute("data-dadi-upload");
@@ -539,10 +523,9 @@ export class BrowserDriver {
   }
 
   /**
-   * Load a passkey into a fresh Chromium virtual authenticator on this tab.
-   * Any earlier authenticator session for the tab is dropped first: its WebAuthn
-   * environment does not outlive later browser work, so reusing it fails. The new
-   * CDP session stays open so the authenticator survives until the browser drops.
+   * Load a passkey into this tab's Chromium virtual authenticator, replacing any passkey an
+   * earlier call loaded. The authenticator lives on the page's kept CDP session, so it stays
+   * active across later browser actions until the tab or the connection closes.
    * Only WebAuthn requests the page starts after this call can use the passkey.
    */
   async addPasskey(
@@ -551,14 +534,23 @@ export class BrowserDriver {
     cred: PasskeyInject,
   ): Promise<{ tab_id: string }> {
     const resolved = await this.resolvePage(browserId, tabId);
-    const key = `${browserId}:${resolved.tabId}`;
-    this.forgetWebAuthn(key);
     try {
-      const state = await this.startWebAuthn(resolved.page, key);
-      await this.addCredential(state, cred);
+      const session = await this.pageSession(resolved.page);
+      const authenticatorId = await this.authenticator(resolved.page, session);
+      await cdpSend(session, "WebAuthn.clearCredentials", { authenticatorId });
+      await cdpSend(session, "WebAuthn.addCredential", {
+        authenticatorId,
+        credential: {
+          credentialId: cred.credentialId,
+          isResidentCredential: cred.resident,
+          rpId: cred.rpId,
+          privateKey: cred.privateKey,
+          userHandle: cred.userHandle,
+          signCount: cred.signCount,
+        },
+      });
       return { tab_id: resolved.tabId };
     } catch (err) {
-      this.forgetWebAuthn(key);
       if (err instanceof DimaagError) {
         throw err;
       }
@@ -567,62 +559,35 @@ export class BrowserDriver {
     }
   }
 
-  /** Open a CDP session on the page, enable WebAuthn, and add one internal authenticator. */
-  private async startWebAuthn(page: Page, key: string): Promise<WebAuthnState> {
-    const session = await page.context().newCDPSession(page);
-    try {
-      await cdpSend(session, "WebAuthn.enable");
-      const added = await cdpSend<{ authenticatorId: string }>(
-        session,
-        "WebAuthn.addVirtualAuthenticator",
-        {
-          options: {
-            protocol: "ctap2",
-            transport: "internal",
-            hasResidentKey: true,
-            hasUserVerification: true,
-            isUserVerified: true,
-            automaticPresenceSimulation: true,
-          },
-        },
-      );
-      const state = { session, authenticatorId: added.authenticatorId };
-      this.webauthn.set(key, state);
-      return state;
-    } catch (err) {
-      await session.detach();
-      throw err;
+  /** The page's internal authenticator id, enabling WebAuthn and adding it on first use. */
+  private async authenticator(page: Page, session: CDPSession): Promise<string> {
+    const kept = this.authenticators.get(page);
+    if (kept) {
+      return kept;
     }
-  }
-
-  /** Add the passkey to a freshly started authenticator. */
-  private async addCredential(state: WebAuthnState, cred: PasskeyInject): Promise<void> {
-    await cdpSend(state.session, "WebAuthn.addCredential", {
-      authenticatorId: state.authenticatorId,
-      credential: {
-        credentialId: cred.credentialId,
-        isResidentCredential: cred.resident,
-        rpId: cred.rpId,
-        privateKey: cred.privateKey,
-        userHandle: cred.userHandle,
-        signCount: cred.signCount,
+    await cdpSend(session, "WebAuthn.enable");
+    const added = await cdpSend<{ authenticatorId: string }>(
+      session,
+      "WebAuthn.addVirtualAuthenticator",
+      {
+        options: {
+          protocol: "ctap2",
+          transport: "internal",
+          hasResidentKey: true,
+          hasUserVerification: true,
+          isUserVerified: true,
+          automaticPresenceSimulation: true,
+        },
       },
-    });
+    );
+    this.authenticators.set(page, added.authenticatorId);
+    return added.authenticatorId;
   }
 
-  /** Log a teardown failure on a connection or session that is being discarded anyway. */
+  /** Log a teardown failure on a connection that is being discarded anyway. */
   private logCleanup(err: unknown, what: string, subject: string): void {
     const message = err instanceof Error ? err.message : String(err);
     this.log.warn({ subject, error: message }, `${what} failed`);
-  }
-
-  private forgetWebAuthn(key: string): void {
-    const state = this.webauthn.get(key);
-    if (!state) {
-      return;
-    }
-    this.webauthn.delete(key);
-    void state.session.detach().catch((err) => this.logCleanup(err, "webauthn session detach", key));
   }
 }
 

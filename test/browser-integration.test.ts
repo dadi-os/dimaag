@@ -4,9 +4,10 @@
  */
 
 import assert from "node:assert/strict";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { test } from "node:test";
 import axios from "axios";
-import { BrowserDriver } from "../src/browser/driver.js";
+import { BrowserDriver, type PasskeyInject } from "../src/browser/driver.js";
 import { createNasClient } from "../src/nas/client.js";
 import { silentLog, testConfig } from "./helpers.js";
 
@@ -194,6 +195,80 @@ test("integration: upload_file attaches a host file directly and through a file 
         return true;
       },
     );
+  } finally {
+    driver.drop(browserId);
+    await http.delete(`/browsers/${browserId}`);
+  }
+});
+
+test("integration: a filled passkey answers WebAuthn after later browser actions and a refill replaces it", async (t) => {
+  if (!nasUrl) {
+    t.skip("NAS_URL not set");
+    return;
+  }
+
+  const config = testConfig();
+  const http = axios.create({
+    baseURL: nasUrl,
+    timeout: Math.max(config.nas.timeout_ms, 120_000),
+    headers: { "content-type": "application/json" },
+  });
+  const created = await http.post("/browsers", {});
+  const browserId = created.data.id as number;
+  const cdpUrl = String(created.data.cdp_url).replace(/^ws:\/\/[^/]+/, nasUrl.replace(/^http/, "ws"));
+  const driver = new BrowserDriver(createNasClient(config), config, silentLog);
+  driver.remember(browserId, cdpUrl);
+
+  const rpId = "passkey.dadi.test";
+  const passkey = (): { id: string; cred: PasskeyInject } => {
+    const { privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
+    const credentialId = randomBytes(16);
+    return {
+      id: credentialId.toString("base64url"),
+      cred: {
+        credentialId: credentialId.toString("base64"),
+        rpId,
+        privateKey: privateKey.export({ format: "der", type: "pkcs8" }).toString("base64"),
+        userHandle: randomBytes(16).toString("base64"),
+        signCount: 0,
+        resident: true,
+      },
+    };
+  };
+
+  try {
+    const opened = await driver.resolvePage(browserId);
+    await opened.page.context().route(`https://${rpId}/**`, (route) =>
+      route.fulfill({ contentType: "text/html", body: "<!doctype html><button>Sign in</button>" }),
+    );
+    const { tab_id: tabId } = await driver.navigate(browserId, opened.tabId, `https://${rpId}/`);
+    const signIn = async (): Promise<string> => {
+      const { page } = await driver.resolvePage(browserId, tabId);
+      return page.evaluate(async (rp) => {
+        const credential = await navigator.credentials.get({
+          publicKey: {
+            challenge: crypto.getRandomValues(new Uint8Array(32)),
+            rpId: rp,
+            userVerification: "required",
+            timeout: 10_000,
+          },
+        });
+        return (credential as PublicKeyCredential).id;
+      }, rpId);
+    };
+
+    const first = passkey();
+    await driver.addPasskey(browserId, tabId, first.cred);
+    await driver.accessibilityTree(browserId, tabId);
+    const other = await driver.newTab(browserId, "about:blank");
+    await driver.listTabs(browserId);
+    await driver.closeTab(browserId, other.tab_id);
+    assert.equal(await signIn(), first.id);
+
+    const second = passkey();
+    await driver.addPasskey(browserId, tabId, second.cred);
+    await driver.accessibilityTree(browserId, tabId);
+    assert.equal(await signIn(), second.id);
   } finally {
     driver.drop(browserId);
     await http.delete(`/browsers/${browserId}`);
