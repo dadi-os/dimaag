@@ -60,10 +60,6 @@ import { readTerminal } from "./terminal/read-terminal.js";
 import { sendKeys } from "./terminal/send-keys.js";
 import { spawnTerminal } from "./terminal/spawn-terminal.js";
 import { writeFile } from "./terminal/write-file.js";
-import { recall } from "./yaad/recall.js";
-import { query } from "./yaad/query.js";
-import { getNode } from "./yaad/get-node.js";
-import { ingest } from "./yaad/ingest.js";
 import { getNodeHistory } from "./yaad/get-node-history.js";
 import { searchHistory } from "./yaad/search-history.js";
 
@@ -83,10 +79,6 @@ const definitions = [
   listSchedules,
   cancelSchedule,
   dimaagGetLogs,
-  recall,
-  query,
-  getNode,
-  ingest,
   getNodeHistory,
   searchHistory,
   listDevices,

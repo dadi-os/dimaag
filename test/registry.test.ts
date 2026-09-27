@@ -184,7 +184,7 @@ test("migrate does not backfill grants onto existing roots", async () => {
     name: "narrow-root",
     systemPrompt: "deliberate grants only",
   });
-  const granted = ["yaad_recall", "yaad_query"] as const;
+  const granted = ["yaad_search_history", "yaad_get_node_history"] as const;
   for (const name of granted) {
     await handle.db.insert(agentTools).values({
       agentId,

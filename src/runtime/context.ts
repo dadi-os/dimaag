@@ -5,7 +5,9 @@ import { DimaagError } from "../errors.js";
 import type { DwarChatRequest, DwarMessage, DwarTool, Lane } from "../types/domain.js";
 import {
   DISPATCH_MESSAGE,
+  INGEST_MEMORY,
   LIST_AGENTS,
+  RECALL_MEMORY,
   RECORD_THOUGHT,
   SEND_MESSAGE,
   STEER_REASONING,
@@ -21,6 +23,7 @@ import {
   waitTool,
   yieldTool,
 } from "./tools.js";
+import { ingestMemoryTool, recallMemoryTool } from "./memory.js";
 import type { TranscriptEntry, TranscriptStore } from "./transcript.js";
 
 /**
@@ -156,10 +159,27 @@ async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTo
     description: `${grant.description}\n\n${grant.usage}`,
     input_schema: grant.inputSchema,
   }));
-  return [...granted, sendMessageTool, listAgentsTool, waitTool, recordThoughtTool, yieldTool];
+  return [
+    ...granted,
+    sendMessageTool,
+    listAgentsTool,
+    waitTool,
+    recallMemoryTool,
+    ingestMemoryTool,
+    recordThoughtTool,
+    yieldTool,
+  ];
 }
 
-export const embeddedReasoningTools = [SEND_MESSAGE, LIST_AGENTS, WAIT, RECORD_THOUGHT, YIELD] as const;
+export const embeddedReasoningTools = [
+  SEND_MESSAGE,
+  LIST_AGENTS,
+  WAIT,
+  RECALL_MEMORY,
+  INGEST_MEMORY,
+  RECORD_THOUGHT,
+  YIELD,
+] as const;
 export const embeddedConversationTools = [
   DISPATCH_MESSAGE,
   STEER_REASONING,

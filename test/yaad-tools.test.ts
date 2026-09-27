@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { LIST_AGENTS, SEND_MESSAGE } from "../src/types/domain.js";
+import { INGEST_MEMORY, LIST_AGENTS, RECALL_MEMORY, SEND_MESSAGE } from "../src/types/domain.js";
 import { assembleContext } from "../src/runtime/context.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { executeTool } from "../src/runtime/tools.js";
@@ -39,33 +39,38 @@ after(async () => {
   await handle.close();
 });
 
-const YAAD_TOOLS = [
-  "yaad_recall",
-  "yaad_query",
-  "yaad_get_node",
-  "yaad_ingest",
-  "yaad_get_node_history",
-  "yaad_search_history",
-] as const;
+function runtimeWith(yaad: ReturnType<typeof mockYaad>, dwar = mockDwar({})) {
+  return createRuntime({
+    db: handle.db,
+    dwar,
+    yaad,
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+    config,
+    log: silentLog,
+  });
+}
 
-test("Yaad tools are registered and syncTools does not auto-grant", async () => {
+test("only the Yaad history tools stay grantable and syncTools does not auto-grant", async () => {
   await resetRuntime(handle.sql, handle.db, config);
-  for (const name of YAAD_TOOLS) {
-    assert.equal(findTool(name)?.name, name);
+  assert.equal(findTool("yaad_get_node_history")?.name, "yaad_get_node_history");
+  assert.equal(findTool("yaad_search_history")?.name, "yaad_search_history");
+  for (const removed of ["yaad_recall", "yaad_query", "yaad_get_node", "yaad_ingest"]) {
+    assert.equal(findTool(removed), undefined);
   }
-  assert.equal(allTools().length, 67);
+  assert.equal(allTools().length, 63);
   await assert.doesNotReject(() => syncTools(handle.db));
   const grants = await handle.db.select().from(agentTools);
   assert.equal(grants.length, 0);
 });
 
-test("assembleContext for a worker includes Yaad tools, send_message, and yield — not spawn", async () => {
+test("a reasoning lane with no grants still holds recall_memory and ingest_memory", async () => {
   await resetRuntime(handle.sql, handle.db, config);
-  const granted = [...YAAD_TOOLS];
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
-    tools: granted,
+    tools: [],
   });
   const ctx = await assembleContext({
     db: handle.db,
@@ -76,162 +81,107 @@ test("assembleContext for a worker includes Yaad tools, send_message, and yield 
     transcriptWindowStep: 20,
   });
   const names = new Set(ctx.tools.map((tool) => tool.name));
-  for (const name of [...granted, SEND_MESSAGE, LIST_AGENTS, "yield"]) {
+  for (const name of [RECALL_MEMORY, INGEST_MEMORY, SEND_MESSAGE, LIST_AGENTS, "yield"]) {
     assert.ok(names.has(name), `missing tool ${name}`);
   }
-  assert.equal(names.has("dimaag_spawn_agent"), false);
 });
 
-test("recall tool shapes the response and preserves sufficient", async () => {
+test("recall_memory passes anchors, hops, and filters through and shapes the response", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
-    tools: ["yaad_recall"],
+    tools: [],
   });
   const nodeId = randomUUID();
+  const neighborId = randomUUID();
   const yaad = mockYaad({
     recall: () => ({
       nodes: [
         {
           id: nodeId,
-          kind: "memory",
-          title: "Vedant lunch",
+          kind: "person",
+          title: "Oliver Chen",
           body: null,
-          occurred_at: "2026-09-05T12:00:00.000Z",
+          occurred_at: null,
           expires_at: null,
-          detail: null,
-          score: 0.91,
+          detail: { birthday: null, aliases: [] },
+          score: null,
           hops: 0,
-          scores: { semantic: 0.9 },
         },
       ],
-      edges: [{ src_id: nodeId, dst_id: randomUUID(), type: "ABOUT", id: randomUUID() }],
-      sufficient: true,
-      coverage: 0.8,
+      edges: [
+        {
+          id: randomUUID(),
+          src_id: nodeId,
+          dst_id: neighborId,
+          type: "WORKS_AT",
+          properties: { role: "recruiter" },
+        },
+      ],
+      sufficient: null,
+      coverage: null,
       anchors: [nodeId],
-      hops_taken: 2,
+      hops_taken: 1,
     }),
   });
-  const runtime = createRuntime({
-    db: handle.db,
-    dwar: mockDwar({}),
-    yaad,
-    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
-    config,
-    log: silentLog,
-  });
-  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
+  const result = await executeTool(runtimeWith(yaad).toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "r1",
-    name: "yaad_recall",
-    input: { query: "Vedant lunch" },
+    name: RECALL_MEMORY,
+    input: { from: [nodeId], hops: 1 },
   });
   assert.equal(result.isError, false);
-  assert.deepEqual(yaad.recallCalls, [{ query: "Vedant lunch" }]);
+  assert.equal(yaad.recallCalls.length, 1);
+  assert.deepEqual(yaad.recallCalls[0], { from: [nodeId], hops: 1 });
   const body = JSON.parse(result.content);
-  assert.equal(body.sufficient, true);
-  assert.equal(body.coverage, 0.8);
   assert.equal(body.nodes[0].id, nodeId);
+  assert.equal(body.nodes[0].hops, 0);
   assert.equal(body.nodes[0].score, undefined);
-  assert.equal(body.nodes[0].hops, undefined);
+  assert.equal(body.sufficient, null);
   assert.equal(body.anchors, undefined);
-  assert.equal(body.hops_taken, undefined);
   assert.deepEqual(body.edges, [
-    { src_id: body.edges[0].src_id, dst_id: body.edges[0].dst_id, type: "ABOUT" },
+    { src_id: nodeId, dst_id: neighborId, type: "WORKS_AT", properties: { role: "recruiter" } },
   ]);
-});
 
-test("query tool passes filters through", async () => {
-  await resetRuntime(handle.sql, handle.db, config);
-  const workerId = await insertWorker(handle.db, {
-    name: "thread",
-    systemPrompt: "do the job",
-    tools: ["yaad_query"],
-  });
-  const yaad = mockYaad({
-    query: () => ({ nodes: [{ id: randomUUID(), kind: "plan", title: "flight" }], limit: 10, offset: 0 }),
-  });
-  const runtime = createRuntime({
-    db: handle.db,
-    dwar: mockDwar({}),
-    yaad,
-    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
-    config,
-    log: silentLog,
-  });
-  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
+  const filtered = await executeTool(runtimeWith(yaad).toolContext(workerId, "reasoning"), {
     type: "tool_use",
-    id: "q1",
-    name: "yaad_query",
+    id: "r2",
+    name: RECALL_MEMORY,
     input: {
       kind: "plan",
-      occurred_from: "2026-09-14T00:00:00.000Z",
-      occurred_to: "2026-09-14T23:59:59.000Z",
+      occurred_from: "2026-09-21T00:00:00-04:00",
+      occurred_to: "2026-09-27T23:59:59-04:00",
     },
   });
-  assert.equal(result.isError, false);
-  assert.equal(yaad.queryCalls.length, 1);
-  assert.equal(yaad.queryCalls[0]?.kind, "plan");
-  const body = JSON.parse(result.content);
-  assert.equal(body.limit, 10);
-  assert.equal(body.offset, 0);
-  assert.equal(body.nodes.length, 1);
+  assert.equal(filtered.isError, false);
+  assert.equal(yaad.recallCalls[1]?.kind, "plan");
 });
 
-test("get_node tool returns the Yaad node response", async () => {
+test("recall_memory rejects fields Yaad does not take", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
-    tools: ["yaad_get_node"],
+    tools: [],
   });
-  const id = randomUUID();
-  const yaad = mockYaad({
-    getNode: () => ({
-      id,
-      kind: "place",
-      title: "Peanut Barrel",
-      body: null,
-      occurred_at: null,
-      expires_at: null,
-      access_count: 0,
-      last_accessed_at: null,
-      source: "yaad_ingest",
-      created_at: "2026-09-05T12:00:00.000Z",
-      updated_at: "2026-09-05T12:00:00.000Z",
-      detail: { address: "Grand River", latitude: null, longitude: null },
-      edges: { outgoing: [], incoming: [{ src_id: randomUUID(), dst_id: id, type: "AT_LOCATION" }] },
-    }),
-  });
-  const runtime = createRuntime({
-    db: handle.db,
-    dwar: mockDwar({}),
-    yaad,
-    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
-    config,
-    log: silentLog,
-  });
-  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
+  const yaad = mockYaad();
+  const result = await executeTool(runtimeWith(yaad).toolContext(workerId, "reasoning"), {
     type: "tool_use",
-    id: "g1",
-    name: "yaad_get_node",
-    input: { id },
+    id: "r3",
+    name: RECALL_MEMORY,
+    input: { query: "anything", offset: 5 },
   });
-  assert.equal(result.isError, false);
-  assert.deepEqual(yaad.getNodeCalls, [id]);
-  const body = JSON.parse(result.content);
-  assert.equal(body.id, id);
-  assert.equal(body.detail.address, "Grand River");
-  assert.ok(body.edges.incoming.length === 1);
+  assert.equal(result.isError, true);
+  assert.equal(yaad.recallCalls.length, 0);
 });
 
-test("ingest stamps occurred_at and source; rejects occurred_at in tool input", async () => {
+test("ingest_memory stamps the calling agent, source, and occurred_at", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
-    tools: ["yaad_ingest"],
+    tools: [],
   });
   const before = Date.now();
   const yaad = mockYaad({
@@ -241,24 +191,18 @@ test("ingest stamps occurred_at and source; rejects occurred_at in tool input", 
       temp_ids: { p1: randomUUID() },
     }),
   });
-  const runtime = createRuntime({
-    db: handle.db,
-    dwar: mockDwar({}),
-    yaad,
-    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
-    config,
-    log: silentLog,
-  });
+  const runtime = runtimeWith(yaad);
   const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "i1",
-    name: "yaad_ingest",
+    name: INGEST_MEMORY,
     input: { text: "Vedant likes orange juice" },
   });
   assert.equal(result.isError, false);
   assert.equal(yaad.ingestCalls.length, 1);
   const call = yaad.ingestCalls[0]!;
   assert.equal(call.source, "agent");
+  assert.equal(call.agent_id, workerId);
   assert.equal(call.text, "Vedant likes orange juice");
   const stamped = Date.parse(call.occurred_at);
   assert.ok(stamped >= before - 1000);
@@ -271,14 +215,24 @@ test("ingest stamps occurred_at and source; rejects occurred_at in tool input", 
   const rejected = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "i2",
-    name: "yaad_ingest",
-    input: {
-      text: "should fail",
-      occurred_at: "2020-01-01T00:00:00.000Z",
-    },
+    name: INGEST_MEMORY,
+    input: { text: "should fail", occurred_at: "2020-01-01T00:00:00.000Z" },
   });
   assert.equal(rejected.isError, true);
   assert.equal(yaad.ingestCalls.length, 1);
+});
+
+test("ingest_memory without an agent identity is an error and writes nothing", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const yaad = mockYaad();
+  const result = await executeTool(runtimeWith(yaad).toolContext(null, "reasoning"), {
+    type: "tool_use",
+    id: "i3",
+    name: INGEST_MEMORY,
+    input: { text: "no author" },
+  });
+  assert.equal(result.isError, true);
+  assert.equal(yaad.ingestCalls.length, 0);
 });
 
 test("Yaad 4xx maps to isError without throwing", async () => {
@@ -286,29 +240,21 @@ test("Yaad 4xx maps to isError without throwing", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
-    tools: ["yaad_query"],
+    tools: [],
   });
   const yaad = mockYaad({
-    query: () => {
-      throw new DimaagError(422, "yaad", "at least one filter is required");
+    recall: () => {
+      throw new DimaagError(422, "yaad", "from cannot be combined with filters");
     },
   });
-  const runtime = createRuntime({
-    db: handle.db,
-    dwar: mockDwar({}),
-    yaad,
-    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
-    config,
-    log: silentLog,
-  });
-  const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
+  const result = await executeTool(runtimeWith(yaad).toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "q2",
-    name: "yaad_query",
-    input: { kind: "plan" },
+    name: RECALL_MEMORY,
+    input: { from: [randomUUID()], kind: "plan" },
   });
   assert.equal(result.isError, true);
-  assert.equal(result.content, "at least one filter is required");
+  assert.equal(result.content, "from cannot be combined with filters");
 });
 
 test("Yaad unreachable maps to isError and the lane continues", async () => {
@@ -316,14 +262,14 @@ test("Yaad unreachable maps to isError and the lane continues", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
-    tools: ["yaad_recall"],
+    tools: [],
   });
   let reasonCalls = 0;
   const dwar = mockDwar({
     reason: async () => {
       reasonCalls += 1;
       if (reasonCalls === 1) {
-        return toolUse("yaad_recall", { query: "anything" }, "fail-call");
+        return toolUse(RECALL_MEMORY, { query: "anything" }, "fail-call");
       }
       if (reasonCalls === 2) {
         return endTurn("recall failed; Yaad is unreachable, so I will stop here");
@@ -337,14 +283,7 @@ test("Yaad unreachable maps to isError and the lane continues", async () => {
       throw new DimaagError(502, "upstream_unreachable", "Yaad is unreachable");
     },
   });
-  const runtime = createRuntime({
-    db: handle.db,
-    dwar,
-    yaad,
-    ghar: mockGhar(), chaavi: mockChaavi(), nas: mockNas(),
-    config,
-    log: silentLog,
-  });
+  const runtime = runtimeWith(yaad, dwar);
   runtime.enqueueReasoning(workerId);
   await runtime.waitUntilIdle();
   assert.equal(reasonCalls, 3, "lane continues after a failed tool call and after a text-only turn");

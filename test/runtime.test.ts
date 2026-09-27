@@ -523,7 +523,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
   });
   assert.deepEqual(
     childCtx.tools.map((tool) => tool.name),
-    [SEND_MESSAGE, LIST_AGENTS, "wait", "record_thought", "yield"],
+    [SEND_MESSAGE, LIST_AGENTS, "wait", "recall_memory", "ingest_memory", "record_thought", "yield"],
   );
 });
 
@@ -628,7 +628,7 @@ test("grant_tool and modify_agent reject a grandchild for a normal agent", async
     name: "dimaag_grant_tool",
     input: {
       agent_id: grandchildId,
-      tool_name: "yaad_recall",
+      tool_name: "yaad_search_history",
       usage: "nope",
     },
   });
@@ -678,7 +678,7 @@ test("as Dadi, grant_tool reaches a root and a nested agent under another parent
     name: "dimaag_grant_tool",
     input: {
       agent_id: rootId,
-      tool_name: "yaad_recall",
+      tool_name: "yaad_search_history",
       usage: "remember for the root",
     },
   });
@@ -690,7 +690,7 @@ test("as Dadi, grant_tool reaches a root and a nested agent under another parent
     name: "dimaag_grant_tool",
     input: {
       agent_id: nestedId,
-      tool_name: "yaad_query",
+      tool_name: "yaad_get_node_history",
       usage: "query for the nested agent",
     },
   });
@@ -698,8 +698,8 @@ test("as Dadi, grant_tool reaches a root and a nested agent under another parent
 
   const grants = await handle.db.select().from(agentTools);
   const byAgent = new Map(grants.map((row) => [row.agentId, row.toolId]));
-  assert.equal(byAgent.get(rootId), toolId("yaad_recall"));
-  assert.equal(byAgent.get(nestedId), toolId("yaad_query"));
+  assert.equal(byAgent.get(rootId), toolId("yaad_search_history"));
+  assert.equal(byAgent.get(nestedId), toolId("yaad_get_node_history"));
 });
 
 test("as Dadi, modify_agent can change any agent", async () => {
@@ -911,7 +911,7 @@ test("get_agent tool names match agent_tools for that agent", async () => {
     name: "tools-child",
     systemPrompt: "child",
     parentAgentId: parentId,
-    tools: ["yaad_recall", "dimaag_schedule_message"],
+    tools: ["yaad_search_history", "dimaag_schedule_message"],
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -942,7 +942,7 @@ test("get_agent tool names match agent_tools for that agent", async () => {
   );
   assert.deepEqual((JSON.parse(result.content) as { tools: string[] }).tools, [
     "dimaag_schedule_message",
-    "yaad_recall",
+    "yaad_search_history",
   ]);
 });
 
@@ -1240,6 +1240,8 @@ test("list_agents is in both lanes for an agent with no grants", async () => {
     SEND_MESSAGE,
     LIST_AGENTS,
     "wait",
+    "recall_memory",
+    "ingest_memory",
     "record_thought",
     "yield",
   ]);
@@ -1613,7 +1615,7 @@ test("executeTool denies registry tools without grant or when inactive", async (
   const dormant = await insertWorker(handle.db, {
     name: "dormant-worker",
     systemPrompt: "asleep",
-    tools: ["yaad_recall"],
+    tools: ["yaad_search_history"],
   });
   await handle.db.update(agents).set({ active: false }).where(eq(agents.id, dormant));
   const runtime = createRuntime({
@@ -1630,16 +1632,16 @@ test("executeTool denies registry tools without grant or when inactive", async (
   const noGrant = await executeTool(runtime.toolContext(ungranted, "reasoning"), {
     type: "tool_use",
     id: "eg1",
-    name: "yaad_recall",
+    name: "yaad_search_history",
     input: { query: "x" },
   });
   assert.equal(noGrant.isError, true);
-  assert.match(noGrant.content, /does not hold yaad_recall/);
+  assert.match(noGrant.content, /does not hold yaad_search_history/);
 
   const inactive = await executeTool(runtime.toolContext(dormant, "reasoning"), {
     type: "tool_use",
     id: "eg2",
-    name: "yaad_recall",
+    name: "yaad_search_history",
     input: { query: "x" },
   });
   assert.equal(inactive.isError, true);

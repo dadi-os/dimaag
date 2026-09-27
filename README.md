@@ -83,7 +83,7 @@ No user table. Human messages use `from_agent_id = null` / `to_agent_id = null`.
 
 ## Dual lanes
 
-Every agent has both lanes. **Reasoning** is the executor (tool-calling against `agent_tools` plus embedded `send_message` / `list_agents` / `yield`). **Conversation** is the control surface (`dispatch_message`, `steer_reasoning`, `list_agents`, `yield`). Speech is only via those message tools — model text is thought, never speech. Reasoning calls Dwar with `tool_choice: "auto"`, so the model can think and write before, alongside, or instead of a tool call; a turn with no tool call continues the lane (a `[continue]` user turn follows it), and a turn ends only on `yield`. Conversation calls with `tool_choice: "any"`: its only outputs are dispatch, steer and yield, and left free it writes replies as plain text that reach no one and never end the lane. `list_agents` looks up kebab-case ids (or lists the roster); it is not grantable. Assembled transcripts stamp each turn `[From: …]` / `[To: …]` (Ankur or an agent id) so multi-party threads stay attributable.
+Every agent has both lanes. **Reasoning** is the executor (tool-calling against `agent_tools` plus embedded `send_message` / `list_agents` / `wait` / `recall_memory` / `ingest_memory` / `record_thought` / `yield`). **Conversation** is the control surface (`dispatch_message`, `steer_reasoning`, `list_agents`, `yield`). Speech is only via those message tools — model text is thought, never speech. Reasoning calls Dwar with `tool_choice: "auto"`, so the model can think and write before, alongside, or instead of a tool call; a turn with no tool call continues the lane (a `[continue]` user turn follows it), and a turn ends only on `yield`. Conversation calls with `tool_choice: "any"`: its only outputs are dispatch, steer and yield, and left free it writes replies as plain text that reach no one and never end the lane. `list_agents` looks up kebab-case ids (or lists the roster); it is not grantable. Assembled transcripts stamp each turn `[From: …]` / `[To: …]` (Ankur or an agent id) so multi-party threads stay attributable.
 
 Transcript is in-process and shared. Conversation starts on inbound message, reasoning finish, or `send_message`. `steer_reasoning` queues instructions for the next reasoning step.
 
@@ -99,16 +99,19 @@ Assembled context always includes a lane block (conversation manages reasoning v
 
 ### Yaad (memory)
 
-| tool | Yaad route | when to use |
+Every reasoning lane holds the two memory tools without a grant, so each agent reads and writes memory itself; there is no memory agent to hand facts to.
+
+| embedded tool | Yaad route | when to use |
 | --- | --- | --- |
-| `yaad_recall` | `POST /recall` | semantic "what do I know about X" |
-| `yaad_query` | `POST /query` | exact dates, names, filters |
-| `yaad_get_node` | `GET /nodes/:id` | full node + edges |
-| `yaad_ingest` | `POST /ingest` | store a fact |
+| `recall_memory` | `POST /recall` | anchor on a `query` (by meaning), `from` node ids, or exact filters (`kind`, `name`, date window, `status`), then walk `hops` links out; `{ from: [id], hops: 1 }` is a node with its neighbors |
+| `ingest_memory` | `POST /ingest` | store a fact, event, or scheduled meeting about Ankur's world |
+
+`ingest_memory` sends `source: "agent"`, `agent_id` = the calling agent, and `occurred_at` stamped from the clock, so Yaad records which agent wrote every node. `record_thought` stays separate: it keeps an agent's own working notes (how it did a task, a workaround) and replays them into that agent's context, while facts about Ankur go to Yaad.
+
+| grantable tool | Yaad route | when to use |
+| --- | --- | --- |
 | `yaad_get_node_history` | `GET /nodes/:id/history` | correction log for one node |
 | `yaad_search_history` | `POST /history/search` | semantic search over corrections |
-
-`occurred_at` on ingest is stamped by Dimaag from the clock.
 
 ### Chaavi (vault)
 

@@ -521,7 +521,7 @@ test("POST /tools/:name/execute without as_agent_id is 422", async () => {
 
   const res = await app.inject({
     method: "POST",
-    url: "/tools/yaad_recall/execute",
+    url: "/tools/yaad_search_history/execute",
     payload: { query: "anything" },
   });
   assert.equal(res.statusCode, 422);
@@ -538,7 +538,7 @@ test("POST /tools/:name/execute with as_agent_id runs a worker tool", async () =
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
-    tools: ["yaad_recall"],
+    tools: ["yaad_search_history"],
   });
   const yaad = mockYaad({
     recall: () => ({
@@ -572,14 +572,14 @@ test("POST /tools/:name/execute with as_agent_id runs a worker tool", async () =
 
   const res = await app.inject({
     method: "POST",
-    url: "/tools/yaad_recall/execute",
+    url: "/tools/yaad_search_history/execute",
     payload: { as_agent_id: workerId, query: "Vedant lunch" },
   });
   assert.equal(res.statusCode, 200);
   const body = res.json() as { ok: boolean; is_error: boolean; content: string };
   assert.equal(body.ok, true);
   assert.equal(body.is_error, false);
-  assert.deepEqual(yaad.recallCalls, [{ query: "Vedant lunch" }]);
+  assert.deepEqual(yaad.searchHistoryCalls, [{ query: "Vedant lunch" }]);
 
   await runtime.waitUntilIdle();
   await app.close();
@@ -619,7 +619,7 @@ test("POST /tools/:name/execute as dadi rejects worker tools", async () => {
 
   const res = await app.inject({
     method: "POST",
-    url: "/tools/yaad_recall/execute",
+    url: "/tools/yaad_search_history/execute",
     payload: { as_agent_id: "dadi", query: "anything" },
   });
   assert.equal(res.statusCode, 422);
@@ -665,14 +665,14 @@ test("POST /tools/:name/execute as user runs a worker tool without a grant", asy
 
   const res = await app.inject({
     method: "POST",
-    url: "/tools/yaad_recall/execute",
+    url: "/tools/yaad_search_history/execute",
     payload: { as_agent_id: "user", query: "Vedant lunch" },
   });
   assert.equal(res.statusCode, 200);
   const body = res.json() as { ok: boolean; is_error: boolean; content: string };
   assert.equal(body.ok, true);
   assert.equal(body.is_error, false);
-  assert.deepEqual(yaad.recallCalls, [{ query: "Vedant lunch" }]);
+  assert.deepEqual(yaad.searchHistoryCalls, [{ query: "Vedant lunch" }]);
 
   await runtime.waitUntilIdle();
   await app.close();
@@ -685,7 +685,7 @@ test("POST /tools/:name/execute with a missing agent id is 404", async () => {
 
   const res = await app.inject({
     method: "POST",
-    url: "/tools/yaad_recall/execute",
+    url: "/tools/yaad_search_history/execute",
     payload: { as_agent_id: missing, query: "anything" },
   });
   assert.equal(res.statusCode, 404);
@@ -708,13 +708,13 @@ test("POST /tools/:name/execute without grant is 403", async () => {
 
   const res = await app.inject({
     method: "POST",
-    url: "/tools/yaad_recall/execute",
+    url: "/tools/yaad_search_history/execute",
     payload: { as_agent_id: workerId, query: "anything" },
   });
   assert.equal(res.statusCode, 403);
   const body = res.json() as { error: { type: string; message: string } };
   assert.equal(body.error.type, "forbidden");
-  assert.match(body.error.message, /does not hold yaad_recall/);
+  assert.match(body.error.message, /does not hold yaad_search_history/);
 
   await runtime.waitUntilIdle();
   await app.close();
@@ -725,14 +725,14 @@ test("POST /tools/:name/execute as inactive agent is 403", async () => {
   const workerId = await insertWorker(handle.db, {
     name: "dormant",
     systemPrompt: "asleep",
-    tools: ["yaad_recall"],
+    tools: ["yaad_search_history"],
   });
   await handle.db.update(agents).set({ active: false }).where(eq(agents.id, workerId));
   const { app, runtime } = await appWith();
 
   const res = await app.inject({
     method: "POST",
-    url: "/tools/yaad_recall/execute",
+    url: "/tools/yaad_search_history/execute",
     payload: { as_agent_id: workerId, query: "anything" },
   });
   assert.equal(res.statusCode, 403);
@@ -771,8 +771,8 @@ test("POST /dadi spawn with grants creates exactly those agent_tools rows", asyn
             id: "finance-specialist",
             system_prompt: "own the money",
             grants: [
-              { tool_name: "yaad_recall", usage: "remember money facts" },
-              { tool_name: "yaad_query", usage: "exact money lookups" },
+              { tool_name: "yaad_search_history", usage: "remember money facts" },
+              { tool_name: "yaad_get_node_history", usage: "exact money lookups" },
             ],
           },
         },
@@ -798,8 +798,8 @@ test("POST /dadi spawn with grants creates exactly those agent_tools rows", asyn
     .where(eq(agentTools.agentId, body.thread_id));
   assert.equal(grants.length, 2);
   const byTool = new Map(grants.map((row) => [row.toolId, row.usage]));
-  assert.equal(byTool.get(toolId("yaad_recall")), "remember money facts");
-  assert.equal(byTool.get(toolId("yaad_query")), "exact money lookups");
+  assert.equal(byTool.get(toolId("yaad_search_history")), "remember money facts");
+  assert.equal(byTool.get(toolId("yaad_get_node_history")), "exact money lookups");
 
   await runtime.waitUntilIdle();
   await app.close();
@@ -862,8 +862,8 @@ test("POST /dadi spawn with duplicate grants creates no agent", async () => {
             id: "duped",
             system_prompt: "should not land",
             grants: [
-              { tool_name: "yaad_recall", usage: "one" },
-              { tool_name: "yaad_recall", usage: "two" },
+              { tool_name: "yaad_search_history", usage: "one" },
+              { tool_name: "yaad_search_history", usage: "two" },
             ],
           },
         },

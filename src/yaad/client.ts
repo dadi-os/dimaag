@@ -1,4 +1,4 @@
-/** HTTP client for Yaad recall, query, get_node, and ingest. */
+/** HTTP client for Yaad recall, ingest, and node history. */
 
 import axios, { type AxiosInstance } from "axios";
 import { z } from "zod";
@@ -17,6 +17,7 @@ const recallNodeSchema = z
     occurred_at: z.string().nullable(),
     expires_at: z.string().nullable(),
     detail: z.unknown().nullable(),
+    hops: z.number().int(),
   })
   .passthrough();
 
@@ -25,6 +26,7 @@ const recallEdgeSchema = z
     src_id: z.string().uuid(),
     dst_id: z.string().uuid(),
     type: z.string(),
+    properties: z.record(z.unknown()),
   })
   .passthrough();
 
@@ -32,29 +34,8 @@ const recallResponseSchema = z
   .object({
     nodes: z.array(recallNodeSchema),
     edges: z.array(recallEdgeSchema),
-    sufficient: z.boolean(),
-    coverage: z.number(),
-  })
-  .passthrough();
-
-const queryResponseSchema = z
-  .object({
-    nodes: z.array(z.unknown()),
-    limit: z.number().int(),
-    offset: z.number().int(),
-  })
-  .passthrough();
-
-const nodeResponseSchema = z
-  .object({
-    id: z.string().uuid(),
-    kind: nodeKind,
-    title: z.string(),
-    detail: z.unknown().nullable(),
-    edges: z.object({
-      outgoing: z.array(z.unknown()),
-      incoming: z.array(z.unknown()),
-    }),
+    sufficient: z.boolean().nullable(),
+    coverage: z.number().nullable(),
   })
   .passthrough();
 
@@ -79,19 +60,20 @@ const nodeHistoryRecordSchema = z
   .passthrough();
 
 export type RecallResponse = z.infer<typeof recallResponseSchema>;
-export type QueryResponse = z.infer<typeof queryResponseSchema>;
-export type NodeResponse = z.infer<typeof nodeResponseSchema>;
 export type IngestResponse = z.infer<typeof ingestResponseSchema>;
 export type NodeHistoryRecord = z.infer<typeof nodeHistoryRecordSchema>;
 
-export type QueryRequest = {
-  kind?: "person" | "memory" | "plan" | "place";
-  name?: string;
-  occurred_from?: string;
-  occurred_to?: string;
-  status?: "idea" | "tentative" | "confirmed";
-  limit?: number;
-  offset?: number;
+/** Yaad `POST /recall` body: anchors from `from`, else the filters, else `query`. */
+export type RecallRequest = {
+  query?: string | undefined;
+  from?: string[] | undefined;
+  hops?: number | undefined;
+  kind?: "person" | "memory" | "plan" | "place" | undefined;
+  name?: string | undefined;
+  occurred_from?: string | undefined;
+  occurred_to?: string | undefined;
+  status?: "idea" | "tentative" | "confirmed" | undefined;
+  limit?: number | undefined;
 };
 
 export type IngestRequest = {
@@ -99,13 +81,13 @@ export type IngestRequest = {
   occurred_at: string;
   participant_ids?: string[];
   source: "agent";
+  /** Writing agent, recorded on every node the ingest creates. */
+  agent_id: string;
 };
 
 /** Yaad surface used by agent tools. */
 export type YaadClient = {
-  recall: (body: { query: string; limit?: number }) => Promise<RecallResponse>;
-  query: (body: QueryRequest) => Promise<QueryResponse>;
-  getNode: (id: string) => Promise<NodeResponse>;
+  recall: (body: RecallRequest) => Promise<RecallResponse>;
   ingest: (body: IngestRequest) => Promise<IngestResponse>;
   getNodeHistory: (id: string) => Promise<{ history: NodeHistoryRecord[] }>;
   searchHistory: (body: {
@@ -134,8 +116,6 @@ export function createYaadClient(config: Config): YaadClient {
 
   return {
     recall: (body) => post("/recall", body, recallResponseSchema),
-    query: (body) => post("/query", body, queryResponseSchema),
-    getNode: (id) => get(`/nodes/${id}`, nodeResponseSchema),
     ingest: (body) => post("/ingest", body, ingestResponseSchema),
     getNodeHistory: (id) =>
       get(

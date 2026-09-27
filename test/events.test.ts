@@ -565,7 +565,7 @@ test("GET /agents/:id includes granted tools with usage and excludes embedded to
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
-    tools: ["yaad_recall", "terminal_execute_shell"],
+    tools: ["yaad_search_history", "terminal_execute_shell"],
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -597,7 +597,7 @@ test("GET /agents/:id includes granted tools with usage and excludes embedded to
     assert.ok(typeof tool.usage === "string" && tool.usage.length > 0);
   }
   const names = body.tools.map((tool) => tool.name);
-  assert.ok(names.includes("yaad_recall"));
+  assert.ok(names.includes("yaad_search_history"));
   assert.ok(names.includes("terminal_execute_shell"));
   assert.equal(names.includes(SEND_MESSAGE), false);
   assert.equal(names.includes(DISPATCH_MESSAGE), false);

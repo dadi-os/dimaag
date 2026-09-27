@@ -45,9 +45,7 @@ import type {
 import type {
   IngestRequest,
   IngestResponse,
-  NodeResponse,
-  QueryRequest,
-  QueryResponse,
+  RecallRequest,
   RecallResponse,
   YaadClient,
 } from "../src/yaad/client.js";
@@ -170,25 +168,20 @@ export function mockDwar(opts: {
 }
 
 export function mockYaad(opts: {
-  recall?: (body: { query: string; limit?: number }) => Promise<RecallResponse> | RecallResponse;
-  query?: (body: QueryRequest) => Promise<QueryResponse> | QueryResponse;
-  getNode?: (id: string) => Promise<NodeResponse> | NodeResponse;
+  recall?: (body: RecallRequest) => Promise<RecallResponse> | RecallResponse;
   ingest?: (body: IngestRequest) => Promise<IngestResponse> | IngestResponse;
 } = {}): YaadClient & {
-  recallCalls: Array<{ query: string; limit?: number }>;
-  queryCalls: QueryRequest[];
-  getNodeCalls: string[];
+  recallCalls: RecallRequest[];
   ingestCalls: IngestRequest[];
+  searchHistoryCalls: Array<{ query: string; limit?: number }>;
 } {
-  const recallCalls: Array<{ query: string; limit?: number }> = [];
-  const queryCalls: QueryRequest[] = [];
-  const getNodeCalls: string[] = [];
+  const recallCalls: RecallRequest[] = [];
   const ingestCalls: IngestRequest[] = [];
+  const searchHistoryCalls: Array<{ query: string; limit?: number }> = [];
   return {
     recallCalls,
-    queryCalls,
-    getNodeCalls,
     ingestCalls,
+    searchHistoryCalls,
     async recall(body) {
       recallCalls.push(body);
       if (opts.recall) {
@@ -200,20 +193,6 @@ export function mockYaad(opts: {
         sufficient: false,
         coverage: 0,
       };
-    },
-    async query(body) {
-      queryCalls.push(body);
-      if (opts.query) {
-        return opts.query(body);
-      }
-      return { nodes: [], limit: 50, offset: 0 };
-    },
-    async getNode(id) {
-      getNodeCalls.push(id);
-      if (opts.getNode) {
-        return opts.getNode(id);
-      }
-      throw new DimaagError(404, "yaad", "node not found");
     },
     async ingest(body) {
       ingestCalls.push(body);
@@ -235,7 +214,8 @@ export function mockYaad(opts: {
     async getNodeHistory() {
       return { history: [] };
     },
-    async searchHistory() {
+    async searchHistory(body) {
+      searchHistoryCalls.push(body);
       return { results: [] };
     },
   };

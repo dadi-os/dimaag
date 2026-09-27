@@ -11,7 +11,9 @@ import { DimaagError } from "../errors.js";
 import type { DwarTool, DwarToolUseBlock } from "../types/domain.js";
 import {
   DISPATCH_MESSAGE,
+  INGEST_MEMORY,
   LIST_AGENTS,
+  RECALL_MEMORY,
   RECORD_THOUGHT,
   SEND_MESSAGE,
   STEER_REASONING,
@@ -31,6 +33,7 @@ import {
   type ToolExecResult,
 } from "../tools/shared.js";
 import { deliverAgentMessage } from "./deliver.js";
+import { runIngestMemory, runRecallMemory } from "./memory.js";
 
 export type { ToolContext, ToolExecResult } from "../tools/shared.js";
 export { requireAgent, requireActiveAgent, requireToolGrant } from "../tools/shared.js";
@@ -180,7 +183,7 @@ export const waitTool: DwarTool = {
 export const recordThoughtTool: DwarTool = {
   name: RECORD_THOUGHT,
   description:
-    "Save a thought to your own durable memory — a note to your future self, delivered to no one. Use it to keep what you worked out this wake: what you did, what you learned, a workaround or site quirk worth reusing. It persists across wakes and reappears in your later context as your own prior thought. Record before you yield when the wake produced something worth remembering.",
+    "Save a working note to your future self, delivered to no one: what you did this wake, how you did it, a workaround or site quirk worth reusing. It persists across wakes and reappears in your later context as your own prior thought. Record before you yield when the wake produced something worth reusing. Facts about Ankur's life and world go in ingest_memory, not here.",
   input_schema: recordThoughtInputSchema,
 };
 
@@ -288,6 +291,12 @@ async function dispatchTool(
       }
       if (call.name === RECORD_THOUGHT) {
         return await runRecordThought(ctx, call.input);
+      }
+      if (call.name === RECALL_MEMORY) {
+        return await runRecallMemory(ctx, call.input);
+      }
+      if (call.name === INGEST_MEMORY) {
+        return await runIngestMemory(ctx, call.input);
       }
       const definition = findTool(call.name);
       if (!definition) {
