@@ -50,13 +50,19 @@ export function syncWake(deps: StepDeps, assembled: AssembledContext): void {
   deps.wake.advance(arrived.throughSeq);
 }
 
-/** The request a lane sends: its system and tools, the shared wake, and free tool choice. */
+/**
+ * The request a lane sends: its system and tools and the shared wake. Reasoning
+ * gets tool_choice auto so it can think and write around its tool calls.
+ * Conversation is forced to call a tool: its only outputs are dispatch, steer
+ * and yield, and left free it writes `[To: …]` replies as plain text, which
+ * never reach anyone and never end the lane.
+ */
 export function laneRequest(deps: StepDeps, assembled: AssembledContext): DwarChatRequest {
   return {
     system: assembled.system,
     messages: deps.wake.view(deps.lane),
     tools: assembled.tools,
-    tool_choice: "auto",
+    tool_choice: deps.lane === "reasoning" ? "auto" : "any",
   };
 }
 

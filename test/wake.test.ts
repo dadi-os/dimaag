@@ -204,6 +204,7 @@ test("a conversation intent stays in view while the lane keeps calling tools", a
 
   assert.equal(requests.length, 3);
   for (const request of requests) {
+    assert.equal(request.tool_choice, "any");
     assert.ok(JSON.stringify(request.messages).includes("tell Ankur the profile URL"));
   }
 });
