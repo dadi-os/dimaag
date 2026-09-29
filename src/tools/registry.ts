@@ -15,7 +15,6 @@ import { typeText } from "./browser/type.js";
 import { uploadFile } from "./browser/upload-file.js";
 import { waitFor } from "./browser/wait-for.js";
 import { spawnAgent } from "./dimaag/spawn-agent.js";
-import { modifyAgent } from "./dimaag/modify-agent.js";
 import { getAgent } from "./dimaag/get-agent.js";
 import { grantTool } from "./dimaag/grant-tool.js";
 import { revokeTool } from "./dimaag/revoke-tool.js";
@@ -64,21 +63,16 @@ import { getNodeHistory } from "./yaad/get-node-history.js";
 import { searchHistory } from "./yaad/search-history.js";
 
 /**
- * Every non-embedded tool. Embedded lane plumbing (send_message, dispatch_message,
- * steer_reasoning, yield, list_agents) is deliberately NOT here — those are not
- * grantable and never appear in the tools table.
+ * Every grantable tool: what an agent's job is. Embedded lane plumbing
+ * (send_message, dispatch_message, steer_reasoning, yield, list_agents, memory,
+ * modify_agent) and the embedded agent-management tools below are deliberately
+ * NOT here — they are not grantable and never appear in the tools table.
  */
 const definitions = [
   spawnAgent,
-  modifyAgent,
-  getAgent,
-  grantTool,
-  revokeTool,
-  listTools,
   scheduleMessage,
   listSchedules,
   cancelSchedule,
-  dimaagGetLogs,
   getNodeHistory,
   searchHistory,
   listDevices,
@@ -148,4 +142,36 @@ export function allTools(): ToolDefinition[] {
 
 export function findTool(name: string): ToolDefinition | undefined {
   return byName.get(name);
+}
+
+/**
+ * Agent-management tools every agent holds without a grant: managing your own
+ * children's tools and reading yourself and them is a general rule, not a job.
+ * Each handler scopes itself to the caller and its direct children; for the
+ * router, the root agents are its children.
+ */
+const embeddedDefinitions = [
+  getAgent,
+  grantTool,
+  revokeTool,
+  listTools,
+  dimaagGetLogs,
+] as unknown as ToolDefinition[];
+
+const embeddedByName = new Map<string, ToolDefinition>();
+for (const definition of embeddedDefinitions) {
+  if (byName.has(definition.name) || embeddedByName.has(definition.name)) {
+    throw new Error(`duplicate tool name in registry: ${definition.name}`);
+  }
+  embeddedByName.set(definition.name, definition);
+}
+
+/** Embedded agent-management tools, in the order agents see them. */
+export function embeddedAgentTools(): ToolDefinition[] {
+  return embeddedDefinitions;
+}
+
+/** Look up an embedded agent-management tool by name; grantable tools use findTool. */
+export function findEmbeddedTool(name: string): ToolDefinition | undefined {
+  return embeddedByName.get(name);
 }

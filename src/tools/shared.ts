@@ -29,11 +29,11 @@ export type ToolExecResult = {
 };
 
 /** Who is invoking a tool: an agents-row kebab id, or a synthetic CLI identity. */
-export type ToolCallerKind = "agent" | "dadi" | "user";
+export type ToolCallerKind = "agent" | "router" | "user";
 
 export type ToolContext = {
   db: Db;
-  /** Agent kebab-case id when `callerKind` is `agent`; null for `dadi` and `user`. */
+  /** Agent kebab-case id when `callerKind` is `agent`; null for `router` and `user`. */
   callerId: string | null;
   /** Distinguishes synthetic CLI callers when `callerId` is null. */
   callerKind: ToolCallerKind;
@@ -64,7 +64,7 @@ export function ok(value: unknown, audit: Record<string, unknown> = {}): ToolExe
   return { content: JSON.stringify(value), isError: false, audit };
 }
 
-/** Fail when a tool needs an agents-row caller (`callerId` null for dadi/user). */
+/** Fail when a tool needs an agents-row caller (`callerId` null for router/user). */
 export function failWithoutAgentIdentity(): ToolExecResult {
   return fail("this tool needs an agent identity");
 }

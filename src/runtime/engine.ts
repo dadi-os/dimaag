@@ -19,7 +19,13 @@ import type { DwarClient } from "../dwar/client.js";
 import type { GharClient } from "../ghar/client.js";
 import type { NasClient } from "../nas/client.js";
 import type { YaadClient } from "../yaad/client.js";
-import type { DwarChatRequest, DwarChatResponse, DwarToolUseBlock, Lane } from "../types/domain.js";
+import type {
+  DwarChatRequest,
+  DwarChatResponse,
+  DwarToolUseBlock,
+  Lane,
+  RoutedMessage,
+} from "../types/domain.js";
 import { arrivalsSince, assembleContext } from "./context.js";
 import { deliverAgentMessage } from "./deliver.js";
 import { runConversationLoop } from "./conversation.js";
@@ -34,7 +40,11 @@ import { ToolDebounce } from "./tool-debounce.js";
 import { executeTool, type ToolContext, type ToolExecResult } from "./tools.js";
 import type { ToolCallerKind } from "../tools/shared.js";
 import { TranscriptStore } from "./transcript.js";
-import { WakeStore } from "./wake.js";
+import { Wake, WakeStore } from "./wake.js";
+import { ROUTER_KEY } from "./router.js";
+import { laneRequest, runStep, syncWake, type StepDeps } from "./step.js";
+import { insertMessage, messageToTranscriptEntry } from "../db/messages.js";
+import { SEND_MESSAGE } from "../types/domain.js";
 import { createScheduler, type Scheduler } from "./scheduler.js";
 
 export type RuntimeLog = {
@@ -56,6 +66,8 @@ export type Runtime = {
   enqueueConversation: (agentId: string) => void;
   enqueueReasoning: (agentId: string) => void;
   waitUntilIdle: () => Promise<void>;
+  /** Run the router on one utterance from Ankur; resolves with every message it sent as him. */
+  route: (content: string) => Promise<RoutedMessage[]>;
   toolContext: (
     callerId: string | null,
     lane: Lane,
@@ -146,13 +158,14 @@ export function createRuntime(opts: {
     enqueueConversation,
     enqueueReasoning,
     waitUntilIdle,
+    route,
     toolContext,
   };
 
   function toolContext(
     callerId: string | null,
     lane: Lane,
-    callerKind: ToolCallerKind = callerId === null ? "dadi" : "agent",
+    callerKind: ToolCallerKind = callerId === null ? "router" : "agent",
   ): ToolContext {
     return {
       db: opts.db,
@@ -262,13 +275,15 @@ export function createRuntime(opts: {
     );
   }
 
-  function laneHelpers(agentId: string, lane: Lane) {
+  /** Null agentId is the router. */
+  function laneHelpers(agentId: string | null, lane: Lane) {
     const assemble = () =>
       assembleContext({
         db: opts.db,
         agentId,
         lane,
         transcript,
+        serviceRoot: opts.config.serviceRoot,
         transcriptWindowMessages: opts.config.runtime.transcript_window_messages,
         transcriptWindowStep: opts.config.runtime.transcript_window_step_messages,
       });
@@ -313,6 +328,66 @@ export function createRuntime(opts: {
       logResponse: helpers.logResponse,
       logToolResult: helpers.logToolResult,
     };
+  }
+
+  /**
+   * The router's run: persist Ankur's utterance as a null→null message so it is
+   * never lost and joins the router's transcript, then loop the router lane on
+   * Dwar's context-free chat/complete until it yields. Runs are serialized; each
+   * starts a fresh wake from the transcript. Nothing caps the loop.
+   */
+  async function route(content: string): Promise<RoutedMessage[]> {
+    const release = await locks.acquire(ROUTER_KEY, "router", opts.config.runtime.lane_queue_timeout_ms);
+    try {
+      const stored = await insertMessage(opts.db, { fromAgentId: null, toAgentId: null, content });
+      const utterance = messageToTranscriptEntry(stored);
+      transcript.ingest(utterance);
+      await writeAgentLog(opts.db, {
+        agentId: null,
+        lane: "router",
+        event: "message",
+        payload: {
+          direction: "receive",
+          message_id: utterance.id,
+          from_agent_id: null,
+          to_agent_id: null,
+          content: utterance.content,
+          seq: utterance.seq,
+        },
+      });
+
+      const helpers = laneHelpers(null, "router");
+      const sent: RoutedMessage[] = [];
+      const deps: StepDeps = {
+        agentId: ROUTER_KEY,
+        lane: "router",
+        wake: new Wake(),
+        assemble: helpers.assemble,
+        arrivalsSince: (afterSeq: number) => arrivalsSince(transcript, null, afterSeq),
+        call: (request: DwarChatRequest) => opts.dwar.complete(request, "dimaag/router"),
+        executeTool: async (call: DwarToolUseBlock) => {
+          const result = await helpers.exec(call);
+          if (call.name === SEND_MESSAGE && !result.isError) {
+            sent.push(JSON.parse(result.content) as RoutedMessage);
+          }
+          return result;
+        },
+        logResponse: helpers.logResponse,
+        logToolResult: helpers.logToolResult,
+      };
+      for (;;) {
+        const assembled = await deps.assemble();
+        syncWake(deps, assembled);
+        const request = laneRequest(deps, assembled);
+        const response = await deps.call(request);
+        await deps.logResponse(response);
+        if (await runStep(deps, response, () => false)) {
+          return sent;
+        }
+      }
+    } finally {
+      release();
+    }
   }
 
   function reasoningDeps(agentId: string) {

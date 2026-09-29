@@ -9,18 +9,18 @@ const input = z.object({
   agent_id: agentIdSchema,
 });
 
-/** Read id, system prompt, parent, active flag, and tool names for self or a direct child (any agent as Dadi). */
+/** Read id, system prompt, parent, active flag, and tool names for self or a direct child (any agent as the router). */
 export const getAgent = defineTool({
-  name: "dimaag_get_agent",
+  name: "get_agent",
   description:
-    "Read an agent's id, system prompt, parent, active flag, and the names of the tools it holds. Only the caller or its direct children are allowed. As Dadi, any agent is allowed.",
+    "Read an agent's id, system prompt, parent, active flag, and the names of the tools it holds. Only the caller or its direct children are allowed. As the router, any agent is allowed.",
   input,
   inputSchema: {
     type: "object",
     properties: {
       agent_id: {
         type: "string",
-        description: "Self or a direct child (any agent as Dadi); immutable kebab-case id",
+        description: "Self or a direct child (any agent as the router); immutable kebab-case id",
       },
     },
     required: ["agent_id"],

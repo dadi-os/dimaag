@@ -53,7 +53,7 @@ test("browser tools are registered", async () => {
   for (const name of BROWSER_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 63);
+  assert.equal(allTools().length, 57);
   await assert.doesNotReject(() => syncTools(handle.db));
 });
 

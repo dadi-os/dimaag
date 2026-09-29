@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { migrate } from "../src/db/migrate.js";
 import { agentTools, tools } from "../src/db/schema.js";
-import { findTool } from "../src/tools/registry.js";
+import { findEmbeddedTool, findTool } from "../src/tools/registry.js";
 import { syncTools, toolId } from "../src/tools/sync.js";
 import { insertAgent, openTestDb, testConfig } from "./helpers.js";
 
@@ -31,14 +31,16 @@ test("findTool returns undefined for a name not in the registry", () => {
   assert.equal(findTool("does_not_exist"), undefined);
 });
 
-test("findTool returns registered tools", () => {
+test("findTool returns grantable tools; agent-management tools are embedded, not grantable", () => {
   assert.equal(findTool("dimaag_spawn_agent")?.name, "dimaag_spawn_agent");
-  assert.equal(findTool("dimaag_grant_tool")?.name, "dimaag_grant_tool");
-  assert.equal(findTool("dimaag_list_tools")?.name, "dimaag_list_tools");
+  for (const name of ["grant_tool", "revoke_tool", "list_tools", "get_agent", "get_logs"]) {
+    assert.equal(findTool(name), undefined, name);
+    assert.equal(findEmbeddedTool(name)?.name, name);
+  }
 });
 
-test("dimaag_list_tools returns registry entries and honors prefix", async () => {
-  const tool = findTool("dimaag_list_tools");
+test("list_tools returns grantable registry entries and honors prefix", async () => {
+  const tool = findEmbeddedTool("list_tools");
   assert.ok(tool);
   const ctx = {} as never;
   const all = await tool.handler(ctx, {});
@@ -48,7 +50,8 @@ test("dimaag_list_tools returns registry entries and honors prefix", async () =>
     count: number;
   };
   assert.ok(allBody.count >= 1);
-  assert.ok(allBody.tools.some((row) => row.name === "dimaag_list_tools"));
+  assert.ok(allBody.tools.some((row) => row.name === "dimaag_spawn_agent"));
+  assert.ok(!allBody.tools.some((row) => row.name === "list_tools"));
   assert.ok(allBody.tools.every((row) => row.description.length > 0));
 
   const filtered = await tool.handler(ctx, { prefix: "dimaag_" });

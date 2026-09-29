@@ -152,7 +152,7 @@ export function mockDwar(opts: {
       if (opts.complete) {
         return opts.complete(request);
       }
-      return toolUse("decide", { action: "spawn", id: "thread", system_prompt: "do the job" }, "decide-1");
+      return yieldTurn("complete-yield");
     },
     async describeImage(request) {
       describeCalls.push(request);
@@ -627,13 +627,8 @@ export async function insertWorker(
   return id;
 }
 
-const MANAGER_TOOLS = [
-  "dimaag_spawn_agent",
-  "dimaag_modify_agent",
-  "dimaag_grant_tool",
-  "dimaag_revoke_tool",
-  "dimaag_list_tools",
-] as const;
+/** Grant-, revoke-, and modify-children tools are embedded; spawning is the manager's grant. */
+const MANAGER_TOOLS = ["dimaag_spawn_agent"] as const;
 
 /** Agent that can spawn/grant/revoke/modify children. */
 export async function insertManager(

@@ -31,7 +31,7 @@ const messageAttachment = z
   })
   .strict();
 
-export const postDadiBody = z
+export const postRouterBody = z
   .object({
     /** May be empty when attachments are present; patched server-side. */
     content: z.string(),

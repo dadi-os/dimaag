@@ -11,7 +11,7 @@ import type {
 import { DimaagError } from "./errors.js";
 
 function parseLane(value: string): Lane {
-  if (value === "reasoning" || value === "conversation") {
+  if (value === "reasoning" || value === "conversation" || value === "router") {
     return value;
   }
   throw new DimaagError(500, "internal_error", `invalid lane in database: ${value}`);

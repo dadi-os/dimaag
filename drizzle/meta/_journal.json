@@ -43,6 +43,13 @@
       "when": 1790471660001,
       "tag": "0005_response_log_event",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790700000000,
+      "tag": "0006_router_logs",
+      "breakpoints": true
     }
   ]
 }

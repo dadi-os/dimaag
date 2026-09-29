@@ -12,18 +12,18 @@ const input = z.object({
   usage: z.string().min(1),
 });
 
-/** Grant a registry tool to a child (or any agent when the caller is Dadi). */
+/** Grant a registry tool to a direct child. Embedded for every agent; the router's children are the roots. */
 export const grantTool = defineTool({
-  name: "dimaag_grant_tool",
+  name: "grant_tool",
   description:
-    "Give one of your direct children a tool. As Dadi, any agent is allowed. usage explains when and why that specific agent should reach for it, which the child sees alongside the tool's own description. When you are unsure of exact registry names for a suite (chaavi_, browser_, terminal_, …), call dimaag_list_tools first.",
+    "Give one of your direct children a tool (the router's direct children are the root agents). usage explains when and why that specific agent should reach for it, which the child sees alongside the tool's own description. When you are unsure of exact registry names for a suite (chaavi_, browser_, terminal_, …), call list_tools first.",
   input,
   inputSchema: {
     type: "object",
     properties: {
       agent_id: {
         type: "string",
-        description: "A direct child of yours (any agent as Dadi); immutable kebab-case id",
+        description: "A direct child of yours; immutable kebab-case id",
       },
       tool_name: { type: "string", description: "Registry tool name" },
       usage: {
@@ -35,7 +35,7 @@ export const grantTool = defineTool({
   },
   async handler(ctx, parsed) {
     const target = await requireAgent(ctx.db, parsed.agent_id);
-    if (ctx.callerId !== null && target.parentAgentId !== ctx.callerId) {
+    if (ctx.callerKind !== "user" && target.parentAgentId !== ctx.callerId) {
       return fail("grant_tool is limited to your direct children");
     }
     if (!findTool(parsed.tool_name)) {

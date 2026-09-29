@@ -1,4 +1,8 @@
-/** In-process cache of durable messages. Hydrated from DB on boot; dies with the process. */
+/**
+ * In-process cache of durable messages. Hydrated from DB on boot; dies with the process.
+ * Null is an identity like any agent id: Ankur and the router share it, so null's
+ * transcript is everything Ankur (or the router, as him) said and everything said to him.
+ */
 
 export type TranscriptEntry = {
   /** Durable messages.id when loaded from or written to the messages table. */
@@ -12,8 +16,8 @@ export type TranscriptEntry = {
 
 export class TranscriptStore {
   private counter = 0;
-  private readonly inbox = new Map<string, TranscriptEntry[]>();
-  private readonly outbox = new Map<string, TranscriptEntry[]>();
+  private readonly inbox = new Map<string | null, TranscriptEntry[]>();
+  private readonly outbox = new Map<string | null, TranscriptEntry[]>();
 
   /**
    * Ingest a durable (or test) row into inbox/outbox. Advances the local seq
@@ -21,16 +25,12 @@ export class TranscriptStore {
    */
   ingest(row: TranscriptEntry): void {
     this.counter = Math.max(this.counter, row.seq);
-    if (row.toAgentId !== null) {
-      const list = this.inbox.get(row.toAgentId) ?? [];
-      list.push(row);
-      this.inbox.set(row.toAgentId, list);
-    }
-    if (row.fromAgentId !== null) {
-      const list = this.outbox.get(row.fromAgentId) ?? [];
-      list.push(row);
-      this.outbox.set(row.fromAgentId, list);
-    }
+    const inbound = this.inbox.get(row.toAgentId) ?? [];
+    inbound.push(row);
+    this.inbox.set(row.toAgentId, inbound);
+    const outgoing = this.outbox.get(row.fromAgentId) ?? [];
+    outgoing.push(row);
+    this.outbox.set(row.fromAgentId, outgoing);
   }
 
   /**
@@ -56,10 +56,10 @@ export class TranscriptStore {
   }
 
   /**
-   * Every inbound message for this agent plus every outbound message from it,
-   * sorted by seq.
+   * Every inbound message for this identity plus every outbound message from it,
+   * sorted by seq. Null is Ankur and the router.
    */
-  transcriptFor(agentId: string): TranscriptEntry[] {
+  transcriptFor(agentId: string | null): TranscriptEntry[] {
     const inbound = this.inbox.get(agentId) ?? [];
     const outgoing = this.outbox.get(agentId) ?? [];
     const bySeq = new Map<number, TranscriptEntry>();

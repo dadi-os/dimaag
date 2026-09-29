@@ -17,7 +17,7 @@ const input = z
 export const getLogs = defineTool({
   name: "nas_get_logs",
   description:
-    "Query system/process HTTP logs from Loki via Nas. Use services (comma list), level, q, from, to, limit. This is not agent cognition — use dimaag_get_logs for thoughts and tool calls.",
+    "Query system/process HTTP logs from Loki via Nas. Use services (comma list), level, q, from, to, limit. This is not agent cognition — use get_logs for thoughts and tool calls.",
   input,
   inputSchema: {
     type: "object",

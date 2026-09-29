@@ -59,7 +59,7 @@ export type DwarDescribeImageResponse = {
 
 /**
  * Dwar surface used by Dimaag: lane chat, promptless complete, and image captioning.
- * `caller` is sent as X-Dadi-Caller (`dimaag/<agent id>`, `dimaag/dadi`, …) so Dwar's
+ * `caller` is sent as X-Dadi-Caller (`dimaag/<agent id>`, `dimaag/router`, …) so Dwar's
  * inference log attributes each call's tokens to whoever spent them.
  */
 export type DwarClient = {

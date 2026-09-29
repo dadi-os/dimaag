@@ -77,6 +77,7 @@ test("a recorded thought reappears as the agent's own [Thought] in context", asy
 
   const ctx = await assembleContext({
     db: handle.db,
+    serviceRoot: config.serviceRoot,
     agentId,
     lane: "reasoning",
     transcript: runtime.transcript,

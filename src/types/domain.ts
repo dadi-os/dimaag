@@ -1,4 +1,4 @@
-export type Lane = "reasoning" | "conversation";
+export type Lane = "reasoning" | "conversation" | "router";
 
 /**
  * response: one model call's full output, blocks in provider order (thinking,
@@ -27,9 +27,18 @@ export type AgentRecord = {
   updated_at: string;
 };
 
+/** One message the router sent as Ankur; `POST /router` returns these in order. */
+export type RoutedMessage = {
+  to_agent_id: string;
+  content: string;
+  seq: number;
+  created_at: string;
+};
+
 export type LogRecord = {
   id: string;
-  agent_id: string;
+  /** Null for the router. */
+  agent_id: string | null;
   lane: Lane;
   event: LogEvent;
   payload: Record<string, unknown>;
@@ -144,5 +153,5 @@ export const RECALL_MEMORY = "recall_memory";
 export const INGEST_MEMORY = "ingest_memory";
 export const LIST_AGENTS = "list_agents";
 export const SPAWN_AGENT = "dimaag_spawn_agent";
-export const MODIFY_AGENT = "dimaag_modify_agent";
-export const GET_AGENT = "dimaag_get_agent";
+export const MODIFY_AGENT = "modify_agent";
+export const GET_AGENT = "get_agent";

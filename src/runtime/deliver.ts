@@ -13,7 +13,9 @@ type DeliverDeps = {
 
 /**
  * Persist a human → agent message (from_agent_id null) and wake the recipient's
- * conversation lane. Shared by POST /messages and POST /dadi.
+ * conversation lane. Shared by POST /messages and the router's send_message. The
+ * null side is logged too, so the router's get_logs sees what Ankur (or it, as
+ * him) sent.
  */
 export async function deliverUserMessage(
   deps: DeliverDeps,
@@ -30,6 +32,19 @@ export async function deliverUserMessage(
   if (row.id === undefined) {
     throw new Error("durable message missing id");
   }
+  await writeAgentLog(deps.db, {
+    agentId: null,
+    lane: "router",
+    event: "message",
+    payload: {
+      direction: "send",
+      message_id: row.id,
+      from_agent_id: null,
+      to_agent_id: row.toAgentId,
+      content: row.content,
+      seq: row.seq,
+    },
+  });
   await writeAgentLog(deps.db, {
     agentId: toAgentId,
     lane: "conversation",
@@ -110,6 +125,21 @@ export async function deliverAgentMessage(
       },
     });
     deps.enqueueConversation(row.toAgentId);
+  } else {
+    await writeAgentLog(deps.db, {
+      agentId: null,
+      lane: "router",
+      event: "message",
+      payload: {
+        direction: "receive",
+        message_id: row.id,
+        from_agent_id: args.fromAgentId,
+        to_agent_id: null,
+        content: row.content,
+        seq: row.seq,
+        ...extra,
+      },
+    });
   }
   deps.events.emit({
     type: "message",

@@ -94,6 +94,7 @@ test("assembleContext truncates to transcript_window_messages", async () => {
 
   const ctx = await assembleContext({
     db: handle.db,
+    serviceRoot: config.serviceRoot,
     agentId,
     lane: "conversation",
     transcript,
@@ -117,6 +118,7 @@ test("assembleContext advances the window in steps so the prefix survives new me
   const assemble = () =>
     assembleContext({
       db: handle.db,
+      serviceRoot: config.serviceRoot,
       agentId,
       lane: "reasoning",
       transcript,
@@ -164,6 +166,7 @@ test("messages arriving mid-wake join the wake after it and never rewrite earlie
     assemble: () =>
       assembleContext({
         db: handle.db,
+        serviceRoot: config.serviceRoot,
         agentId,
         lane: "reasoning",
         transcript,
@@ -416,6 +419,8 @@ test("backfill migration smoke: agent_logs message events land in messages after
   assert.equal(rows[0]?.content, "legacy from logs");
   assert.equal(rows[0]?.toAgentId, agentId);
   assert.equal(rows[0]?.fromAgentId, null);
+
+  await handle.sql`ALTER TABLE "messages" DROP CONSTRAINT IF EXISTS "messages_party_check"`;
 });
 
 test("assembleContext injects agent id and parent routing for children", async () => {
@@ -431,6 +436,7 @@ test("assembleContext injects agent id and parent routing for children", async (
   });
   const childCtx = await assembleContext({
     db: handle.db,
+    serviceRoot: config.serviceRoot,
     agentId: childId,
     lane: "reasoning",
     transcript: new TranscriptStore(),
@@ -442,6 +448,7 @@ test("assembleContext injects agent id and parent routing for children", async (
 
   const parentCtx = await assembleContext({
     db: handle.db,
+    serviceRoot: config.serviceRoot,
     agentId: parentId,
     lane: "conversation",
     transcript: new TranscriptStore(),

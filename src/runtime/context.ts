@@ -1,4 +1,6 @@
-import { asc, eq } from "drizzle-orm";
+import { readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { asc, eq, isNull } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { agentTools, agents, tools } from "../db/schema.js";
 import { DimaagError } from "../errors.js";
@@ -7,6 +9,7 @@ import {
   DISPATCH_MESSAGE,
   INGEST_MEMORY,
   LIST_AGENTS,
+  MODIFY_AGENT,
   RECALL_MEMORY,
   RECORD_THOUGHT,
   SEND_MESSAGE,
@@ -24,18 +27,43 @@ import {
   yieldTool,
 } from "./tools.js";
 import { ingestMemoryTool, recallMemoryTool } from "./memory.js";
+import { modifyAgentTool } from "./modify.js";
 import type { TranscriptEntry, TranscriptStore } from "./transcript.js";
+import { embeddedAgentTools } from "../tools/registry.js";
+import { asDwarTool } from "../tools/types.js";
+import { routerLaneTools } from "./router.js";
+
+const promptCache = new Map<string, { mtimeMs: number; text: string }>();
+
+/** loadPrompt reads `prompts/<name>` under the service root, re-reading only when the file changes. Throws when empty. */
+function loadPrompt(serviceRoot: string, name: string): string {
+  const path = join(serviceRoot, "prompts", name);
+  const { mtimeMs } = statSync(path);
+  const cached = promptCache.get(path);
+  if (cached && cached.mtimeMs === mtimeMs) {
+    return cached.text;
+  }
+  const text = readFileSync(path, "utf8").trim();
+  if (!text) {
+    throw new Error(`prompt ${name} is empty`);
+  }
+  promptCache.set(path, { mtimeMs, text });
+  return text;
+}
 
 /**
- * lineageBlock states runtime facts the model cannot know on its own: this
- * agent's id and its parent. Lane roles, messaging discipline, and the rest of
- * the standing doctrine live in Dwar's per-lane block (cached, shared across
- * agents) — deliberately not restated here, so there is one source of truth.
+ * lineageBlock states runtime facts the model cannot know on its own: who it is
+ * and its parent. Lane roles, messaging discipline, and the rest of the standing
+ * doctrine live in Dwar's per-lane block (cached, shared across agents) —
+ * deliberately not restated here, so there is one source of truth.
  */
-function lineageBlock(agentId: string, parentAgentId: string | null): string {
+function lineageBlock(agentId: string | null, parentAgentId: string | null): string {
+  if (agentId === null) {
+    return "You are the router. Your identity is null, the same as Ankur's: every message you send reaches its agent as a message from him, and root agents are your direct children.";
+  }
   const parentLine =
     parentAgentId === null
-      ? "You are a root agent (no parent)."
+      ? "You are a root agent: your parent is the router."
       : `Your parent is ${parentAgentId}.`;
   return `Your agent id is ${agentId}.\n${parentLine}`;
 }
@@ -44,26 +72,37 @@ function lineageBlock(agentId: string, parentAgentId: string | null): string {
 export type AssembledContext = Omit<DwarChatRequest, "tool_choice"> & { throughSeq: number };
 
 /**
- * One assembler for both lanes. dimaag's system is agent-specific only —
- * charter (the agent's stored prompt), lineage facts, then its active children.
- * The lane doctrine is appended by Dwar as a cached block, so nothing lane- or
- * tool-related is built here. Message history keeps at least the last
+ * One assembler for every lane, the router included. dimaag's system is, in order:
+ * the system doctrine (`prompts/system.md`, shared by everyone), the charter (an
+ * agent's stored prompt, or `prompts/router.md` for the router), lineage facts,
+ * then active direct children — for the router, the active root agents. Dwar
+ * appends lane doctrine to agent lanes as a cached block; the router's call is
+ * context-free on Dwar's side. Message history keeps at least the last
  * `transcriptWindowMessages` turns; its start only advances in steps of
  * `transcriptWindowStep` so the provider's cached prefix survives new messages.
- * Only the tool set differs across lanes.
  */
 export async function assembleContext(opts: {
   db: Db;
-  agentId: string;
+  /** Null is the router. */
+  agentId: string | null;
   lane: Lane;
   transcript: TranscriptStore;
+  serviceRoot: string;
   transcriptWindowMessages: number;
   transcriptWindowStep: number;
 }): Promise<AssembledContext> {
-  const agentRows = await opts.db.select().from(agents).where(eq(agents.id, opts.agentId));
-  const agent = agentRows[0];
-  if (!agent) {
-    throw new DimaagError(404, "not_found", `agent ${opts.agentId} not found`);
+  let charter: string;
+  let parentAgentId: string | null = null;
+  if (opts.agentId === null) {
+    charter = loadPrompt(opts.serviceRoot, "router.md");
+  } else {
+    const agentRows = await opts.db.select().from(agents).where(eq(agents.id, opts.agentId));
+    const agent = agentRows[0];
+    if (!agent) {
+      throw new DimaagError(404, "not_found", `agent ${opts.agentId} not found`);
+    }
+    charter = agent.systemPrompt;
+    parentAgentId = agent.parentAgentId;
   }
 
   const childRows = await opts.db
@@ -73,10 +112,17 @@ export async function assembleContext(opts: {
       systemPrompt: agents.systemPrompt,
     })
     .from(agents)
-    .where(eq(agents.parentAgentId, opts.agentId));
+    .where(
+      opts.agentId === null ? isNull(agents.parentAgentId) : eq(agents.parentAgentId, opts.agentId),
+    )
+    .orderBy(asc(agents.id));
   const activeChildren = childRows.filter((c) => c.active);
 
-  let system = `${agent.systemPrompt}\n\n${lineageBlock(agent.id, agent.parentAgentId)}`;
+  let system = [
+    loadPrompt(opts.serviceRoot, "system.md"),
+    charter,
+    lineageBlock(opts.agentId, parentAgentId),
+  ].join("\n\n");
   if (activeChildren.length > 0) {
     const lines = activeChildren.map((c) => {
       const purpose = c.systemPrompt.trim().split(/\n/)[0] ?? "";
@@ -111,7 +157,7 @@ export async function assembleContext(opts: {
  */
 export function arrivalsSince(
   transcript: TranscriptStore,
-  agentId: string,
+  agentId: string | null,
   afterSeq: number,
 ): { turn: DwarMessage | null; throughSeq: number } {
   const fresh = transcript.transcriptFor(agentId).filter((row) => row.seq > afterSeq);
@@ -125,11 +171,18 @@ export function arrivalsSince(
   };
 }
 
-/** labelEntry gives a transcript row its turn role and `[From:]`/`[To:]`/`[Thought]` label from this agent's point of view. */
+/**
+ * labelEntry gives a transcript row its turn role and `[From:]`/`[To:]`/`[Thought]`
+ * label from this identity's point of view. For the router (null), a null→null row
+ * is Ankur speaking to it, and null→agent rows are what it or Ankur sent.
+ */
 function labelEntry(
   row: TranscriptEntry,
-  agentId: string,
+  agentId: string | null,
 ): { role: "user" | "assistant"; label: string } {
+  if (agentId === null && row.fromAgentId === null && row.toAgentId === null) {
+    return { role: "user", label: "[From: Ankur]" };
+  }
   if (row.fromAgentId === agentId && row.toAgentId === agentId) {
     return { role: "assistant", label: "[Thought]" };
   }
@@ -139,7 +192,13 @@ function labelEntry(
   return { role: "assistant", label: `[To: ${row.toAgentId === null ? "Ankur" : row.toAgentId}]` };
 }
 
-async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTool[]> {
+async function toolsForLane(db: Db, agentId: string | null, lane: Lane): Promise<DwarTool[]> {
+  if (lane === "router") {
+    return routerLaneTools();
+  }
+  if (agentId === null) {
+    throw new DimaagError(500, "internal_error", `the router has no ${lane} lane`);
+  }
   if (lane === "conversation") {
     return [dispatchMessageTool, steerReasoningTool, listAgentsTool, yieldTool];
   }
@@ -167,6 +226,8 @@ async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTo
     recallMemoryTool,
     ingestMemoryTool,
     recordThoughtTool,
+    modifyAgentTool,
+    ...embeddedAgentTools().map(asDwarTool),
     yieldTool,
   ];
 }
@@ -178,8 +239,10 @@ export const embeddedReasoningTools = [
   RECALL_MEMORY,
   INGEST_MEMORY,
   RECORD_THOUGHT,
+  MODIFY_AGENT,
+  ...embeddedAgentTools().map((tool) => tool.name),
   YIELD,
-] as const;
+];
 export const embeddedConversationTools = [
   DISPATCH_MESSAGE,
   STEER_REASONING,

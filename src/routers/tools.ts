@@ -6,25 +6,19 @@ import { agentIdSchema } from "../agent-id.js";
 import { DimaagError } from "../errors.js";
 import { executeTool } from "../runtime/tools.js";
 import { requireActiveAgent, requireToolGrant } from "../tools/shared.js";
-import { allTools, findTool } from "../tools/registry.js";
+import { allTools, findEmbeddedTool, findTool } from "../tools/registry.js";
 import { parse } from "./schemas.js";
+import { routerToolNames } from "../runtime/router.js";
 
 const nameParam = z.object({ name: z.string().min(1) }).strict();
 
 const executeBody = z
   .object({
-    as_agent_id: z.union([z.literal("dadi"), z.literal("user"), agentIdSchema]),
+    as_agent_id: z.union([z.literal("router"), agentIdSchema]).optional(),
   })
   .passthrough();
 
-/** Tools Dadi may run via `as_agent_id: "dadi"` — router authority only. */
-const DADI_AUTHORITY_TOOLS = new Set([
-  "dimaag_spawn_agent",
-  "dimaag_grant_tool",
-  "dimaag_revoke_tool",
-  "dimaag_modify_agent",
-  "dimaag_get_agent",
-]);
+
 
 /** Register GET /tools, GET /tools/:name, POST /tools/:name/execute. */
 export async function registerTools(app: FastifyInstance): Promise<void> {
@@ -51,7 +45,8 @@ export async function registerTools(app: FastifyInstance): Promise<void> {
 
   app.post("/tools/:name/execute", async (request) => {
     const { name } = parse(nameParam, request.params);
-    const tool = findTool(name);
+    const grantable = findTool(name);
+    const tool = grantable ?? findEmbeddedTool(name);
     if (!tool) {
       throw new DimaagError(404, "not_found", `tool ${name} not found`);
     }
@@ -61,19 +56,21 @@ export async function registerTools(app: FastifyInstance): Promise<void> {
         : request.body;
     const parsed = parse(executeBody, raw);
     const { as_agent_id: asAgentId, ...input } = parsed;
+    const callerId = asAgentId === undefined || asAgentId === "router" ? null : asAgentId;
     const callerKind =
-      asAgentId === "dadi" ? "dadi" : asAgentId === "user" ? "user" : "agent";
-    const callerId = callerKind === "agent" ? asAgentId : null;
-    if (asAgentId === "dadi" && !DADI_AUTHORITY_TOOLS.has(name)) {
+      asAgentId === undefined ? "user" : asAgentId === "router" ? "router" : "agent";
+    if (asAgentId === "router" && !routerToolNames().has(name)) {
       throw new DimaagError(
         422,
         "invalid_request",
-        "as_agent_id dadi is limited to router authority tools",
+        "as_agent_id router is limited to router authority tools",
       );
     }
     if (callerId !== null) {
       await requireActiveAgent(app.db, callerId);
-      await requireToolGrant(app.db, callerId, name);
+      if (grantable) {
+        await requireToolGrant(app.db, callerId, name);
+      }
     }
     const result = await executeTool(app.runtime.toolContext(callerId, "reasoning", callerKind), {
       type: "tool_use",

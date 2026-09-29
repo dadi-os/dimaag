@@ -43,9 +43,8 @@ export const agentLogs = pgTable(
   "agent_logs",
   {
     id: uuid("id").primaryKey(),
-    agentId: text("agent_id")
-      .notNull()
-      .references(() => agents.id),
+    /** Null for the router, which shares the user's null identity. */
+    agentId: text("agent_id").references(() => agents.id),
     lane: text("lane").notNull(),
     event: text("event").notNull(),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
@@ -53,7 +52,7 @@ export const agentLogs = pgTable(
   },
   (table) => [
     index("agent_logs_agent_id_created_at_idx").on(table.agentId, table.createdAt),
-    check("agent_logs_lane_check", sql`${table.lane} IN ('reasoning', 'conversation')`),
+    check("agent_logs_lane_check", sql`${table.lane} IN ('reasoning', 'conversation', 'router')`),
     check(
       "agent_logs_event_check",
       sql`${table.event} IN ('response', 'tool_result', 'message')`,
@@ -108,10 +107,6 @@ export const messages = pgTable(
     index("messages_to_agent_id_seq_idx").on(table.toAgentId, table.seq),
     index("messages_from_agent_id_seq_idx").on(table.fromAgentId, table.seq),
     index("messages_created_at_idx").on(table.createdAt),
-    check(
-      "messages_party_check",
-      sql`${table.fromAgentId} IS NOT NULL OR ${table.toAgentId} IS NOT NULL`,
-    ),
   ],
 );
 

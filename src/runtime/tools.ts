@@ -13,6 +13,7 @@ import {
   DISPATCH_MESSAGE,
   INGEST_MEMORY,
   LIST_AGENTS,
+  MODIFY_AGENT,
   RECALL_MEMORY,
   RECORD_THOUGHT,
   SEND_MESSAGE,
@@ -20,7 +21,7 @@ import {
   WAIT,
   YIELD,
 } from "../types/domain.js";
-import { findTool } from "../tools/registry.js";
+import { findEmbeddedTool, findTool } from "../tools/registry.js";
 import { insertMessage, messageToTranscriptEntry } from "../db/messages.js";
 import {
   fail,
@@ -34,6 +35,8 @@ import {
 } from "../tools/shared.js";
 import { deliverAgentMessage } from "./deliver.js";
 import { runIngestMemory, runRecallMemory } from "./memory.js";
+import { runModifyAgent } from "./modify.js";
+import { runRouterTool } from "./router.js";
 
 export type { ToolContext, ToolExecResult } from "../tools/shared.js";
 export { requireAgent, requireActiveAgent, requireToolGrant } from "../tools/shared.js";
@@ -282,6 +285,9 @@ async function dispatchTool(
     if (call.name === LIST_AGENTS) {
       return await runListAgents(ctx, call.input);
     }
+    if (ctx.lane === "router") {
+      return await runRouterTool(ctx, call);
+    }
     if (ctx.lane === "reasoning") {
       if (call.name === SEND_MESSAGE) {
         return await runSendMessage(ctx, call.input);
@@ -297,6 +303,13 @@ async function dispatchTool(
       }
       if (call.name === INGEST_MEMORY) {
         return await runIngestMemory(ctx, call.input);
+      }
+      if (call.name === MODIFY_AGENT) {
+        return await runModifyAgent(ctx, call.input);
+      }
+      const embedded = findEmbeddedTool(call.name);
+      if (embedded) {
+        return await embedded.handler(ctx, embedded.input.parse(call.input));
       }
       const definition = findTool(call.name);
       if (!definition) {

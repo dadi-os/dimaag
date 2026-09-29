@@ -64,7 +64,7 @@ test("Nas terminal tools and destructive ops are registered", async () => {
   for (const name of [...NAS_TOOLS, ...NAS_DESTRUCTIVE]) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 63);
+  assert.equal(allTools().length, 57);
   await assert.doesNotReject(() => syncTools(handle.db));
 });
 
@@ -269,7 +269,7 @@ test("worker granted execute_shell and read_file sees those plus send_message an
     const granted = await executeTool(runtime.toolContext(managerId, "reasoning"), {
       type: "tool_use",
       id: `g-${toolName}`,
-      name: "dimaag_grant_tool",
+      name: "grant_tool",
       input: {
         agent_id: childId,
         tool_name: toolName,
@@ -280,6 +280,7 @@ test("worker granted execute_shell and read_file sees those plus send_message an
   }
   const ctx = await assembleContext({
     db: handle.db,
+    serviceRoot: config.serviceRoot,
     agentId: childId,
     lane: "reasoning",
     transcript: new TranscriptStore(),
@@ -288,6 +289,22 @@ test("worker granted execute_shell and read_file sees those plus send_message an
   });
   assert.deepEqual(
     ctx.tools.map((tool) => tool.name).sort(),
-    ["terminal_execute_shell", "terminal_read_file", SEND_MESSAGE, LIST_AGENTS, "wait", "recall_memory", "ingest_memory", "record_thought", "yield"].sort(),
+    [
+      "terminal_execute_shell",
+      "terminal_read_file",
+      SEND_MESSAGE,
+      LIST_AGENTS,
+      "wait",
+      "recall_memory",
+      "ingest_memory",
+      "record_thought",
+      "modify_agent",
+      "get_agent",
+      "grant_tool",
+      "revoke_tool",
+      "list_tools",
+      "get_logs",
+      "yield",
+    ].sort(),
   );
 });

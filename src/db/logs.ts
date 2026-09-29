@@ -8,7 +8,8 @@ import type { Lane, LogEvent } from "../types/domain.js";
 export async function writeAgentLog(
   db: Db,
   args: {
-    agentId: string;
+    /** Null for the router. */
+    agentId: string | null;
     lane: Lane;
     event: LogEvent;
     payload: Record<string, unknown>;

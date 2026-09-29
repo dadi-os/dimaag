@@ -1,4 +1,5 @@
 import type { ZodType } from "zod";
+import type { DwarTool } from "../types/domain.js";
 import type { ToolContext, ToolExecResult } from "./shared.js";
 
 /**
@@ -16,4 +17,13 @@ export type ToolDefinition<T = unknown> = {
 
 export function defineTool<T>(definition: ToolDefinition<T>): ToolDefinition<T> {
   return definition;
+}
+
+/** The shape the model sees for a zod-defined tool. */
+export function asDwarTool(definition: ToolDefinition): DwarTool {
+  return {
+    name: definition.name,
+    description: definition.description,
+    input_schema: definition.inputSchema,
+  };
 }

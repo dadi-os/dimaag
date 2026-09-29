@@ -26,11 +26,11 @@ export type RuntimeEvent =
       at: string;
     }
   | {
-      type: "dadi_started";
+      type: "router_started";
       at: string;
     }
-  | { type: "dadi_finished"; at: string }
-  | { type: "dadi_failed"; message: string; at: string }
+  | { type: "router_finished"; at: string }
+  | { type: "router_failed"; message: string; at: string }
   | {
       type: "agent_spawned";
       agent_id: string;

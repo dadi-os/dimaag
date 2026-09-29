@@ -41,7 +41,7 @@ test("Ghar tools are registered", async () => {
   for (const name of GHAR_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 63);
+  assert.equal(allTools().length, 57);
   await assert.doesNotReject(() => syncTools(handle.db));
 });
 
@@ -148,7 +148,7 @@ test("control_device attributes cause to the calling agent, not the parent", asy
   assert.notEqual(call.body.cause_ref, parentId);
 });
 
-test("control_device cause_ref distinguishes dadi and user when callerId is null", async () => {
+test("control_device cause_ref distinguishes router and user when callerId is null", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const deviceId = randomUUID();
   const ghar = mockGhar({});
@@ -162,7 +162,7 @@ test("control_device cause_ref distinguishes dadi and user when callerId is null
     config,
     log: silentLog,
   });
-  const asDadi = await executeTool(runtime.toolContext(null, "reasoning", "dadi"), {
+  const asDadi = await executeTool(runtime.toolContext(null, "reasoning", "router"), {
     type: "tool_use",
     id: "cd-dadi",
     name: "ghar_control_device",
@@ -173,7 +173,7 @@ test("control_device cause_ref distinguishes dadi and user when callerId is null
     },
   });
   assert.equal(asDadi.isError, false);
-  assert.equal(ghar.commandCalls[0]!.body.cause_ref, "dadi");
+  assert.equal(ghar.commandCalls[0]!.body.cause_ref, "router");
 
   const asUser = await executeTool(runtime.toolContext(null, "reasoning", "user"), {
     type: "tool_use",
