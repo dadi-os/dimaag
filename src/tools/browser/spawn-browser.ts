@@ -12,7 +12,7 @@ const input = z
 export const spawnBrowser = defineTool({
   name: "browser_spawn",
   description:
-    "Start a headed Chromium on its own virtual display via Nas. Pass browser_id to start that id again and keep its profile (cookies and logins). Omit browser_id to allocate the lowest id at or above 10 whose display is down and whose profile has no Chromium data, so the login is fresh. Returns browser_id and cdp_url — hand browser_id to a worker in its system prompt or a message. The worker drives pages over CDP; do not pass coordinates. Fails if that id is already running.",
+    "Start a headed Chromium on its own virtual display via Nas. Pass browser_id to bring back a browser that went down in a crash or restart with its profile (cookies and logins) intact; browser_close deletes the profile, so a closed id starts fresh. Omit browser_id to allocate the lowest id at or above 10 whose display is down and whose profile has no Chromium data, so the login is fresh. Returns browser_id and cdp_url — hand browser_id to a worker in its system prompt or a message. The worker drives pages over CDP; do not pass coordinates. Fails if that id is already running.",
   input,
   inputSchema: {
     type: "object",

@@ -13,7 +13,7 @@ const input = z.object({
 export const spawnAgent = defineTool({
   name: "dimaag_spawn_agent",
   description:
-    "Create a child agent with the caller as its parent. When called as the router, creates a root (parent_agent_id null). The child starts with no granted tools — use grant_tool afterward to give it capabilities. id is the immutable kebab-case address (e.g. browser-manager, browser-worker-d2l-due-tonight-check); it cannot be renamed later.",
+    "Create a child agent with the caller as its parent. When called as the router, creates a root (parent_agent_id null). The child starts with no granted tools — use grant_tool afterward to give it capabilities. id is the immutable kebab-case address (e.g. browser-manager, browser-worker-cse-431); it cannot be renamed later.",
   input,
   inputSchema: {
     type: "object",
@@ -21,7 +21,7 @@ export const spawnAgent = defineTool({
       id: {
         type: "string",
         description:
-          "Immutable kebab-case agent id (lowercase letters, digits, single hyphens), e.g. browser-manager or coding-worker-auth-token-refresh. This is how other agents address it.",
+          "Immutable kebab-case agent id (lowercase letters, digits, single hyphens), e.g. browser-manager or coding-worker-yaad. Name it for the area it owns, not the task at hand. This is how other agents address it.",
       },
       system_prompt: {
         type: "string",

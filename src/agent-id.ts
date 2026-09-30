@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 
-/** Lowercase kebab-case: `browser-manager`, `browser-worker-d2l-due-tonight-check`. */
+/** Lowercase kebab-case: `browser-manager`, `browser-worker-cse-431`. */
 export const AGENT_ID_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
 export const agentIdSchema = z
