@@ -1,7 +1,7 @@
 /**
  * In-process cache of durable messages. Hydrated from DB on boot; dies with the process.
- * Null is an identity like any agent id: Ankur and the router share it, so null's
- * transcript is everything Ankur (or the router, as him) said and everything said to him.
+ * Rows key by sender and recipient, where null is Ankur. Only agents read a
+ * transcript: the router is ephemeral and has none.
  */
 
 export type TranscriptEntry = {
@@ -56,10 +56,10 @@ export class TranscriptStore {
   }
 
   /**
-   * Every inbound message for this identity plus every outbound message from it,
-   * sorted by seq. Null is Ankur and the router.
+   * Every inbound message for this agent plus every outbound message from it,
+   * sorted by seq.
    */
-  transcriptFor(agentId: string | null): TranscriptEntry[] {
+  transcriptFor(agentId: string): TranscriptEntry[] {
     const inbound = this.inbox.get(agentId) ?? [];
     const outgoing = this.outbox.get(agentId) ?? [];
     const bySeq = new Map<number, TranscriptEntry>();

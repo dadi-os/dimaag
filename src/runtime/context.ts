@@ -72,56 +72,46 @@ function lineageBlock(agentId: string | null, parentAgentId: string | null): str
 export type AssembledContext = Omit<DwarChatRequest, "tool_choice"> & { throughSeq: number };
 
 /**
- * One assembler for every lane, the router included. dimaag's system is, in order:
- * the system doctrine (`prompts/system.md`, shared by everyone), the charter (an
- * agent's stored prompt, or `prompts/router.md` for the router), lineage facts,
- * then active direct children — for the router, the active root agents. Dwar
- * appends lane doctrine to agent lanes as a cached block; the router's call is
- * context-free on Dwar's side. Message history keeps at least the last
- * `transcriptWindowMessages` turns; its start only advances in steps of
- * `transcriptWindowStep` so the provider's cached prefix survives new messages.
+ * dimaag's system for an identity, in order: the system doctrine
+ * (`prompts/system.md`, shared by everyone), the charter (an agent's stored
+ * prompt, or `prompts/router.md` for the router), lineage facts, then active
+ * direct children — for the router, the active root agents.
  */
-export async function assembleContext(opts: {
-  db: Db;
+async function composeSystem(
+  db: Db,
+  serviceRoot: string,
   /** Null is the router. */
-  agentId: string | null;
-  lane: Lane;
-  transcript: TranscriptStore;
-  serviceRoot: string;
-  transcriptWindowMessages: number;
-  transcriptWindowStep: number;
-}): Promise<AssembledContext> {
+  agentId: string | null,
+): Promise<string> {
   let charter: string;
   let parentAgentId: string | null = null;
-  if (opts.agentId === null) {
-    charter = loadPrompt(opts.serviceRoot, "router.md");
+  if (agentId === null) {
+    charter = loadPrompt(serviceRoot, "router.md");
   } else {
-    const agentRows = await opts.db.select().from(agents).where(eq(agents.id, opts.agentId));
+    const agentRows = await db.select().from(agents).where(eq(agents.id, agentId));
     const agent = agentRows[0];
     if (!agent) {
-      throw new DimaagError(404, "not_found", `agent ${opts.agentId} not found`);
+      throw new DimaagError(404, "not_found", `agent ${agentId} not found`);
     }
     charter = agent.systemPrompt;
     parentAgentId = agent.parentAgentId;
   }
 
-  const childRows = await opts.db
+  const childRows = await db
     .select({
       id: agents.id,
       active: agents.active,
       systemPrompt: agents.systemPrompt,
     })
     .from(agents)
-    .where(
-      opts.agentId === null ? isNull(agents.parentAgentId) : eq(agents.parentAgentId, opts.agentId),
-    )
+    .where(agentId === null ? isNull(agents.parentAgentId) : eq(agents.parentAgentId, agentId))
     .orderBy(asc(agents.id));
   const activeChildren = childRows.filter((c) => c.active);
 
   let system = [
-    loadPrompt(opts.serviceRoot, "system.md"),
+    loadPrompt(serviceRoot, "system.md"),
     charter,
-    lineageBlock(opts.agentId, parentAgentId),
+    lineageBlock(agentId, parentAgentId),
   ].join("\n\n");
   if (activeChildren.length > 0) {
     const lines = activeChildren.map((c) => {
@@ -131,7 +121,25 @@ export async function assembleContext(opts: {
     });
     system = `${system}\n\nYour active direct children:\n${lines.join("\n")}`;
   }
+  return system;
+}
 
+/**
+ * An agent lane's request: its system, then its message history. History keeps
+ * at least the last `transcriptWindowMessages` turns; its start only advances
+ * in steps of `transcriptWindowStep` so the provider's cached prefix survives
+ * new messages. Dwar appends lane doctrine as a cached block.
+ */
+export async function assembleContext(opts: {
+  db: Db;
+  agentId: string;
+  lane: Lane;
+  transcript: TranscriptStore;
+  serviceRoot: string;
+  transcriptWindowMessages: number;
+  transcriptWindowStep: number;
+}): Promise<AssembledContext> {
+  const system = await composeSystem(opts.db, opts.serviceRoot, opts.agentId);
   const entries = opts.transcript.transcriptFor(opts.agentId);
   const overflow = entries.length - opts.transcriptWindowMessages;
   const start =
@@ -150,6 +158,25 @@ export async function assembleContext(opts: {
 }
 
 /**
+ * The router's request. The router is ephemeral: it sees its system and this
+ * one utterance, never an earlier run, a message sent as Ankur, or a reply to
+ * him. The org's current state reaches it only through the system and its tools.
+ */
+export async function assembleRouterContext(opts: {
+  db: Db;
+  serviceRoot: string;
+  /** What Ankur just said. */
+  utterance: string;
+}): Promise<AssembledContext> {
+  return {
+    system: await composeSystem(opts.db, opts.serviceRoot, null),
+    messages: [{ role: "user", content: `[From: Ankur]\n${opts.utterance}` }],
+    tools: routerLaneTools(),
+    throughSeq: 0,
+  };
+}
+
+/**
  * arrivalsSince folds transcript entries newer than `afterSeq` into one user
  * turn, so messages that land mid-wake join the scratchpad at the point they
  * arrived instead of rewriting the history above it. `turn` is null when
@@ -157,7 +184,7 @@ export async function assembleContext(opts: {
  */
 export function arrivalsSince(
   transcript: TranscriptStore,
-  agentId: string | null,
+  agentId: string,
   afterSeq: number,
 ): { turn: DwarMessage | null; throughSeq: number } {
   const fresh = transcript.transcriptFor(agentId).filter((row) => row.seq > afterSeq);
@@ -173,16 +200,12 @@ export function arrivalsSince(
 
 /**
  * labelEntry gives a transcript row its turn role and `[From:]`/`[To:]`/`[Thought]`
- * label from this identity's point of view. For the router (null), a null→null row
- * is Ankur speaking to it, and null→agent rows are what it or Ankur sent.
+ * label from this agent's point of view.
  */
 function labelEntry(
   row: TranscriptEntry,
-  agentId: string | null,
+  agentId: string,
 ): { role: "user" | "assistant"; label: string } {
-  if (agentId === null && row.fromAgentId === null && row.toAgentId === null) {
-    return { role: "user", label: "[From: Ankur]" };
-  }
   if (row.fromAgentId === agentId && row.toAgentId === agentId) {
     return { role: "assistant", label: "[Thought]" };
   }
@@ -192,12 +215,9 @@ function labelEntry(
   return { role: "assistant", label: `[To: ${row.toAgentId === null ? "Ankur" : row.toAgentId}]` };
 }
 
-async function toolsForLane(db: Db, agentId: string | null, lane: Lane): Promise<DwarTool[]> {
+async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTool[]> {
   if (lane === "router") {
-    return routerLaneTools();
-  }
-  if (agentId === null) {
-    throw new DimaagError(500, "internal_error", `the router has no ${lane} lane`);
+    throw new DimaagError(500, "internal_error", `agent ${agentId} has no router lane`);
   }
   if (lane === "conversation") {
     return [dispatchMessageTool, steerReasoningTool, listAgentsTool, yieldTool];

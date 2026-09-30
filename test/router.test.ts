@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { buildApp } from "../src/app.js";
 import { migrate } from "../src/db/migrate.js";
-import { agentLogs, agents, agentTools } from "../src/db/schema.js";
+import { agentLogs, agents, agentTools, messages } from "../src/db/schema.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import type { RuntimeEvent } from "../src/runtime/events.js";
 import { toolId } from "../src/tools/sync.js";
@@ -108,10 +108,8 @@ test("POST /router spawns a root, grants it, sends as Ankur, and returns what it
   assert.equal(delivered[0]?.fromAgentId, null);
   assert.match(delivered[0]?.content ?? "", /book it/);
 
-  const own = runtime.transcript.transcriptFor(null);
-  assert.equal(own[0]?.fromAgentId, null);
-  assert.equal(own[0]?.toAgentId, null);
-  assert.equal(own[0]?.content, "can I afford the escape room tomorrow? if so book it");
+  const stored = await handle.db.select().from(messages).where(and(isNull(messages.fromAgentId), isNull(messages.toAgentId)));
+  assert.equal(stored.length, 0);
 
   assert.ok(seen.some((event) => event.type === "router_started"));
   assert.ok(seen.some((event) => event.type === "router_finished"));
@@ -254,7 +252,7 @@ test("POST /router runs as long as the model keeps calling tools", async () => {
   await app.close();
 });
 
-test("POST /router sees earlier utterances and what it sent in its context", async () => {
+test("POST /router is ephemeral: each run sees only its own utterance", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   await insertAgent(handle.db, { id: "finance-specialist", systemPrompt: "Owns money." });
   const dwar = scripted([
@@ -263,12 +261,41 @@ test("POST /router sees earlier utterances and what it sent in its context", asy
   const { app, runtime } = await appWith(dwar);
 
   await app.inject({ method: "POST", url: "/router", payload: { content: "build me a budget" } });
+  await app.inject({
+    method: "POST",
+    url: "/messages",
+    payload: { to_agent_id: "finance-specialist", content: "typed straight into the thread" },
+  });
   await app.inject({ method: "POST", url: "/router", payload: { content: "no, a monthly one" } });
   const second = dwar.completeCalls.at(-1)!;
-  const transcript = second.messages.map((m) => String(typeof m.content === "string" ? m.content : ""));
-  assert.ok(transcript.some((t) => t === "[From: Ankur]\nbuild me a budget"));
-  assert.ok(transcript.some((t) => t === "[To: finance-specialist]\nBuild me a budget."));
-  assert.ok(transcript.some((t) => t === "[From: Ankur]\nno, a monthly one"));
+  assert.deepEqual(
+    second.messages.map((m) => ({ role: m.role, content: m.content })),
+    [{ role: "user", content: "[From: Ankur]\nno, a monthly one" }],
+  );
+
+  await runtime.waitUntilIdle();
+  await app.close();
+});
+
+test("POST /router get_logs must name an agent", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  await insertAgent(handle.db, { id: "finance-specialist", systemPrompt: "Owns money." });
+  const dwar = scripted([
+    toolUse("get_logs", {}, "own"),
+    toolUse("get_logs", { agent_id: "finance-specialist" }, "agent"),
+  ]);
+  const { app, runtime } = await appWith(dwar);
+
+  const res = await app.inject({ method: "POST", url: "/router", payload: { content: "what's going on" } });
+  assert.equal(res.statusCode, 201, res.body);
+  const results = (await handle.db.select().from(agentLogs).where(isNull(agentLogs.agentId)))
+    .filter((row) => row.event === "tool_result")
+    .map((row) => row.payload);
+  const own = results.find((payload) => payload.tool_use_id === "own");
+  const agent = results.find((payload) => payload.tool_use_id === "agent");
+  assert.equal(own?.is_error, true);
+  assert.match(String(own?.content), /ephemeral/);
+  assert.equal(agent?.is_error, false);
 
   await runtime.waitUntilIdle();
   await app.close();

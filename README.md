@@ -73,13 +73,13 @@ Every `agents` row is an agent. The router is not a row — it is `POST /router`
 
 ## Router
 
-`POST /router` is where Ankur speaks to the org. The router is the null identity — the same as the user — so every message it sends lands in an agent's thread as `from_agent_id` null, written as Ankur. Each request:
+`POST /router` is where Ankur speaks to the org. The router is the null identity — the same as the user — so every message it sends lands in an agent's thread as `from_agent_id` null, written as Ankur. The router is ephemeral: it has no transcript and carries nothing between runs. Each request:
 
-1. Stores the utterance as a null → null message (never lost; it heads the router's own transcript).
-2. Runs the router lane: the same composer and step loop as agent lanes, calling Dwar `POST /chat/complete` (context-free on Dwar's side). System is `prompts/system.md` + `prompts/router.md` + identity + the active root agents; messages are null's transcript — Ankur's utterances, what was sent as him, and what agents sent him. Nothing in code caps the loop; it ends when the model calls `yield`.
+1. Writes an audit row (`agent_logs`, router lane, `message` / `receive`) holding the utterance. It is not stored as a message.
+2. Runs the router lane: the same step loop as agent lanes, calling Dwar `POST /chat/complete` (context-free on Dwar's side). System is `prompts/system.md` + `prompts/router.md` + identity + the active root agents; messages are exactly one turn, this utterance — no earlier run, nothing sent as Ankur, no reply to him, and nothing that arrives mid-run. What is underway it finds with its tools. Nothing in code caps the loop; it ends when the model calls `yield`.
 3. Returns `201 { messages: [{ to_agent_id, content, seq, created_at }] }` — every message it sent, in order (may be empty).
 
-Router tools (hardcoded, not grants): `send_message` (deliver as Ankur; wakes a dormant recipient), `list_agents`, `recall_memory`, `dimaag_spawn_agent` (creates a root), and the embedded agent-management tools — `grant_tool` / `revoke_tool` on root agents only, `get_agent` / `get_logs` on any agent, `list_tools`. It cannot modify agents: agents reshape themselves. Its model turns and tool results log to `agent_logs` with a null `agent_id` on the `router` lane; `get_logs` with no `agent_id` returns those plus every message sent by or to the null identity. Runs are serialized.
+Router tools (hardcoded, not grants): `send_message` (deliver as Ankur; wakes a dormant recipient), `list_agents`, `recall_memory`, `dimaag_spawn_agent` (creates a root), and the embedded agent-management tools — `grant_tool` / `revoke_tool` on root agents only, `get_agent` / `get_logs` on any agent, `list_tools`. It cannot modify agents: agents reshape themselves. Its model turns and tool results log to `agent_logs` with a null `agent_id` on the `router` lane. The router's `get_logs` must name an agent; only the user (CLI, no `agent_id`) reads the null identity's rows — the router's turns plus every message sent by or to Ankur. Runs are serialized.
 
 SSE: `router_started` / `router_finished` / `router_failed`. After a route, each thread's `lane_*` and `message` events take over.
 
@@ -218,7 +218,7 @@ Embedded in every reasoning lane (never granted, never in the tools table):
 | `grant_tool` / `revoke_tool` | manage a direct child's grants; the router's children are the roots |
 | `list_tools` | grantable registry catalog (name + description); optional prefix filter |
 | `get_agent` | id, system prompt, parent, active flag, and tool names for self or a direct child (any agent for the router) |
-| `get_logs` | audit (`response` / `tool_result` / `message`) for self or a direct child (any agent for the router; defaults to the null identity) |
+| `get_logs` | audit (`response` / `tool_result` / `message`) for self or a direct child (any named agent for the router, which never reads its own) |
 
 ## CLI
 

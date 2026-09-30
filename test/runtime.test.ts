@@ -1620,14 +1620,23 @@ test("get_logs defaults to caller and allows direct children only", async () => 
   assert.equal(denied.isError, true);
   assert.match(denied.content, /direct children/);
 
-  const asDadi = await executeTool(runtime.toolContext(null, "reasoning"), {
+  const asRouter = await executeTool(runtime.toolContext(null, "router"), {
     type: "tool_use",
     id: "gl4",
     name: "get_logs",
     input: {},
   });
-  assert.equal(asDadi.isError, false, asDadi.content);
-  assert.deepEqual(JSON.parse(asDadi.content).logs, []);
+  assert.equal(asRouter.isError, true);
+  assert.match(asRouter.content, /ephemeral/);
+
+  const asUser = await executeTool(runtime.toolContext(null, "router", "user"), {
+    type: "tool_use",
+    id: "gl5",
+    name: "get_logs",
+    input: {},
+  });
+  assert.equal(asUser.isError, false, asUser.content);
+  assert.deepEqual(JSON.parse(asUser.content).logs, []);
 });
 
 test("executeTool denies registry tools without grant or when inactive", async () => {

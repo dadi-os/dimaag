@@ -16,20 +16,21 @@ const input = z
 
 /**
  * Query durable audit logs. Agents read themselves or a direct child. The router
- * (and the user) read any agent; with no agent_id they read the null identity —
- * the router's own turns and every message Ankur or the router sent or received.
+ * reads any agent but never the null identity: it is ephemeral, so earlier runs
+ * and Ankur's messages stay out of reach. The user (CLI) with no agent_id reads
+ * the null identity — the router's turns and every message to or from Ankur.
  */
 export const getLogs = defineTool({
   name: "get_logs",
   description:
-    "Read cognition audit logs for yourself or a direct child: response rows hold one model turn in order (thinking, text, tool calls), tool_result rows hold each tool's name and outcome, message rows hold delivered messages. Defaults to yourself when agent_id is omitted. The router may read any agent, and by default reads its own null identity: its turns plus every message sent by or to Ankur. Not system HTTP logs — use nas_get_logs for those.",
+    "Read cognition audit logs for yourself or a direct child: response rows hold one model turn in order (thinking, text, tool calls), tool_result rows hold each tool's name and outcome, message rows hold delivered messages. Defaults to yourself when agent_id is omitted. The router may read any agent and must name one: it has no logs of its own to read. Not system HTTP logs — use nas_get_logs for those.",
   input,
   inputSchema: {
     type: "object",
     properties: {
       agent_id: {
         type: "string",
-        description: "Self or a direct child (any agent for the router); defaults to yourself",
+        description: "Self or a direct child (any agent for the router, which must pass one); defaults to yourself",
       },
       event: {
         type: "string",
@@ -40,6 +41,9 @@ export const getLogs = defineTool({
     required: [],
   },
   async handler(ctx, parsed) {
+    if (ctx.callerKind === "router" && parsed.agent_id === undefined) {
+      return fail("the router is ephemeral and has no logs of its own; pass an agent_id");
+    }
     const targetId = parsed.agent_id ?? ctx.callerId;
     if (targetId !== null) {
       const target = await requireAgent(ctx.db, targetId);

@@ -26,7 +26,7 @@ import type {
   Lane,
   RoutedMessage,
 } from "../types/domain.js";
-import { arrivalsSince, assembleContext } from "./context.js";
+import { arrivalsSince, assembleContext, assembleRouterContext } from "./context.js";
 import { deliverAgentMessage } from "./deliver.js";
 import { runConversationLoop } from "./conversation.js";
 import { EventBus } from "./events.js";
@@ -43,7 +43,6 @@ import { TranscriptStore } from "./transcript.js";
 import { Wake, WakeStore } from "./wake.js";
 import { ROUTER_KEY } from "./router.js";
 import { laneRequest, runStep, syncWake, type StepDeps } from "./step.js";
-import { insertMessage, messageToTranscriptEntry } from "../db/messages.js";
 import { SEND_MESSAGE } from "../types/domain.js";
 import { createScheduler, type Scheduler } from "./scheduler.js";
 
@@ -275,18 +274,8 @@ export function createRuntime(opts: {
     );
   }
 
-  /** Null agentId is the router. */
+  /** Tool execution and audit logging for a lane. Null agentId is the router. */
   function laneHelpers(agentId: string | null, lane: Lane) {
-    const assemble = () =>
-      assembleContext({
-        db: opts.db,
-        agentId,
-        lane,
-        transcript,
-        serviceRoot: opts.config.serviceRoot,
-        transcriptWindowMessages: opts.config.runtime.transcript_window_messages,
-        transcriptWindowStep: opts.config.runtime.transcript_window_step_messages,
-      });
     const exec = (call: DwarToolUseBlock) => executeTool(toolContext(agentId, lane), call);
     const logResponse = (response: DwarChatResponse) =>
       writeAgentLog(opts.db, {
@@ -313,7 +302,7 @@ export function createRuntime(opts: {
           ...result.audit,
         },
       });
-    return { assemble, exec, logResponse, logToolResult };
+    return { exec, logResponse, logToolResult };
   }
 
   function stepDeps(agentId: string, lane: Lane) {
@@ -322,7 +311,16 @@ export function createRuntime(opts: {
       agentId,
       lane,
       wake: wakes.get(agentId),
-      assemble: helpers.assemble,
+      assemble: () =>
+        assembleContext({
+          db: opts.db,
+          agentId,
+          lane,
+          transcript,
+          serviceRoot: opts.config.serviceRoot,
+          transcriptWindowMessages: opts.config.runtime.transcript_window_messages,
+          transcriptWindowStep: opts.config.runtime.transcript_window_step_messages,
+        }),
       arrivalsSince: (afterSeq: number) => arrivalsSince(transcript, agentId, afterSeq),
       executeTool: helpers.exec,
       logResponse: helpers.logResponse,
@@ -331,28 +329,24 @@ export function createRuntime(opts: {
   }
 
   /**
-   * The router's run: persist Ankur's utterance as a null→null message so it is
-   * never lost and joins the router's transcript, then loop the router lane on
-   * Dwar's context-free chat/complete until it yields. Runs are serialized; each
-   * starts a fresh wake from the transcript. Nothing caps the loop.
+   * The router's run. The router is ephemeral: each run sees only this
+   * utterance — no earlier run, nothing sent as Ankur, no reply to him, and
+   * nothing that arrives mid-run. The utterance is not stored as a message; an
+   * audit row records it. Loops the router lane on Dwar's context-free
+   * chat/complete until it yields. Runs are serialized. Nothing caps the loop.
    */
   async function route(content: string): Promise<RoutedMessage[]> {
     const release = await locks.acquire(ROUTER_KEY, "router", opts.config.runtime.lane_queue_timeout_ms);
     try {
-      const stored = await insertMessage(opts.db, { fromAgentId: null, toAgentId: null, content });
-      const utterance = messageToTranscriptEntry(stored);
-      transcript.ingest(utterance);
       await writeAgentLog(opts.db, {
         agentId: null,
         lane: "router",
         event: "message",
         payload: {
           direction: "receive",
-          message_id: utterance.id,
           from_agent_id: null,
           to_agent_id: null,
-          content: utterance.content,
-          seq: utterance.seq,
+          content,
         },
       });
 
@@ -362,8 +356,9 @@ export function createRuntime(opts: {
         agentId: ROUTER_KEY,
         lane: "router",
         wake: new Wake(),
-        assemble: helpers.assemble,
-        arrivalsSince: (afterSeq: number) => arrivalsSince(transcript, null, afterSeq),
+        assemble: () =>
+          assembleRouterContext({ db: opts.db, serviceRoot: opts.config.serviceRoot, utterance: content }),
+        arrivalsSince: (afterSeq: number) => ({ turn: null, throughSeq: afterSeq }),
         call: (request: DwarChatRequest) => opts.dwar.complete(request, "dimaag/router"),
         executeTool: async (call: DwarToolUseBlock) => {
           const result = await helpers.exec(call);
