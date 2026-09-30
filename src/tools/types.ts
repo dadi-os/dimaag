@@ -15,6 +15,7 @@ export type ToolDefinition<T = unknown> = {
   handler: (ctx: ToolContext, input: T) => Promise<ToolExecResult>;
 };
 
+/** Identity helper that types a tool definition by its zod input. */
 export function defineTool<T>(definition: ToolDefinition<T>): ToolDefinition<T> {
   return definition;
 }

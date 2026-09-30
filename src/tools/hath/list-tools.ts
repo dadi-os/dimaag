@@ -25,7 +25,7 @@ export const listTools = defineTool({
       prefix: {
         type: "string",
         description:
-          "Optional name prefix filter, e.g. chaavi_, browser_, terminal_, yaad_, ghar_, hath_, nas_, dimaag_",
+          "Optional name prefix filter, e.g. chaavi_, browser_, terminal_, yaad_, ghar_, device_, nas_, hath_",
       },
     },
     required: [],

@@ -8,7 +8,7 @@ import { TranscriptStore } from "../src/runtime/transcript.js";
 import { migrate } from "../src/db/migrate.js";
 import { allTools, findTool } from "../src/tools/registry.js";
 import { syncTools } from "../src/tools/sync.js";
-import { DimaagError } from "../src/errors.js";
+import { HathError } from "../src/errors.js";
 import {
   insertAgent,
   insertManager,
@@ -154,7 +154,7 @@ test("Nas 404 becomes not_found tool error without killing the lane", async () =
   });
   const nas = mockNas({
     exec: () => {
-      throw new DimaagError(404, "not_found", "not_found");
+      throw new HathError(404, "not_found", "not_found");
     },
   });
   const runtime = createRuntime({
@@ -187,7 +187,7 @@ test("Nas 409 on execute_shell becomes busy tool error", async () => {
   });
   const nas = mockNas({
     exec: () => {
-      throw new DimaagError(409, "busy", "terminal is busy");
+      throw new HathError(409, "busy", "terminal is busy");
     },
   });
   const runtime = createRuntime({
@@ -219,7 +219,7 @@ test("edit_file 409 surfaces the match count", async () => {
   });
   const nas = mockNas({
     editFile: () => {
-      throw new DimaagError(409, "conflict", "matches: 3");
+      throw new HathError(409, "conflict", "matches: 3");
     },
   });
   const runtime = createRuntime({

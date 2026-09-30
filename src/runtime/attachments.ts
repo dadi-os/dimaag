@@ -1,5 +1,5 @@
 import type { DwarClient } from "../dwar/client.js";
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 
 /** Mirrors Dwar `image.describe.allowed_media_types`. */
 export const DESCRIBABLE_IMAGE_TYPES = new Set([
@@ -36,13 +36,13 @@ export async function patchMessageContent(
 
   if (files.length === 0) {
     if (!text) {
-      throw new DimaagError(422, "invalid_request", "content or attachments required");
+      throw new HathError(422, "invalid_request", "content or attachments required");
     }
     return text;
   }
 
   if (files.length > MAX_ATTACHMENTS) {
-    throw new DimaagError(
+    throw new HathError(
       422,
       "invalid_request",
       `attachments exceeds max of ${MAX_ATTACHMENTS}`,
@@ -57,7 +57,7 @@ export async function patchMessageContent(
   for (const [index, att] of files.entries()) {
     const mediaType = att.media_type.trim().toLowerCase();
     if (!mediaType) {
-      throw new DimaagError(
+      throw new HathError(
         422,
         "invalid_request",
         `attachments[${index}].media_type is required`,
@@ -65,7 +65,7 @@ export async function patchMessageContent(
     }
     const raw = decodeBase64(att.data, index);
     if (raw.length > MAX_ATTACHMENT_BYTES) {
-      throw new DimaagError(
+      throw new HathError(
         422,
         "invalid_request",
         `attachments[${index}] exceeds max size of ${MAX_ATTACHMENT_BYTES} bytes`,
@@ -75,7 +75,7 @@ export async function patchMessageContent(
     if (DESCRIBABLE_IMAGE_TYPES.has(mediaType)) {
       const { description } = await dwar.describeImage(
         { image: { media_type: mediaType, data: raw.toString("base64") } },
-        "dimaag/attachments",
+        "hath/attachments",
       );
       const label = att.filename?.trim()
         ? `Image (${att.filename.trim()})`
@@ -96,14 +96,14 @@ export async function patchMessageContent(
 function decodeBase64(data: string, index: number): Buffer {
   const cleaned = data.replace(/\s+/g, "");
   if (!cleaned) {
-    throw new DimaagError(
+    throw new HathError(
       422,
       "invalid_request",
       `attachments[${index}].data must not be empty`,
     );
   }
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(cleaned) || cleaned.length % 4 !== 0) {
-    throw new DimaagError(
+    throw new HathError(
       422,
       "invalid_request",
       `attachments[${index}].data is not valid base64`,
@@ -111,7 +111,7 @@ function decodeBase64(data: string, index: number): Buffer {
   }
   const buf = Buffer.from(cleaned, "base64");
   if (buf.length === 0) {
-    throw new DimaagError(
+    throw new HathError(
       422,
       "invalid_request",
       `attachments[${index}].data must not be empty`,

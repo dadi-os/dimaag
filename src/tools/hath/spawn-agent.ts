@@ -11,7 +11,7 @@ const input = z.object({
 
 /** Create a child of the caller, or a root when the caller is the router. */
 export const spawnAgent = defineTool({
-  name: "dimaag_spawn_agent",
+  name: "hath_spawn_agent",
   description:
     "Create a child agent with the caller as its parent. When called as the router, creates a root (parent_agent_id null). The child starts with no granted tools — use grant_tool afterward to give it capabilities. id is the immutable kebab-case address (e.g. browser-manager, browser-worker-cse-431); it cannot be renamed later.",
   input,

@@ -8,13 +8,13 @@ import type {
   Lane,
   ScheduledMessageRecord,
 } from "./types/domain.js";
-import { DimaagError } from "./errors.js";
+import { HathError } from "./errors.js";
 
 function parseLane(value: string): Lane {
   if (value === "reasoning" || value === "conversation" || value === "router") {
     return value;
   }
-  throw new DimaagError(500, "internal_error", `invalid lane in database: ${value}`);
+  throw new HathError(500, "internal_error", `invalid lane in database: ${value}`);
 }
 
 function parseLogEvent(value: string): LogEvent {
@@ -25,14 +25,14 @@ function parseLogEvent(value: string): LogEvent {
   ) {
     return value;
   }
-  throw new DimaagError(500, "internal_error", `invalid log event in database: ${value}`);
+  throw new HathError(500, "internal_error", `invalid log event in database: ${value}`);
 }
 
 /** Agent row without ephemeral `running` / `sessions` (filled by routers). */
 export function toAgentRecord(row: AgentRow): Omit<AgentRecord, "running" | "sessions"> {
   return {
     id: row.id,
-    /** Display alias of the immutable kebab-case id (Hath / roster compat). */
+    /** Display alias of the immutable kebab-case id (desktop / roster compat). */
     name: row.id,
     system_prompt: row.systemPrompt,
     parent_agent_id: row.parentAgentId,

@@ -46,7 +46,7 @@ export type RuntimeEvent =
       at: string;
     }
   | {
-      type: "hath_command";
+      type: "device_command";
       command_id: string;
       node_name: string;
       tool: string;
@@ -56,6 +56,7 @@ export type RuntimeEvent =
 
 type Listener = (event: RuntimeEvent) => void;
 
+/** In-process fan-out of runtime events to SSE subscribers; a throwing listener is logged, not propagated. */
 export class EventBus {
   constructor(private readonly log: RuntimeLog) {}
 

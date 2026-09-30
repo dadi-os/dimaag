@@ -24,7 +24,7 @@ export const getLogs = defineTool({
     properties: {
       services: {
         type: "string",
-        description: "Comma-separated service labels (e.g. dimaag,dwar)",
+        description: "Comma-separated service labels (e.g. hath,dwar)",
       },
       level: {
         type: "string",

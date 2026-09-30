@@ -1,5 +1,6 @@
 /** Per-agent in-memory steer instructions and terminate flags. Dies with the process. */
 
+/** Per-agent steering instructions for the reasoning lane, plus the terminate flag that stops its next tool call. */
 export class SteerQueue {
   private readonly items = new Map<string, string[]>();
   private readonly terminate = new Set<string>();
@@ -46,6 +47,7 @@ export class SteerQueue {
 
 export const STEER_TURN_PREFIX = "Steering instructions from your conversation lane:";
 
+/** The reasoning-lane turn that delivers queued steering instructions as a numbered list. */
 export function formatSteerTurn(instructions: string[]): string {
   const lines = instructions.map((item, index) => `${index + 1}. ${item}`);
   return `${STEER_TURN_PREFIX}\n${lines.join("\n")}`;

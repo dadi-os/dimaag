@@ -14,15 +14,15 @@ import { spawnBrowser } from "./browser/spawn-browser.js";
 import { typeText } from "./browser/type.js";
 import { uploadFile } from "./browser/upload-file.js";
 import { waitFor } from "./browser/wait-for.js";
-import { spawnAgent } from "./dimaag/spawn-agent.js";
-import { getAgent } from "./dimaag/get-agent.js";
-import { grantTool } from "./dimaag/grant-tool.js";
-import { revokeTool } from "./dimaag/revoke-tool.js";
-import { listTools } from "./dimaag/list-tools.js";
-import { scheduleMessage } from "./dimaag/schedule-message.js";
-import { listSchedules } from "./dimaag/list-schedules.js";
-import { cancelSchedule } from "./dimaag/cancel-schedule.js";
-import { getLogs as dimaagGetLogs } from "./dimaag/get-logs.js";
+import { spawnAgent } from "./hath/spawn-agent.js";
+import { getAgent } from "./hath/get-agent.js";
+import { grantTool } from "./hath/grant-tool.js";
+import { revokeTool } from "./hath/revoke-tool.js";
+import { listTools } from "./hath/list-tools.js";
+import { scheduleMessage } from "./hath/schedule-message.js";
+import { listSchedules } from "./hath/list-schedules.js";
+import { cancelSchedule } from "./hath/cancel-schedule.js";
+import { getLogs as hathGetLogs } from "./hath/get-logs.js";
 import { listDevices } from "./ghar/list-devices.js";
 import { getState } from "./ghar/get-state.js";
 import { controlDevice } from "./ghar/control-device.js";
@@ -41,13 +41,13 @@ import { stackUp } from "./nas/stack-up.js";
 import { stackDown } from "./nas/stack-down.js";
 import { provision } from "./nas/provision.js";
 import { listClients } from "./nas/list-clients.js";
-import { getInfo as hathGetInfo } from "./hath/get-info.js";
-import { getBattery as hathGetBattery } from "./hath/get-battery.js";
-import { getLocation as hathGetLocation } from "./hath/get-location.js";
-import { getNetwork as hathGetNetwork } from "./hath/get-network.js";
-import { readClipboard as hathReadClipboard } from "./hath/read-clipboard.js";
-import { writeClipboard as hathWriteClipboard } from "./hath/write-clipboard.js";
-import { sendFile as hathSendFile } from "./hath/send-file.js";
+import { getInfo as deviceGetInfo } from "./device/get-info.js";
+import { getBattery as deviceGetBattery } from "./device/get-battery.js";
+import { getLocation as deviceGetLocation } from "./device/get-location.js";
+import { getNetwork as deviceGetNetwork } from "./device/get-network.js";
+import { readClipboard as deviceReadClipboard } from "./device/read-clipboard.js";
+import { writeClipboard as deviceWriteClipboard } from "./device/write-clipboard.js";
+import { sendFile as deviceSendFile } from "./device/send-file.js";
 import { closeTerminal } from "./terminal/close-terminal.js";
 import { editFile } from "./terminal/edit-file.js";
 import { executeShell } from "./terminal/execute-shell.js";
@@ -119,13 +119,13 @@ const definitions = [
   stackDown,
   provision,
   listClients,
-  hathGetInfo,
-  hathGetBattery,
-  hathGetLocation,
-  hathGetNetwork,
-  hathReadClipboard,
-  hathWriteClipboard,
-  hathSendFile,
+  deviceGetInfo,
+  deviceGetBattery,
+  deviceGetLocation,
+  deviceGetNetwork,
+  deviceReadClipboard,
+  deviceWriteClipboard,
+  deviceSendFile,
 ] as unknown as ToolDefinition[];
 
 const byName = new Map<string, ToolDefinition>();
@@ -136,10 +136,12 @@ for (const definition of definitions) {
   byName.set(definition.name, definition);
 }
 
+/** Every grantable tool definition. */
 export function allTools(): ToolDefinition[] {
   return definitions;
 }
 
+/** The grantable tool with this name, if any. */
 export function findTool(name: string): ToolDefinition | undefined {
   return byName.get(name);
 }
@@ -155,7 +157,7 @@ const embeddedDefinitions = [
   grantTool,
   revokeTool,
   listTools,
-  dimaagGetLogs,
+  hathGetLogs,
 ] as unknown as ToolDefinition[];
 
 const embeddedByName = new Map<string, ToolDefinition>();

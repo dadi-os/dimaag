@@ -1,5 +1,5 @@
 /**
- * Postgres + Drizzle handle for Dimaag.
+ * Postgres + Drizzle handle for Hath.
  * Suppresses Postgres NOTICE callbacks (Drizzle CREATE IF NOT EXISTS) so Loki
  * is not flooded with multi-line notice objects from the default console.log.
  */

@@ -1,9 +1,9 @@
-/** Hath presence heartbeat and command result routes. */
+/** Device presence heartbeat and command result routes. */
 
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { DimaagError } from "../errors.js";
-import type { HathCommandResult } from "../runtime/hath.js";
+import { HathError } from "../errors.js";
+import type { DeviceCommandResult } from "../runtime/devices.js";
 
 const presenceBody = z
   .object({
@@ -43,37 +43,37 @@ const resultBody = z
     }
   });
 
-/** Register POST /hath/presence and POST /hath/commands/:command_id/result. */
-export async function registerHath(app: FastifyInstance): Promise<void> {
-  app.post("/hath/presence", async (request) => {
+/** Register POST /devices/presence and POST /devices/commands/:command_id/result. */
+export async function registerDevices(app: FastifyInstance): Promise<void> {
+  app.post("/devices/presence", async (request) => {
     const parsed = presenceBody.safeParse(request.body);
     if (!parsed.success) {
-      throw new DimaagError(400, "invalid_request", parsed.error.message);
+      throw new HathError(400, "invalid_request", parsed.error.message);
     }
-    const entry = app.runtime.hath.setPresence(parsed.data);
+    const entry = app.runtime.devices.setPresence(parsed.data);
     return entry;
   });
 
   app.post<{ Params: { command_id: string } }>(
-    "/hath/commands/:command_id/result",
+    "/devices/commands/:command_id/result",
     async (request) => {
       const commandId = request.params.command_id;
       if (!commandId) {
-        throw new DimaagError(400, "invalid_request", "command_id is required");
+        throw new HathError(400, "invalid_request", "command_id is required");
       }
       const parsed = resultBody.safeParse(request.body);
       if (!parsed.success) {
-        throw new DimaagError(400, "invalid_request", parsed.error.message);
+        throw new HathError(400, "invalid_request", parsed.error.message);
       }
-      const result: HathCommandResult = parsed.data.ok
+      const result: DeviceCommandResult = parsed.data.ok
         ? { ok: true, result: parsed.data.result }
         : {
             ok: false,
             error: parsed.data.error!,
           };
-      const accepted = app.runtime.hath.complete(commandId, result);
+      const accepted = app.runtime.devices.complete(commandId, result);
       if (!accepted) {
-        throw new DimaagError(404, "not_found", `command ${commandId} not found`);
+        throw new HathError(404, "not_found", `command ${commandId} not found`);
       }
       return { accepted: true };
     },

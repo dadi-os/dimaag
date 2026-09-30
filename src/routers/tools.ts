@@ -3,7 +3,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { agentIdSchema } from "../agent-id.js";
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 import { executeTool } from "../runtime/tools.js";
 import { requireActiveAgent, requireToolGrant } from "../tools/shared.js";
 import { allTools, findEmbeddedTool, findTool } from "../tools/registry.js";
@@ -34,7 +34,7 @@ export async function registerTools(app: FastifyInstance): Promise<void> {
     const { name } = parse(nameParam, request.params);
     const tool = findTool(name);
     if (!tool) {
-      throw new DimaagError(404, "not_found", `tool ${name} not found`);
+      throw new HathError(404, "not_found", `tool ${name} not found`);
     }
     return {
       name: tool.name,
@@ -48,7 +48,7 @@ export async function registerTools(app: FastifyInstance): Promise<void> {
     const grantable = findTool(name);
     const tool = grantable ?? findEmbeddedTool(name);
     if (!tool) {
-      throw new DimaagError(404, "not_found", `tool ${name} not found`);
+      throw new HathError(404, "not_found", `tool ${name} not found`);
     }
     const raw =
       request.body === undefined || request.body === null || request.body === ""
@@ -60,7 +60,7 @@ export async function registerTools(app: FastifyInstance): Promise<void> {
     const callerKind =
       asAgentId === undefined ? "user" : asAgentId === "router" ? "router" : "agent";
     if (asAgentId === "router" && !routerToolNames().has(name)) {
-      throw new DimaagError(
+      throw new HathError(
         422,
         "invalid_request",
         "as_agent_id router is limited to router authority tools",

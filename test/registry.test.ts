@@ -19,12 +19,12 @@ after(async () => {
 });
 
 test("toolId is deterministic for the same name", () => {
-  assert.equal(toolId("dimaag_spawn_agent"), toolId("dimaag_spawn_agent"));
-  assert.equal(toolId("dimaag_modify_agent"), toolId("dimaag_modify_agent"));
+  assert.equal(toolId("hath_spawn_agent"), toolId("hath_spawn_agent"));
+  assert.equal(toolId("hath_modify_agent"), toolId("hath_modify_agent"));
 });
 
 test("toolId produces distinct ids for distinct names", () => {
-  assert.notEqual(toolId("dimaag_spawn_agent"), toolId("dimaag_modify_agent"));
+  assert.notEqual(toolId("hath_spawn_agent"), toolId("hath_modify_agent"));
 });
 
 test("findTool returns undefined for a name not in the registry", () => {
@@ -32,7 +32,7 @@ test("findTool returns undefined for a name not in the registry", () => {
 });
 
 test("findTool returns grantable tools; agent-management tools are embedded, not grantable", () => {
-  assert.equal(findTool("dimaag_spawn_agent")?.name, "dimaag_spawn_agent");
+  assert.equal(findTool("hath_spawn_agent")?.name, "hath_spawn_agent");
   for (const name of ["grant_tool", "revoke_tool", "list_tools", "get_agent", "get_logs"]) {
     assert.equal(findTool(name), undefined, name);
     assert.equal(findEmbeddedTool(name)?.name, name);
@@ -50,18 +50,18 @@ test("list_tools returns grantable registry entries and honors prefix", async ()
     count: number;
   };
   assert.ok(allBody.count >= 1);
-  assert.ok(allBody.tools.some((row) => row.name === "dimaag_spawn_agent"));
+  assert.ok(allBody.tools.some((row) => row.name === "hath_spawn_agent"));
   assert.ok(!allBody.tools.some((row) => row.name === "list_tools"));
   assert.ok(allBody.tools.every((row) => row.description.length > 0));
 
-  const filtered = await tool.handler(ctx, { prefix: "dimaag_" });
+  const filtered = await tool.handler(ctx, { prefix: "hath_" });
   assert.equal(filtered.isError, false);
   const filteredBody = JSON.parse(filtered.content) as {
     tools: { name: string }[];
     count: number;
   };
   assert.ok(filteredBody.count >= 1);
-  assert.ok(filteredBody.tools.every((row) => row.name.startsWith("dimaag_")));
+  assert.ok(filteredBody.tools.every((row) => row.name.startsWith("hath_")));
   assert.ok(filteredBody.count < allBody.count);
 });
 
@@ -177,6 +177,74 @@ test("syncTools remaps grants when a Chaavi tool is renamed", async () => {
     leftoverTools.filter((row) => row.name === "chaavi_with_secret").length,
     0,
   );
+});
+
+test("syncTools carries grants across the dimaag → hath and hath_* → device_* renames", async () => {
+  await handle.sql`TRUNCATE scheduled_messages, agent_logs, agent_tools, tools, agents CASCADE`;
+  await syncTools(handle.db);
+
+  const agentId = await insertAgent(handle.db, {
+    name: "rename-carrier",
+    systemPrompt: "prompt",
+  });
+  for (const name of ["hath_get_location", "dimaag_spawn_agent"]) {
+    await handle.db.insert(tools).values({
+      id: toolId(name),
+      name,
+      description: `old ${name}`,
+      inputSchema: { type: "object", properties: {} },
+    });
+  }
+  await handle.db.insert(agentTools).values([
+    { agentId, toolId: toolId("hath_get_location"), usage: "where is Ankur" },
+    { agentId, toolId: toolId("dimaag_spawn_agent"), usage: "build my team" },
+  ]);
+
+  await assert.doesNotReject(() => syncTools(handle.db));
+
+  const grants = await handle.db.select().from(agentTools);
+  const byTool = new Map(grants.map((row) => [row.toolId, row.usage]));
+  assert.equal(byTool.get(toolId("device_get_location")), "where is Ankur");
+  assert.equal(byTool.get(toolId("hath_spawn_agent")), "build my team");
+  assert.equal(byTool.has(toolId("hath_get_location")), false);
+  assert.equal(byTool.has(toolId("dimaag_spawn_agent")), false);
+  const names = (await handle.db.select().from(tools)).map((row) => row.name);
+  assert.equal(names.includes("hath_get_location"), false);
+  assert.equal(names.includes("dimaag_spawn_agent"), false);
+});
+
+test("syncTools carries grants across the dimaag → hath and hath_* → device_* renames", async () => {
+  await handle.sql`TRUNCATE scheduled_messages, agent_logs, agent_tools, tools, agents CASCADE`;
+  await syncTools(handle.db);
+
+  const agentId = await insertAgent(handle.db, {
+    name: "rename-carrier",
+    systemPrompt: "prompt",
+  });
+  for (const name of ["hath_get_location", "dimaag_spawn_agent"]) {
+    await handle.db.insert(tools).values({
+      id: toolId(name),
+      name,
+      description: `old ${name}`,
+      inputSchema: { type: "object", properties: {} },
+    });
+  }
+  await handle.db.insert(agentTools).values([
+    { agentId, toolId: toolId("hath_get_location"), usage: "where is Ankur" },
+    { agentId, toolId: toolId("dimaag_spawn_agent"), usage: "build my team" },
+  ]);
+
+  await assert.doesNotReject(() => syncTools(handle.db));
+
+  const grants = await handle.db.select().from(agentTools);
+  const byTool = new Map(grants.map((row) => [row.toolId, row.usage]));
+  assert.equal(byTool.get(toolId("device_get_location")), "where is Ankur");
+  assert.equal(byTool.get(toolId("hath_spawn_agent")), "build my team");
+  assert.equal(byTool.has(toolId("hath_get_location")), false);
+  assert.equal(byTool.has(toolId("dimaag_spawn_agent")), false);
+  const names = (await handle.db.select().from(tools)).map((row) => row.name);
+  assert.equal(names.includes("hath_get_location"), false);
+  assert.equal(names.includes("dimaag_spawn_agent"), false);
 });
 
 test("migrate does not backfill grants onto existing roots", async () => {

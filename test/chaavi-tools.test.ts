@@ -6,7 +6,7 @@ import { executeTool } from "../src/runtime/tools.js";
 import { migrate } from "../src/db/migrate.js";
 import { allTools, findTool } from "../src/tools/registry.js";
 import { syncTools } from "../src/tools/sync.js";
-import { DimaagError } from "../src/errors.js";
+import { HathError } from "../src/errors.js";
 import {
   insertWorker,
   mockChaavi,
@@ -378,7 +378,7 @@ test("Chaavi unreachable fails with chaavi code, not an empty success", async ()
   });
   const chaavi = mockChaavi({
     listItems: () => {
-      throw new DimaagError(502, "chaavi", "Chaavi is unreachable");
+      throw new HathError(502, "chaavi", "Chaavi is unreachable");
     },
   });
   const runtime = createRuntime({
@@ -419,7 +419,7 @@ test("vault_unconfigured maps through", async () => {
   });
   const chaavi = mockChaavi({
     listItems: () => {
-      throw new DimaagError(503, "vault_unconfigured", "vault is not configured");
+      throw new HathError(503, "vault_unconfigured", "vault is not configured");
     },
   });
   const runtime = createRuntime({

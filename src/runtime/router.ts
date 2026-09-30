@@ -10,8 +10,8 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { agentIdSchema } from "../agent-id.js";
 import { agents } from "../db/schema.js";
-import { spawnAgent } from "../tools/dimaag/spawn-agent.js";
-import { openChat } from "../tools/hath/open-chat.js";
+import { spawnAgent } from "../tools/hath/spawn-agent.js";
+import { openChat } from "../tools/device/open-chat.js";
 import { embeddedAgentTools } from "../tools/registry.js";
 import { fail, ok, requireAgent, type ToolContext, type ToolExecResult } from "../tools/shared.js";
 import { asDwarTool, type ToolDefinition } from "../tools/types.js";
@@ -49,7 +49,7 @@ const routerSendMessageTool: DwarTool = {
 
 /**
  * Registry-style tools the router holds without grants: spawning roots, the
- * embedded agent-management set, and opening the hand-off's chat in Hath.
+ * embedded agent-management set, and opening the hand-off's chat on his device.
  */
 function routerRegistryTools(): ToolDefinition[] {
   return [

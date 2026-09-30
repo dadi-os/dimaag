@@ -10,7 +10,7 @@ import { migrate } from "../src/db/migrate.js";
 import { allTools, findTool } from "../src/tools/registry.js";
 import { syncTools } from "../src/tools/sync.js";
 import { agentTools } from "../src/db/schema.js";
-import { DimaagError } from "../src/errors.js";
+import { HathError } from "../src/errors.js";
 import {
   endTurn,
   insertWorker,
@@ -245,7 +245,7 @@ test("Yaad 4xx maps to isError without throwing", async () => {
   });
   const yaad = mockYaad({
     recall: () => {
-      throw new DimaagError(422, "yaad", "from cannot be combined with filters");
+      throw new HathError(422, "yaad", "from cannot be combined with filters");
     },
   });
   const result = await executeTool(runtimeWith(yaad).toolContext(workerId, "reasoning"), {
@@ -281,7 +281,7 @@ test("Yaad unreachable maps to isError and the lane continues", async () => {
   });
   const yaad = mockYaad({
     recall: () => {
-      throw new DimaagError(502, "upstream_unreachable", "Yaad is unreachable");
+      throw new HathError(502, "upstream_unreachable", "Yaad is unreachable");
     },
   });
   const runtime = runtimeWith(yaad, dwar);

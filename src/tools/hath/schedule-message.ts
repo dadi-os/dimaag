@@ -14,7 +14,7 @@ const input = z.object({
 
 /** Schedule a future (optionally recurring) agent-to-agent message. */
 export const scheduleMessage = defineTool({
-  name: "dimaag_schedule_message",
+  name: "hath_schedule_message",
   description: "Deliver a message to another agent at a future time, optionally repeating every interval_minutes. The message arrives from you, exactly like dispatch_message would at that moment. For patterns that do not fit one interval (Tuesdays and Saturdays), create one schedule per pattern. You cannot schedule messages to yourself.",
   input,
   inputSchema: {

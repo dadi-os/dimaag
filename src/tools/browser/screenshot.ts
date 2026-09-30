@@ -63,7 +63,7 @@ export const screenshot = defineTool({
             prompt:
               "Describe this browser screenshot for an agent that cannot see pixels. Note visible text, controls, dialogs, and anything unusual. Start directly with what is on screen — no preamble about the request, the user, or what they want.",
           },
-          `dimaag/${ctx.callerId ?? ctx.callerKind}`,
+          `hath/${ctx.callerId ?? ctx.callerKind}`,
         );
         return {
           description: description.trim(),

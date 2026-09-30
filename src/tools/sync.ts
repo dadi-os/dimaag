@@ -11,11 +11,24 @@ import { allTools } from "./registry.js";
 const TOOL_RENAMES: ReadonlyArray<readonly [string, string]> = [
   ["chaavi_use_passkey", "chaavi_fill_passkey"],
   ["chaavi_with_secret", "chaavi_fill_secret"],
+  ["hath_get_info", "device_get_info"],
+  ["hath_get_battery", "device_get_battery"],
+  ["hath_get_location", "device_get_location"],
+  ["hath_get_network", "device_get_network"],
+  ["hath_read_clipboard", "device_read_clipboard"],
+  ["hath_write_clipboard", "device_write_clipboard"],
+  ["hath_send_file", "device_send_file"],
+  ["dimaag_spawn_agent", "hath_spawn_agent"],
+  ["dimaag_schedule_message", "hath_schedule_message"],
+  ["dimaag_list_schedules", "hath_list_schedules"],
+  ["dimaag_cancel_schedule", "hath_cancel_schedule"],
 ];
 
 /**
  * Deterministic id from a tool name, so ids are stable across environments and
- * fresh databases without hand-maintained UUID constants.
+ * fresh databases without hand-maintained UUID constants. The `dimaag.tool.`
+ * seed predates the rename to Hath and is frozen: changing it re-keys every
+ * tool and drops every grant.
  */
 export function toolId(name: string): string {
   const hash = createHash("sha1").update(`dimaag.tool.${name}`).digest("hex");

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "../types.js";
-import { hathToolCall } from "./call.js";
+import { deviceToolCall } from "./call.js";
 
 const input = z
   .object({
@@ -8,11 +8,11 @@ const input = z
   })
   .strict();
 
-/** Ask a Hath client for network / mesh connectivity details. */
+/** Ask a device for network / mesh connectivity details. */
 export const getNetwork = defineTool({
-  name: "hath_get_network",
+  name: "device_get_network",
   description:
-    "Get network and mesh status from a Hath client (connection type, mesh up, optional SSID).",
+    "Get network and mesh status from a device (connection type, mesh up, optional SSID).",
   input,
   inputSchema: {
     type: "object",
@@ -23,6 +23,6 @@ export const getNetwork = defineTool({
     required: ["node_name"],
   },
   async handler(ctx, parsed) {
-    return hathToolCall(ctx, parsed.node_name, "hath_get_network");
+    return deviceToolCall(ctx, parsed.node_name, "device_get_network");
   },
 });

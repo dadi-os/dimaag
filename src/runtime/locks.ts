@@ -1,4 +1,4 @@
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 import type { Lane } from "../types/domain.js";
 
 type Waiter = {
@@ -14,7 +14,7 @@ type LaneState = {
 
 /**
  * Two independent single-flight locks per agent, one per lane.
- * Waiters queue in memory. This assumes a single Dimaag process.
+ * Waiters queue in memory. This assumes a single Hath process.
  */
 export class LaneLocks {
   private readonly states = new Map<string, LaneState>();
@@ -71,7 +71,7 @@ export class LaneLocks {
             state.waiters.splice(idx, 1);
           }
           reject(
-            new DimaagError(
+            new HathError(
               503,
               "lane_busy",
               `${lane} lane queue timed out for agent ${agentId}`,

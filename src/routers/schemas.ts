@@ -2,13 +2,13 @@
 
 import { z, type ZodError } from "zod";
 import { agentIdSchema } from "../agent-id.js";
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 
 /** Parse with zod; map failures to `422 invalid_request`. */
 export function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.output<S> {
   const parsed = schema.safeParse(data);
   if (!parsed.success) {
-    throw new DimaagError(422, "invalid_request", formatZod(parsed.error));
+    throw new HathError(422, "invalid_request", formatZod(parsed.error));
   }
   return parsed.data;
 }
@@ -36,7 +36,7 @@ export const postRouterBody = z
     /** May be empty when attachments are present; patched server-side. */
     content: z.string(),
     attachments: z.array(messageAttachment).max(8).optional(),
-    /** The Hath device Ankur is speaking from, so the router can open the hand-off there. */
+    /** The device Ankur is speaking from, so the router can open the hand-off there. */
     node_name: z.string().min(1).optional(),
   })
   .strict()

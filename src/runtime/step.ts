@@ -1,6 +1,6 @@
 /** One lane step against the shared wake: call the model, run its tools, record the turn whole. */
 
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 import type {
   DwarChatRequest,
   DwarChatResponse,
@@ -89,10 +89,10 @@ export async function runStep(
 
   if (uses.length === 0) {
     if (response.stop_reason === "error") {
-      throw new DimaagError(502, "dwar", `${deps.lane} model stopped with an error and no tool call`);
+      throw new HathError(502, "dwar", `${deps.lane} model stopped with an error and no tool call`);
     }
     if (response.content.length === 0) {
-      throw new DimaagError(502, "dwar", `${deps.lane} model returned an empty turn`);
+      throw new HathError(502, "dwar", `${deps.lane} model returned an empty turn`);
     }
     deps.wake.push(
       { message: assistant },

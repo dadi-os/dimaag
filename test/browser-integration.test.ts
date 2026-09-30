@@ -19,8 +19,6 @@ test("integration: snapshot refs, actions, tabs, truncate, stale_ref", async (t)
     return;
   }
 
-  // Point the Nas constant client at NAS_URL by proxying through axios rewrite:
-  // createNasClient uses NAS from constants; hit live Nas via a thin wrapper.
   const config = testConfig();
   const http = axios.create({
     baseURL: nasUrl,
@@ -36,7 +34,6 @@ test("integration: snapshot refs, actions, tabs, truncate, stale_ref", async (t)
     nasUrl.replace(/^http/, "ws"),
   );
 
-  // Real Nas client still targets topology NAS; use a shim that forwards.
   const base = createNasClient(config);
   const nas = {
     ...base,
@@ -106,7 +103,6 @@ test("integration: snapshot refs, actions, tabs, truncate, stale_ref", async (t)
     assert.equal(tiny.truncated, true);
     assert.ok(Buffer.byteLength(tiny.tree, "utf8") <= 40);
 
-    // Rewrite DOM so prior refs go stale.
     await page.evaluate(() => {
       document.body.innerHTML = "<p>rewritten</p>";
     });
@@ -120,11 +116,9 @@ test("integration: snapshot refs, actions, tabs, truncate, stale_ref", async (t)
     );
   } finally {
     driver.drop(browserId);
-    try {
-      await http.delete(`/browsers/${browserId}`);
-    } catch {
-      // best-effort — Nas may already have torn the browser down
-    }
+    await http.delete(`/browsers/${browserId}`, {
+      validateStatus: (status) => status < 300 || status === 404,
+    });
   }
 });
 
@@ -145,7 +139,7 @@ test("integration: upload_file attaches a host file directly and through a file 
   const browserId = created.data.id as number;
   const cdpUrl = String(created.data.cdp_url).replace(/^ws:\/\/[^/]+/, wsBase);
 
-  const hostDir = "/tmp/dimaag-upload-test";
+  const hostDir = "/tmp/hath-upload-test";
   const hostPath = `${hostDir}/Resume [v1].txt`;
   const content = "upload integration test\n";
   await http.post("/fs/write", { path: hostPath, content });

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { asc, eq, isNull } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { agentTools, agents, tools } from "../db/schema.js";
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 import type { DwarChatRequest, DwarMessage, DwarTool, Lane } from "../types/domain.js";
 import {
   DISPATCH_MESSAGE,
@@ -72,7 +72,7 @@ function lineageBlock(agentId: string | null, parentAgentId: string | null): str
 export type AssembledContext = Omit<DwarChatRequest, "tool_choice"> & { throughSeq: number };
 
 /**
- * dimaag's system for an identity, in order: the system doctrine
+ * hath's system for an identity, in order: the system doctrine
  * (`prompts/system.md`, shared by everyone), the charter (an agent's stored
  * prompt, or `prompts/router.md` for the router), lineage facts, then active
  * direct children — for the router, the active root agents.
@@ -91,7 +91,7 @@ async function composeSystem(
     const agentRows = await db.select().from(agents).where(eq(agents.id, agentId));
     const agent = agentRows[0];
     if (!agent) {
-      throw new DimaagError(404, "not_found", `agent ${agentId} not found`);
+      throw new HathError(404, "not_found", `agent ${agentId} not found`);
     }
     charter = agent.systemPrompt;
     parentAgentId = agent.parentAgentId;
@@ -167,10 +167,10 @@ export async function assembleRouterContext(opts: {
   serviceRoot: string;
   /** What Ankur just said. */
   utterance: string;
-  /** The Hath device he said it from, when he used Hath. */
+  /** The device he said it from, when he used the desktop or phone app. */
   nodeName: string | undefined;
 }): Promise<AssembledContext> {
-  const from = opts.nodeName === undefined ? "[From: Ankur]" : `[From: Ankur, in Hath on ${opts.nodeName}]`;
+  const from = opts.nodeName === undefined ? "[From: Ankur]" : `[From: Ankur, on device ${opts.nodeName}]`;
   return {
     system: await composeSystem(opts.db, opts.serviceRoot, null),
     messages: [{ role: "user", content: `${from}\n${opts.utterance}` }],
@@ -220,7 +220,7 @@ function labelEntry(
 
 async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTool[]> {
   if (lane === "router") {
-    throw new DimaagError(500, "internal_error", `agent ${agentId} has no router lane`);
+    throw new HathError(500, "internal_error", `agent ${agentId} has no router lane`);
   }
   if (lane === "conversation") {
     return [dispatchMessageTool, steerReasoningTool, listAgentsTool, yieldTool];

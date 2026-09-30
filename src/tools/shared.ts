@@ -3,7 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { agentTools, agents } from "../db/schema.js";
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 import type { Lane } from "../types/domain.js";
 import type { EventBus } from "../runtime/events.js";
 import type { LaneLocks } from "../runtime/locks.js";
@@ -16,7 +16,7 @@ import type { ChaaviClient } from "../chaavi/client.js";
 import type { GharClient } from "../ghar/client.js";
 import type { NasClient } from "../nas/client.js";
 import type { YaadClient } from "../yaad/client.js";
-import type { HathGateway } from "../runtime/hath.js";
+import type { DeviceGateway } from "../runtime/devices.js";
 import type { HostSessions } from "../runtime/sessions.js";
 import type { ToolDebounce } from "../runtime/tool-debounce.js";
 import { toolId } from "./sync.js";
@@ -44,7 +44,7 @@ export type ToolContext = {
   nas: NasClient;
   dwar: DwarClient;
   browsers: BrowserDriver;
-  hath: HathGateway;
+  devices: DeviceGateway;
   steer: SteerQueue;
   intents: IntentQueue;
   locks: LaneLocks;
@@ -56,10 +56,12 @@ export type ToolContext = {
   enqueueReasoning: (agentId: string) => void;
 };
 
+/** A tool result the model sees as an error. */
 export function fail(message: string): ToolExecResult {
   return { content: message, isError: true, audit: {} };
 }
 
+/** A successful tool result: `value` as JSON, plus fields for the audit log. */
 export function ok(value: unknown, audit: Record<string, unknown> = {}): ToolExecResult {
   return { content: JSON.stringify(value), isError: false, audit };
 }
@@ -74,7 +76,7 @@ export async function requireAgent(db: Db, id: string) {
   const rows = await db.select().from(agents).where(eq(agents.id, id));
   const row = rows[0];
   if (!row) {
-    throw new DimaagError(404, "not_found", `agent ${id} not found`);
+    throw new HathError(404, "not_found", `agent ${id} not found`);
   }
   return row;
 }
@@ -83,7 +85,7 @@ export async function requireAgent(db: Db, id: string) {
 export async function requireActiveAgent(db: Db, id: string) {
   const row = await requireAgent(db, id);
   if (!row.active) {
-    throw new DimaagError(403, "forbidden", `agent ${id} is inactive`);
+    throw new HathError(403, "forbidden", `agent ${id} is inactive`);
   }
   return row;
 }
@@ -95,7 +97,7 @@ export async function requireToolGrant(db: Db, agentId: string, toolName: string
     .from(agentTools)
     .where(and(eq(agentTools.agentId, agentId), eq(agentTools.toolId, toolId(toolName))));
   if (!rows[0]) {
-    throw new DimaagError(403, "forbidden", `agent does not hold ${toolName}`);
+    throw new HathError(403, "forbidden", `agent does not hold ${toolName}`);
   }
 }
 

@@ -7,7 +7,7 @@ import { migrate } from "../src/db/migrate.js";
 import { allTools, findTool } from "../src/tools/registry.js";
 import { syncTools, toolId } from "../src/tools/sync.js";
 import { agentTools } from "../src/db/schema.js";
-import { DimaagError } from "../src/errors.js";
+import { HathError } from "../src/errors.js";
 import {
   insertAgent,
   insertWorker,
@@ -198,7 +198,7 @@ test("Ghar unreachable fails with ghar code, not an empty success", async () => 
   });
   const ghar = mockGhar({
     listDevices: () => {
-      throw new DimaagError(502, "ghar", "Ghar is unreachable");
+      throw new HathError(502, "ghar", "Ghar is unreachable");
     },
   });
   const runtime = createRuntime({
@@ -242,13 +242,13 @@ test("capability_unsupported and device_unreachable stay distinguishable", async
   const ghar = mockGhar({
     command: () => {
       if (mode === "capability") {
-        throw new DimaagError(
+        throw new HathError(
           422,
           "capability_unsupported",
           "device does not support capability dimmable",
         );
       }
-      throw new DimaagError(504, "device_unreachable", "command timed out after 5000ms");
+      throw new HathError(504, "device_unreachable", "command timed out after 5000ms");
     },
   });
   const runtime = createRuntime({

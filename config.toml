@@ -39,8 +39,8 @@ timeout_ms = 30000
 retry_attempts = 3
 backoff_ms = [500, 1000, 2000]
 
-[hath]
-# How long a hath_* tool waits for the target client to POST a command result.
+[devices]
+# How long a device_* tool waits for the target device to POST a command result.
 timeout_ms = 30000
 
 [browser]

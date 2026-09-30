@@ -78,7 +78,7 @@ type RoutedBody = {
 test("POST /router spawns a root, grants it, sends as Ankur, and returns what it sent", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const dwar = scripted([
-    toolUse("dimaag_spawn_agent", { id: "escape-room-booking", system_prompt: "Own the escape room booking." }, "c1"),
+    toolUse("hath_spawn_agent", { id: "escape-room-booking", system_prompt: "Own the escape room booking." }, "c1"),
     toolUse("grant_tool", { agent_id: "escape-room-booking", tool_name: "yaad_search_history", usage: "look up past plans" }, "c2"),
     toolUse("send_message", { to_agent_id: "escape-room-booking", content: "Check I can afford the escape room tomorrow, then book it." }, "c3"),
   ]);
@@ -141,11 +141,11 @@ test("POST /router composes system doctrine, charter, identity, and roots; offer
 
   const names = (request.tools ?? []).map((tool) => tool.name).sort();
   assert.deepEqual(names, [
-    "dimaag_spawn_agent",
+    "device_open_chat",
     "get_agent",
     "get_logs",
     "grant_tool",
-    "hath_open_chat",
+    "hath_spawn_agent",
     "list_agents",
     "list_tools",
     "recall_memory",
@@ -278,21 +278,21 @@ test("POST /router is ephemeral: each run sees only its own utterance", async ()
   await app.close();
 });
 
-test("POST /router opens the hand-off's chat on the Hath device Ankur spoke from", async () => {
+test("POST /router opens the hand-off's chat on the device Ankur spoke from", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   await insertAgent(handle.db, { id: "finance-specialist", systemPrompt: "Owns money." });
   const dwar = scripted([
     toolUse("send_message", { to_agent_id: "finance-specialist", content: "Budget please." }, "s1"),
-    toolUse("hath_open_chat", { node_name: "macbook", agent_id: "finance-specialist" }, "o1"),
+    toolUse("device_open_chat", { node_name: "macbook", agent_id: "finance-specialist" }, "o1"),
   ]);
   const { app, runtime } = await appWith(dwar);
   const commands: RuntimeEvent[] = [];
   runtime.events.subscribe((event) => {
-    if (event.type !== "hath_command") {
+    if (event.type !== "device_command") {
       return;
     }
     commands.push(event);
-    runtime.hath.complete(event.command_id, { ok: true, result: { opened: event.args.agent_id } });
+    runtime.devices.complete(event.command_id, { ok: true, result: { opened: event.args.agent_id } });
   });
 
   const res = await app.inject({
@@ -301,11 +301,11 @@ test("POST /router opens the hand-off's chat on the Hath device Ankur spoke from
     payload: { content: "budget", node_name: "macbook" },
   });
   assert.equal(res.statusCode, 201, res.body);
-  assert.match(String(dwar.completeCalls[0]?.messages[0]?.content), /^\[From: Ankur, in Hath on macbook\]\nbudget$/);
+  assert.match(String(dwar.completeCalls[0]?.messages[0]?.content), /^\[From: Ankur, on device macbook\]\nbudget$/);
   assert.equal(commands.length, 1);
-  const command = commands[0] as Extract<RuntimeEvent, { type: "hath_command" }>;
+  const command = commands[0] as Extract<RuntimeEvent, { type: "device_command" }>;
   assert.equal(command.node_name, "macbook");
-  assert.equal(command.tool, "hath_open_chat");
+  assert.equal(command.tool, "device_open_chat");
   assert.deepEqual(command.args, { agent_id: "finance-specialist" });
 
   await runtime.waitUntilIdle();
@@ -413,7 +413,7 @@ test("POST /tools/:name/execute as router spawn_agent creates a root", async () 
 
   const res = await app.inject({
     method: "POST",
-    url: "/tools/dimaag_spawn_agent/execute",
+    url: "/tools/hath_spawn_agent/execute",
     payload: {
       as_agent_id: "router",
       id: "finance-specialist",

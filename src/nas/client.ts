@@ -4,7 +4,7 @@ import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
 import { z } from "zod";
 import type { Config } from "../config.js";
 import { NAS } from "../constants.js";
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 
 const createTerminalResponseSchema = z
   .object({
@@ -310,7 +310,7 @@ export function createNasClient(config: Config): NasClient {
         return Buffer.from(res.data as ArrayBuffer);
       });
       if (!Buffer.isBuffer(data)) {
-        throw new DimaagError(502, "nas", "Nas screenshot response is malformed");
+        throw new HathError(502, "nas", "Nas screenshot response is malformed");
       }
       return data;
     },
@@ -345,7 +345,7 @@ function omitUndefined(obj: Record<string, unknown>): Record<string, unknown> {
 function parseResponse<T>(schema: z.ZodType<T>, data: unknown): T {
   const parsed = schema.safeParse(data);
   if (!parsed.success) {
-    throw new DimaagError(502, "nas", "Nas response is malformed");
+    throw new HathError(502, "nas", "Nas response is malformed");
   }
   return parsed.data;
 }
@@ -400,27 +400,27 @@ const PASSTHROUGH_TYPES = new Set([
   "internal_error",
 ]);
 
-function mapNasError(err: unknown): DimaagError {
-  if (err instanceof DimaagError) {
+function mapNasError(err: unknown): HathError {
+  if (err instanceof HathError) {
     return err;
   }
   if (axios.isAxiosError(err)) {
     if (!err.response) {
-      return new DimaagError(502, "nas", "Nas is unreachable");
+      return new HathError(502, "nas", "Nas is unreachable");
     }
     const status = err.response.status;
     const data = err.response.data;
 
     const { type, message } = nasErrorParts(data);
     if (PASSTHROUGH_TYPES.has(type)) {
-      return new DimaagError(status, type, message);
+      return new HathError(status, type, message);
     }
     if (status >= 400 && status < 500) {
-      return new DimaagError(status, "nas", message);
+      return new HathError(status, "nas", message);
     }
-    return new DimaagError(502, "nas", `Nas failed: ${message}`);
+    return new HathError(502, "nas", `Nas failed: ${message}`);
   }
-  return new DimaagError(502, "nas", "Nas request failed");
+  return new HathError(502, "nas", "Nas request failed");
 }
 
 function nasErrorParts(data: unknown): { type: string; message: string } {

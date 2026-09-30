@@ -30,20 +30,20 @@ after(async () => {
   await handle.close();
 });
 
-const HATH_TOOLS = [
+const DEVICE_TOOLS = [
   "nas_list_clients",
-  "hath_get_info",
-  "hath_get_battery",
-  "hath_get_location",
-  "hath_get_network",
-  "hath_read_clipboard",
-  "hath_write_clipboard",
-  "hath_send_file",
+  "device_get_info",
+  "device_get_battery",
+  "device_get_location",
+  "device_get_network",
+  "device_read_clipboard",
+  "device_write_clipboard",
+  "device_send_file",
 ] as const;
 
-test("Hath tools are registered", async () => {
+test("device tools are registered", async () => {
   await resetRuntime(handle.sql, handle.db, config);
-  for (const name of HATH_TOOLS) {
+  for (const name of DEVICE_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
   assert.equal(allTools().length, 57);
@@ -89,12 +89,12 @@ test("nas_list_clients returns Nas mesh clients", async () => {
   assert.equal(body.clients[0].node_name, "ankur-phone");
 });
 
-test("hath_get_battery waits for client result over the command bus", async () => {
+test("device_get_battery waits for client result over the command bus", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
-    tools: ["hath_get_battery"],
+    tools: ["device_get_battery"],
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -108,12 +108,12 @@ test("hath_get_battery waits for client result over the command bus", async () =
   });
 
   const unsubscribe = runtime.events.subscribe((event) => {
-    if (event.type !== "hath_command") {
+    if (event.type !== "device_command") {
       return;
     }
     assert.equal(event.node_name, "ankur-phone");
-    assert.equal(event.tool, "hath_get_battery");
-    const accepted = runtime.hath.complete(event.command_id, {
+    assert.equal(event.tool, "device_get_battery");
+    const accepted = runtime.devices.complete(event.command_id, {
       ok: true,
       result: { percent: 81, charging: true },
     });
@@ -124,7 +124,7 @@ test("hath_get_battery waits for client result over the command bus", async () =
     const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
       type: "tool_use",
       id: "bat1",
-      name: "hath_get_battery",
+      name: "device_get_battery",
       input: { node_name: "ankur-phone" },
     });
     assert.equal(result.isError, false);
@@ -135,12 +135,12 @@ test("hath_get_battery waits for client result over the command bus", async () =
   }
 });
 
-test("hath_write_clipboard forwards text args and surfaces client errors", async () => {
+test("device_write_clipboard forwards text args and surfaces client errors", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
-    tools: ["hath_write_clipboard"],
+    tools: ["device_write_clipboard"],
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -154,12 +154,12 @@ test("hath_write_clipboard forwards text args and surfaces client errors", async
   });
 
   const unsubscribe = runtime.events.subscribe((event) => {
-    if (event.type !== "hath_command") {
+    if (event.type !== "device_command") {
       return;
     }
-    assert.equal(event.tool, "hath_write_clipboard");
+    assert.equal(event.tool, "device_write_clipboard");
     assert.deepEqual(event.args, { text: "hello" });
-    runtime.hath.complete(event.command_id, {
+    runtime.devices.complete(event.command_id, {
       ok: false,
       error: { type: "permission_denied", message: "clipboard blocked" },
     });
@@ -169,7 +169,7 @@ test("hath_write_clipboard forwards text args and surfaces client errors", async
     const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
       type: "tool_use",
       id: "clip1",
-      name: "hath_write_clipboard",
+      name: "device_write_clipboard",
       input: { node_name: "ankur-laptop", text: "hello" },
     });
     assert.equal(result.isError, true);

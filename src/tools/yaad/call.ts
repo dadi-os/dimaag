@@ -1,4 +1,4 @@
-import { DimaagError } from "../../errors.js";
+import { HathError } from "../../errors.js";
 import type { ToolExecResult } from "../shared.js";
 import { fail, ok } from "../shared.js";
 
@@ -11,7 +11,7 @@ export async function yaadToolCall<T>(
     const data = await fn();
     return ok(shape(data));
   } catch (err) {
-    if (err instanceof DimaagError) {
+    if (err instanceof HathError) {
       return fail(err.message);
     }
     throw err;

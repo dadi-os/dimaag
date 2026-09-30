@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "../types.js";
-import { hathToolCall } from "./call.js";
+import { deviceToolCall } from "./call.js";
 
 const input = z
   .object({
@@ -8,11 +8,11 @@ const input = z
   })
   .strict();
 
-/** Ask a Hath client for battery level and charging state. */
-export const getBattery = defineTool({
-  name: "hath_get_battery",
+/** Read the clipboard text on a device. */
+export const readClipboard = defineTool({
+  name: "device_read_clipboard",
   description:
-    "Get battery percent and charging state from a Hath client. Fails with capability_unsupported when the OS does not expose battery data.",
+    "Read the current clipboard text from a device. Fails with permission_denied when clipboard access is blocked.",
   input,
   inputSchema: {
     type: "object",
@@ -23,6 +23,6 @@ export const getBattery = defineTool({
     required: ["node_name"],
   },
   async handler(ctx, parsed) {
-    return hathToolCall(ctx, parsed.node_name, "hath_get_battery");
+    return deviceToolCall(ctx, parsed.node_name, "device_read_clipboard");
   },
 });

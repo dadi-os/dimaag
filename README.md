@@ -1,6 +1,6 @@
-# Dimaag
+# Hath
 
-Agent runtime for dadi. It owns agent identity, transcripts, the dual-lane loop, inter-agent messaging, and the audit log. Every model call goes to Dwar. Dimaag never talks to a provider. Unauthenticated; private mesh only.
+Agent runtime for dadi. It owns agent identity, transcripts, the dual-lane loop, inter-agent messaging, and the audit log. Every model call goes to Dwar. Hath never talks to a provider. Unauthenticated; private mesh only.
 
 ## Dependencies
 
@@ -15,7 +15,7 @@ Agent runtime for dadi. It owns agent identity, transcripts, the dual-lane loop,
 ## Layout
 
 ```
-dimaag/
+hath/
   src/
     app.ts, config.ts, logging.ts, errors.ts, constants.ts
     db/           Drizzle, migrate, messages, agent logs
@@ -26,7 +26,7 @@ dimaag/
     nas/          Nas axios client (terminals + filesystem + browsers)
     browser/      Playwright CDP driver for Nas Chromium
     runtime/      dual-lane engine, transcript cache, events, locks
-    tools/        grantable tool registry (dimaag + yaad + ghar + chaavi + nas + browser)
+    tools/        grantable tool registry (hath + yaad + ghar + chaavi + nas + browser)
     routers/      HTTP routes + schemas
     types/        domain types
   test/
@@ -41,15 +41,15 @@ dimaag/
 
 Topology is hardcoded in `src/constants.ts`.
 
-`DATABASE_URL` is required at startup (no empty default). Nas injects it in compose and on the appliance (`postgres://dimaag:dimaag@dimaag-postgres:5432/dimaag`). There is no Dimaag `.env` — Postgres is not Preferences-editable.
+`DATABASE_URL` is required at startup (no empty default). Nas injects it in compose and on the appliance (`postgres://hath:hath@hath-postgres:5432/hath`). There is no Hath `.env` — Postgres is not Preferences-editable; `.env.example` documents the variable.
 
 ## Local run
 
 ```sh
 cd ../nas
-docker compose up dimaag dimaag-postgres
-docker compose run --rm dimaag npm run db:migrate
-docker compose run --rm dimaag npm test
+docker compose up hath hath-postgres
+docker compose run --rm hath npm run db:migrate
+docker compose run --rm hath npm test
 ```
 
 Migrations run schema SQL and sync the tool registry. They do not grant tools. The router is `POST /router`, not an agents row.
@@ -59,27 +59,27 @@ Migrations run schema SQL and sync the tool registry. They do not grant tools. T
 | Workflow | When | What |
 | --- | --- | --- |
 | `ci.yml` → `ci` | PR + push to `main` | Postgres service, migrate, `npm test`, build images |
-| `ci.yml` → `publish` | `main` after `ci` | Push `ghcr.io/<owner>/dimaag:{latest,sha}` |
+| `ci.yml` → `publish` | `main` after `ci` | Push `ghcr.io/<owner>/hath:{latest,sha}` |
 
 ## Logging / error codes
 
-Logs follow the nas JSON contract (`service=dimaag`, request summary, `code` on errors). Default Fastify access logging is off.
+Logs follow the nas JSON contract (`service=hath`, request summary, `code` on errors). Default Fastify access logging is off.
 
 HTTP errors: `{ "error": { "type": "<code>", "message": "..." } }`. Shared codes include `invalid_request`, `not_found`, `upstream_unreachable`, `internal_error`. Domain codes include `dwar`, `yaad`, `ghar`, `chaavi`, `vault_unconfigured`, `vault_unreachable`, `nas`, `conflict`, `stale_ref`. See nas README for the shared catalog (`busy`, `forbidden`, `binary_file`, …).
 
 ## Agents
 
-Every `agents` row is an agent. The router is not a row — it is `POST /router`. Agent primary keys are immutable lowercase kebab-case ids (`browser-manager`); there is no separate name column. API responses still expose `name` as an alias of `id` for Hath/roster compat. Root agents have `parent_agent_id` null: they are the router's children. Nested workers point at a real parent. `GET /agents` includes ephemeral `running` (lane locks) and `sessions` (Nas browsers and terminals the agent recently drove). Spawn/list do not attach; worker tools that take `browser_id` or `terminal_id` do. Both maps die with the process.
+Every `agents` row is an agent. The router is not a row — it is `POST /router`. Agent primary keys are immutable lowercase kebab-case ids (`browser-manager`); there is no separate name column. API responses still expose `name` as an alias of `id` for desktop/roster compat. Root agents have `parent_agent_id` null: they are the router's children. Nested workers point at a real parent. `GET /agents` includes ephemeral `running` (lane locks) and `sessions` (Nas browsers and terminals the agent recently drove). Spawn/list do not attach; worker tools that take `browser_id` or `terminal_id` do. Both maps die with the process.
 
 ## Router
 
-`POST /router` is Dadi's translator: Ankur says what he wants, and the router picks the owner, writes the message he would send, sends it as him, and opens that chat in Hath. It is not an agent and not a conversation. The router is the null identity — the same as the user — so every message it sends lands in an agent's thread as `from_agent_id` null, written as Ankur. The router is ephemeral: it has no transcript and carries nothing between runs. Each request:
+`POST /router` is Dadi's translator: Ankur says what he wants, and the router picks the owner, writes the message he would send, sends it as him, and opens that chat on his device. It is not an agent and not a conversation. The router is the null identity — the same as the user — so every message it sends lands in an agent's thread as `from_agent_id` null, written as Ankur. The router is ephemeral: it has no transcript and carries nothing between runs. Each request:
 
-1. Writes an audit row (`agent_logs`, router lane, `message` / `receive`) holding the utterance and, when Hath sent it, `node_name`. It is not stored as a message.
-2. Runs the router lane: the same step loop as agent lanes, calling Dwar `POST /chat/complete` (context-free on Dwar's side). System is `prompts/system.md` + `prompts/router.md` + identity + the active root agents; messages are exactly one turn, this utterance (headed `[From: Ankur, in Hath on <node_name>]` when the body carries `node_name`) — no earlier run, nothing sent as Ankur, no reply to him, and nothing that arrives mid-run. What is underway it finds with its tools. Nothing in code caps the loop; it ends when the model calls `yield`.
+1. Writes an audit row (`agent_logs`, router lane, `message` / `receive`) holding the utterance and, when a device sent it, `node_name`. It is not stored as a message.
+2. Runs the router lane: the same step loop as agent lanes, calling Dwar `POST /chat/complete` (context-free on Dwar's side). System is `prompts/system.md` + `prompts/router.md` + identity + the active root agents; messages are exactly one turn, this utterance (headed `[From: Ankur, on device <node_name>]` when the body carries `node_name`) — no earlier run, nothing sent as Ankur, no reply to him, and nothing that arrives mid-run. What is underway it finds with its tools. Nothing in code caps the loop; it ends when the model calls `yield`.
 3. Returns `201 { messages: [{ to_agent_id, content, seq, created_at }] }` — every message it sent, in order (may be empty).
 
-Router tools (hardcoded, not grants): `send_message` (deliver as Ankur; wakes a dormant recipient), `list_agents`, `recall_memory`, `dimaag_spawn_agent` (creates a root), `hath_open_chat` (opens a thread in Ankur's Hath on that device; router-only, never granted), and the embedded agent-management tools — `grant_tool` / `revoke_tool` on root agents only, `get_agent` / `get_logs` on any agent, `list_tools`. It cannot modify agents: agents reshape themselves. Its model turns and tool results log to `agent_logs` with a null `agent_id` on the `router` lane. The router's `get_logs` must name an agent; only the user (CLI, no `agent_id`) reads the null identity's rows — the router's turns plus every message sent by or to Ankur. Runs are serialized.
+Router tools (hardcoded, not grants): `send_message` (deliver as Ankur; wakes a dormant recipient), `list_agents`, `recall_memory`, `hath_spawn_agent` (creates a root), `device_open_chat` (opens a thread in Ankur's dadi app on that device; router-only, never granted), and the embedded agent-management tools — `grant_tool` / `revoke_tool` on root agents only, `get_agent` / `get_logs` on any agent, `list_tools`. It cannot modify agents: agents reshape themselves. Its model turns and tool results log to `agent_logs` with a null `agent_id` on the `router` lane. The router's `get_logs` must name an agent; only the user (CLI, no `agent_id`) reads the null identity's rows — the router's turns plus every message sent by or to Ankur. Runs are serialized.
 
 SSE: `router_started` / `router_finished` / `router_failed`. After a route, each thread's `lane_*` and `message` events take over.
 
@@ -95,7 +95,7 @@ Transcript is in-process and shared. Conversation starts on inbound message, rea
 
 Both lanes share one **wake** per agent (`src/runtime/wake.ts`). It starts from the transcript frozen at the wake's first call, then records every step either lane takes, whole and in order: the model turn (thinking, text and tool calls, tagged with the provider and lane that produced it) followed by its tool results, plus messages that arrive mid-wake as one `[Arrived during this wake]` turn. Nothing is cleared or shortened while the wake lasts, and there is no step limit. Each lane sends the whole wake on every call, so conversation sees reasoning's thinking, calls and results (and the reverse); Dwar replays each provider's own turns verbatim and translates the other lane's. Two kinds of turn are private to one lane: steers (reasoning only) and send_message intents (conversation only). A wake lasts while any lane run for the agent is queued or running; when the last one finishes it is dropped, and the next wake starts from the transcript alone. Earlier turns never change mid-wake — Dwar caches the history prefix, so a byte-stable history is what keeps long wakes cheap. A reasoning wake that throws is reported to the agent's parent (Ankur for a root agent) as a `[runtime]` message, which also wakes the parent.
 
-Every Dwar call sends `X-Dadi-Caller` (`dimaag/<agent id>`, `dimaag/router`, `dimaag/attachments`) so Dwar's inference log attributes tokens; `response` logs carry the full usage including cache reads and writes.
+Every Dwar call sends `X-Dadi-Caller` (`hath/<agent id>`, `hath/router`, `hath/attachments`) so Dwar's inference log attributes tokens; `response` logs carry the full usage including cache reads and writes.
 
 Every system prompt starts with the shared system doctrine (`prompts/system.md`), then the charter (the agent's stored prompt), its identity, and its active children. Assembled context always includes a lane block (conversation manages reasoning via `steer_reasoning`, including `terminate` to halt the next tool call; conversation must not claim grants are missing) and an identity/routing block: agent id, parent (or root), point-of-contact messaging for the job, and grant escalation to the parent when the agent is a child. This is prompt guidance only — `send_message` / `dispatch_message` do not enforce it.
 
@@ -133,7 +133,7 @@ Grantable vault tools. Metadata may reach the model; passwords, passkey keys, an
 
 ### Terminal (shell + files)
 
-Thin clients over Nas. Shell is the run-a-command mechanism; file tools are the file-manipulation mechanism — no file IO through the shell by design. Terminal ids are handed off by the spawning agent (prompt or message); Dimaag does not enforce ownership.
+Thin clients over Nas. Shell is the run-a-command mechanism; file tools are the file-manipulation mechanism — no file IO through the shell by design. Terminal ids are handed off by the spawning agent (prompt or message); Hath does not enforce ownership.
 
 | tool | holder | Nas route |
 | --- | --- | --- |
@@ -188,27 +188,27 @@ Host ops via Nas HTTP. System logs are Loki (`nas_get_logs`); agent cognition is
 | `nas_provision` | `POST /provision` |
 | `nas_list_clients` | `GET /clients` |
 
-### Hath (remote clients)
+### Devices (desktop and phone apps)
 
-Reverse RPC over SSE `hath_command` + `POST /hath/commands/:id/result`. Discover `node_name` with `nas_list_clients` first.
+Reverse RPC over SSE `device_command` + `POST /devices/commands/:id/result`. Discover `node_name` with `nas_list_clients` first.
 
 | tool | notes |
 | --- | --- |
-| `hath_get_info` | platform, OS/app version, timezone |
-| `hath_get_battery` | percent + charging |
-| `hath_get_location` | lat/lng/accuracy/timestamp + address when available |
-| `hath_get_network` | mesh + connection type |
-| `hath_read_clipboard` / `hath_write_clipboard` | clipboard text |
-| `hath_send_file` | write into OS Downloads; returns path |
+| `device_get_info` | platform, OS/app version, timezone |
+| `device_get_battery` | percent + charging |
+| `device_get_location` | lat/lng/accuracy/timestamp + address when available |
+| `device_get_network` | mesh + connection type |
+| `device_read_clipboard` / `device_write_clipboard` | clipboard text |
+| `device_send_file` | write into OS Downloads; returns path |
 
-### Dimaag (meta)
+### Hath (meta)
 
 Grantable (a job, not a general rule):
 
 | tool | notes |
 | --- | --- |
-| `dimaag_spawn_agent` | create a child (a root when the router calls it); makes an agent a manager |
-| `dimaag_schedule_message` / `dimaag_list_schedules` / `dimaag_cancel_schedule` | durable schedules |
+| `hath_spawn_agent` | create a child (a root when the router calls it); makes an agent a manager |
+| `hath_schedule_message` / `hath_list_schedules` / `hath_cancel_schedule` | durable schedules |
 
 Embedded in every reasoning lane (never granted, never in the tools table):
 
@@ -222,13 +222,13 @@ Embedded in every reasoning lane (never granted, never in the tools table):
 
 ## CLI
 
-The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the appliance). It invokes this registry over HTTP (`GET /tools`, `POST /tools/:name/execute`). Requires `DIMAAG_URL` (no default). Execute runs as the user unless a caller identity is given: `--as-agent <kebab-id>` or `--as-router`. Agent callers must be active and hold a grant for the tool. `as_agent_id: "router"` is limited to the router's tools (`dimaag_spawn_agent`, `grant_tool`, `revoke_tool`, `get_agent`, `get_logs`, `list_tools`). Embedded tools can be executed by name too; agents need no grant for them. Omitting `as_agent_id` runs as the user: any tool, no grant or active check (human / ops).
+The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the appliance). It invokes this registry over HTTP (`GET /tools`, `POST /tools/:name/execute`). Requires `HATH_URL` (no default). Execute runs as the user unless a caller identity is given: `--as-agent <kebab-id>` or `--as-router`. Agent callers must be active and hold a grant for the tool. `as_agent_id: "router"` is limited to the router's tools (`hath_spawn_agent`, `grant_tool`, `revoke_tool`, `get_agent`, `get_logs`, `list_tools`). Embedded tools can be executed by name too; agents need no grant for them. Omitting `as_agent_id` runs as the user: any tool, no grant or active check (human / ops).
 
 ## Persistence
 
-`agents`, `agent_logs`, `messages`, and `scheduled_messages` survive restart. `messages` is the source of truth for human↔agent chat and the rolling lane transcript (at least the last `[runtime].transcript_window_messages` turns, default 40; the window's start advances in steps of `transcript_window_step_messages` so the cached prefix survives new messages). Older turns remain in `agent_logs` / `dimaag_get_logs`. Each `agent_logs` row is one of: `response` — one model call's full output (`provider`, `stop_reason`, `usage`, and `content` blocks in provider order: `thinking` / `redacted_thinking`, `text`, `tool_use`), written before its tools run; `tool_result` — one tool's outcome (`tool_use_id`, `name`, `content`, `is_error`, plus audit fields such as `browser_id`); `message` — a delivered message. Wakes, locks, steer/intent queues, host `sessions`, and the event stream do not survive. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
+`agents`, `agent_logs`, `messages`, and `scheduled_messages` survive restart. `messages` is the source of truth for human↔agent chat and the rolling lane transcript (at least the last `[runtime].transcript_window_messages` turns, default 40; the window's start advances in steps of `transcript_window_step_messages` so the cached prefix survives new messages). Older turns remain in `agent_logs` / `hath_get_logs`. Each `agent_logs` row is one of: `response` — one model call's full output (`provider`, `stop_reason`, `usage`, and `content` blocks in provider order: `thinking` / `redacted_thinking`, `text`, `tool_use`), written before its tools run; `tool_result` — one tool's outcome (`tool_use_id`, `name`, `content`, `is_error`, plus audit fields such as `browser_id`); `message` — a delivered message. Wakes, locks, steer/intent queues, host `sessions`, and the event stream do not survive. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
 
-Schedule tools (`dimaag_schedule_message`, `dimaag_list_schedules`, `dimaag_cancel_schedule`) persist one-shot and recurring deliveries; the in-process scheduler ticks from `[schedule].tick_seconds` in `config.toml` (wall clock uses `TIMEZONE` in `constants.ts`).
+Schedule tools (`hath_schedule_message`, `hath_list_schedules`, `hath_cancel_schedule`) persist one-shot and recurring deliveries; the in-process scheduler ticks from `[schedule].tick_seconds` in `config.toml` (wall clock uses `TIMEZONE` in `constants.ts`).
 
 ## Routes
 

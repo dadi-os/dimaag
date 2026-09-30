@@ -35,6 +35,7 @@ export function advanceRunAt(runAt: Date, intervalMinutes: number): Date {
 
 type FiredRow = ScheduledMessageRow & { firedAt: Date };
 
+/** Polls scheduled messages every `tickSeconds`, delivers the due ones into transcripts, and wakes each recipient's conversation lane. */
 export function createScheduler(opts: {
   db: Db;
   transcript: TranscriptStore;

@@ -6,7 +6,7 @@ import { buildApp } from "../src/app.js";
 import { migrate } from "../src/db/migrate.js";
 import { writeAgentLog } from "../src/db/logs.js";
 import { agentLogs } from "../src/db/schema.js";
-import { DimaagError } from "../src/errors.js";
+import { HathError } from "../src/errors.js";
 import { deliverAgentMessage } from "../src/runtime/deliver.js";
 import { createRuntime } from "../src/runtime/engine.js";
 import { EventBus, type RuntimeEvent } from "../src/runtime/events.js";
@@ -445,10 +445,10 @@ test("GET /agents drops sessions when close tools error", async () => {
   const nas = mockNas({
     browserScreenshot: () => Buffer.from("png"),
     closeBrowser: () => {
-      throw new DimaagError(404, "not_found", "browser already gone");
+      throw new HathError(404, "not_found", "browser already gone");
     },
     closeTerminal: () => {
-      throw new DimaagError(404, "not_found", "terminal already gone");
+      throw new HathError(404, "not_found", "terminal already gone");
     },
   });
   const runtime = createRuntime({

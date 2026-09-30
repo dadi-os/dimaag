@@ -66,7 +66,7 @@ export type ThreadSummary = {
 };
 
 /**
- * Conversation summaries for human↔agent threads (Hath sidebar shape).
+ * Conversation summaries for human↔agent threads (desktop sidebar shape).
  * One row per agent that has at least one human-thread message.
  */
 export async function listThreads(db: Db): Promise<ThreadSummary[]> {

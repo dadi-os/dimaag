@@ -39,7 +39,7 @@ test("integration: spawn terminal, echo, edit file, close", async (t) => {
     assert.equal(exec.data.exit_code, 0);
     assert.match(String(exec.data.output), /hi/);
 
-    const filePath = `${cwd}/dimaag-nas-integration.txt`;
+    const filePath = `${cwd}/hath-nas-integration.txt`;
     await http.post("/fs/write", { path: filePath, content: "alpha\n" });
     const edited = await http.post("/fs/edit", {
       path: filePath,

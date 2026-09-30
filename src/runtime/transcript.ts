@@ -14,6 +14,7 @@ export type TranscriptEntry = {
   createdAt: Date;
 };
 
+/** In-memory inbox and outbox of messages per agent (null is the user), ordered by a monotonic seq. */
 export class TranscriptStore {
   private counter = 0;
   private readonly inbox = new Map<string | null, TranscriptEntry[]>();

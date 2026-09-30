@@ -1,4 +1,4 @@
-import { DimaagError } from "../../errors.js";
+import { HathError } from "../../errors.js";
 import type { ToolExecResult } from "../shared.js";
 import { ok } from "../shared.js";
 
@@ -16,7 +16,7 @@ export async function nasToolCall<T>(
     const fields = typeof audit === "function" ? audit(data) : audit;
     return ok(shape(data), fields);
   } catch (err) {
-    if (err instanceof DimaagError) {
+    if (err instanceof HathError) {
       const fields = typeof audit === "function" ? {} : audit;
       return { content: `${err.type}: ${err.message}`, isError: true, audit: fields };
     }

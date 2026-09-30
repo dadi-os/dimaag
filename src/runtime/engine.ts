@@ -10,7 +10,7 @@
 import { eq } from "drizzle-orm";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 import { writeAgentLog } from "../db/logs.js";
 import { agents } from "../db/schema.js";
 import { BrowserDriver } from "../browser/driver.js";
@@ -30,7 +30,7 @@ import { arrivalsSince, assembleContext, assembleRouterContext } from "./context
 import { deliverAgentMessage } from "./deliver.js";
 import { runConversationLoop } from "./conversation.js";
 import { EventBus } from "./events.js";
-import { HathGateway } from "./hath.js";
+import { DeviceGateway } from "./devices.js";
 import { IntentQueue } from "./intents.js";
 import { LaneLocks } from "./locks.js";
 import { runReasoningLoop } from "./reasoning.js";
@@ -58,7 +58,7 @@ export type Runtime = {
   intents: IntentQueue;
   transcript: TranscriptStore;
   events: EventBus;
-  hath: HathGateway;
+  devices: DeviceGateway;
   browsers: BrowserDriver;
   sessions: HostSessions;
   scheduler: Scheduler;
@@ -90,7 +90,7 @@ export function createRuntime(opts: {
   const intents = new IntentQueue();
   const transcript = new TranscriptStore();
   const events = new EventBus(opts.log);
-  const hath = new HathGateway(events, opts.config.hath.timeout_ms);
+  const devices = new DeviceGateway(events, opts.config.devices.timeout_ms);
   const browsers = new BrowserDriver(opts.nas, opts.config, opts.log);
   const sessions = new HostSessions();
   const toolDebounce = new ToolDebounce({
@@ -150,7 +150,7 @@ export function createRuntime(opts: {
     intents,
     transcript,
     events,
-    hath,
+    devices,
     browsers,
     sessions,
     scheduler,
@@ -177,7 +177,7 @@ export function createRuntime(opts: {
       nas: opts.nas,
       dwar: opts.dwar,
       browsers,
-      hath,
+      devices,
       steer,
       intents,
       locks,
@@ -262,7 +262,7 @@ export function createRuntime(opts: {
       .from(agents)
       .where(eq(agents.id, agentId));
     if (!agent) {
-      throw new DimaagError(404, "not_found", `agent ${agentId} not found`);
+      throw new HathError(404, "not_found", `agent ${agentId} not found`);
     }
     await deliverAgentMessage(
       { db: opts.db, transcript, events, enqueueConversation },
@@ -365,7 +365,7 @@ export function createRuntime(opts: {
             nodeName,
           }),
         arrivalsSince: (afterSeq: number) => ({ turn: null, throughSeq: afterSeq }),
-        call: (request: DwarChatRequest) => opts.dwar.complete(request, "dimaag/router"),
+        call: (request: DwarChatRequest) => opts.dwar.complete(request, "hath/router"),
         executeTool: async (call: DwarToolUseBlock) => {
           const result = await helpers.exec(call);
           if (call.name === SEND_MESSAGE && !result.isError) {
@@ -394,7 +394,7 @@ export function createRuntime(opts: {
   function reasoningDeps(agentId: string) {
     return {
       ...stepDeps(agentId, "reasoning"),
-      call: (request: DwarChatRequest) => opts.dwar.reason(request, `dimaag/${agentId}`),
+      call: (request: DwarChatRequest) => opts.dwar.reason(request, `hath/${agentId}`),
       steer,
     };
   }
@@ -402,7 +402,7 @@ export function createRuntime(opts: {
   function conversationDeps(agentId: string) {
     return {
       ...stepDeps(agentId, "conversation"),
-      call: (request: DwarChatRequest) => opts.dwar.converse(request, `dimaag/${agentId}`),
+      call: (request: DwarChatRequest) => opts.dwar.converse(request, `hath/${agentId}`),
       intents,
     };
   }

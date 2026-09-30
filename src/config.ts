@@ -52,7 +52,7 @@ const fileSchema = z.object({
     retry_attempts: z.number().int().positive(),
     backoff_ms: z.array(z.number().min(0)).nonempty(),
   }),
-  hath: z.object({
+  devices: z.object({
     timeout_ms: z.number().int().positive(),
   }),
   browser: z.object({
@@ -86,7 +86,7 @@ export type Config = {
   ghar: FileConfig["ghar"];
   chaavi: FileConfig["chaavi"];
   nas: FileConfig["nas"];
-  hath: FileConfig["hath"];
+  devices: FileConfig["devices"];
   browser: FileConfig["browser"];
   schedule: FileConfig["schedule"];
 };
@@ -145,7 +145,7 @@ export function loadConfig(): Config {
     ghar: file.ghar,
     chaavi: file.chaavi,
     nas: file.nas,
-    hath: file.hath,
+    devices: file.devices,
     browser: file.browser,
     schedule: file.schedule,
   };

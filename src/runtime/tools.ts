@@ -7,7 +7,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { z, ZodError } from "zod";
 import { agentIdOrUserSchema, agentIdSchema } from "../agent-id.js";
 import { agents } from "../db/schema.js";
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 import type { DwarTool, DwarToolUseBlock } from "../types/domain.js";
 import {
   DISPATCH_MESSAGE,
@@ -177,7 +177,7 @@ export const yieldTool: DwarTool = {
 export const waitTool: DwarTool = {
   name: WAIT,
   description:
-    "Pause your reasoning lane for a number of seconds, then resume automatically where you left off. Use when you must wait for something to settle — a page to load, a job or another agent to finish, a reply you expect shortly — instead of burning turns polling. Unlike yield, this does NOT end your turn: reasoning continues after the pause with no model calls spent while waiting. Unlike dimaag_schedule_message, it waits here rather than sending a message to another agent later. A steer or terminate cuts the wait short. Max " +
+    "Pause your reasoning lane for a number of seconds, then resume automatically where you left off. Use when you must wait for something to settle — a page to load, a job or another agent to finish, a reply you expect shortly — instead of burning turns polling. Unlike yield, this does NOT end your turn: reasoning continues after the pause with no model calls spent while waiting. Unlike hath_schedule_message, it waits here rather than sending a message to another agent later. A steer or terminate cuts the wait short. Max " +
     `${WAIT_MAX_SECONDS}s; for longer or cross-agent delays, use scheduling.`,
   input_schema: waitInputSchema,
 };
@@ -238,7 +238,7 @@ const listAgentsInput = z
 
 /** Map an unexpected throw into a tool error so the lane transcript stays valid. */
 export function unexpectedToolError(err: unknown): ToolExecResult {
-  if (err instanceof DimaagError) {
+  if (err instanceof HathError) {
     return fail(`${err.type}: ${err.message}`);
   }
   if (err instanceof Error) {

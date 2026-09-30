@@ -4,7 +4,7 @@ import axios, { type AxiosInstance } from "axios";
 import { z } from "zod";
 import type { Config } from "../config.js";
 import { DWAR_BASE_URL } from "../constants.js";
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 import type { DwarChatRequest, DwarChatResponse, DwarUsage } from "../types/domain.js";
 
 const chatBlockSchema = z.discriminatedUnion("type", [
@@ -58,8 +58,8 @@ export type DwarDescribeImageResponse = {
 };
 
 /**
- * Dwar surface used by Dimaag: lane chat, promptless complete, and image captioning.
- * `caller` is sent as X-Dadi-Caller (`dimaag/<agent id>`, `dimaag/router`, …) so Dwar's
+ * Dwar surface used by Hath: lane chat, promptless complete, and image captioning.
+ * `caller` is sent as X-Dadi-Caller (`hath/<agent id>`, `hath/router`, …) so Dwar's
  * inference log attributes each call's tokens to whoever spent them.
  */
 export type DwarClient = {
@@ -90,7 +90,7 @@ export function createDwarClient(config: Config): DwarClient {
     );
     const parsed = chatResponseSchema.safeParse(data);
     if (!parsed.success) {
-      throw new DimaagError(502, "dwar", "Dwar chat response is malformed");
+      throw new HathError(502, "dwar", "Dwar chat response is malformed");
     }
     return parsed.data;
   }
@@ -110,7 +110,7 @@ export function createDwarClient(config: Config): DwarClient {
     );
     const parsed = describeResponseSchema.safeParse(data);
     if (!parsed.success) {
-      throw new DimaagError(502, "dwar", "Dwar image describe response is malformed");
+      throw new HathError(502, "dwar", "Dwar image describe response is malformed");
     }
     return parsed.data;
   }
@@ -154,18 +154,18 @@ function isRetryable(err: unknown): boolean {
   return err.response.status >= 500;
 }
 
-function mapDwarError(err: unknown): DimaagError {
-  if (err instanceof DimaagError) {
+function mapDwarError(err: unknown): HathError {
+  if (err instanceof HathError) {
     return err;
   }
   if (axios.isAxiosError(err)) {
     if (!err.response) {
-      return new DimaagError(502, "upstream_unreachable", "Dwar is unreachable");
+      return new HathError(502, "upstream_unreachable", "Dwar is unreachable");
     }
     const message = dwarMessage(err.response.data);
-    return new DimaagError(502, "dwar", message);
+    return new HathError(502, "dwar", message);
   }
-  return new DimaagError(502, "dwar", "Dwar request failed");
+  return new HathError(502, "dwar", "Dwar request failed");
 }
 
 function dwarMessage(data: unknown): string {

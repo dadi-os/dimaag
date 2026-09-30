@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "../types.js";
-import { hathToolCall } from "./call.js";
+import { deviceToolCall } from "./call.js";
 
 const input = z
   .object({
@@ -11,11 +11,11 @@ const input = z
   })
   .strict();
 
-/** Save a file into a Hath client's default Downloads folder. */
+/** Save a file into a device's default Downloads folder. */
 export const sendFile = defineTool({
-  name: "hath_send_file",
+  name: "device_send_file",
   description:
-    "Write a file into the Hath client's OS Downloads folder. data is raw base64 (no data-URL prefix). Returns the absolute path written on the device.",
+    "Write a file into the device's OS Downloads folder. data is raw base64 (no data-URL prefix). Returns the absolute path written on the device.",
   input,
   inputSchema: {
     type: "object",
@@ -29,7 +29,7 @@ export const sendFile = defineTool({
     required: ["node_name", "filename", "media_type", "data"],
   },
   async handler(ctx, parsed) {
-    return hathToolCall(ctx, parsed.node_name, "hath_send_file", {
+    return deviceToolCall(ctx, parsed.node_name, "device_send_file", {
       filename: parsed.filename,
       media_type: parsed.media_type,
       data: parsed.data,

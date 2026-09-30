@@ -4,7 +4,7 @@ import axios, { type AxiosInstance } from "axios";
 import { z } from "zod";
 import type { Config } from "../config.js";
 import { YAAD_BASE_URL } from "../constants.js";
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 
 const nodeKind = z.enum(["person", "memory", "plan", "place"]);
 
@@ -134,7 +134,7 @@ export function createYaadClient(config: Config): YaadClient {
 function parseResponse<T>(schema: z.ZodType<T>, data: unknown): T {
   const parsed = schema.safeParse(data);
   if (!parsed.success) {
-    throw new DimaagError(502, "yaad", "Yaad response is malformed");
+    throw new HathError(502, "yaad", "Yaad response is malformed");
   }
   return parsed.data;
 }
@@ -170,22 +170,22 @@ function isRetryable(err: unknown): boolean {
   return err.response.status >= 500;
 }
 
-function mapYaadError(err: unknown): DimaagError {
-  if (err instanceof DimaagError) {
+function mapYaadError(err: unknown): HathError {
+  if (err instanceof HathError) {
     return err;
   }
   if (axios.isAxiosError(err)) {
     if (!err.response) {
-      return new DimaagError(502, "upstream_unreachable", "Yaad is unreachable");
+      return new HathError(502, "upstream_unreachable", "Yaad is unreachable");
     }
     const status = err.response.status;
     const message = yaadMessage(err.response.data);
     if (status >= 400 && status < 500) {
-      return new DimaagError(status, "yaad", message);
+      return new HathError(status, "yaad", message);
     }
-    return new DimaagError(502, "yaad", `Yaad failed: ${message}`);
+    return new HathError(502, "yaad", `Yaad failed: ${message}`);
   }
-  return new DimaagError(502, "yaad", "Yaad request failed");
+  return new HathError(502, "yaad", "Yaad request failed");
 }
 
 function yaadMessage(data: unknown): string {

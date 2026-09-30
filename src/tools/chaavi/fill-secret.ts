@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { DimaagError } from "../../errors.js";
+import { HathError } from "../../errors.js";
 import { fail, ok } from "../shared.js";
 import { defineTool } from "../types.js";
 
@@ -92,7 +92,7 @@ export const fillSecret = defineTool({
           leftover = ` secret staging file may remain at ${stagedPath} (cleanup failed: ${reason}); retry after terminal idle`;
         }
       }
-      if (err instanceof DimaagError) {
+      if (err instanceof HathError) {
         return fail(`${err.type}: ${err.message}${leftover}`);
       }
       throw err;

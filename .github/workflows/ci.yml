@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 concurrency:
-  group: dimaag-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: hath-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -17,36 +17,36 @@ jobs:
       postgres:
         image: postgres:18
         env:
-          POSTGRES_USER: dimaag
-          POSTGRES_PASSWORD: dimaag
-          POSTGRES_DB: dimaag
+          POSTGRES_USER: hath
+          POSTGRES_PASSWORD: hath
+          POSTGRES_DB: hath
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U dimaag -d dimaag"
+          --health-cmd "pg_isready -U hath -d hath"
           --health-interval 5s --health-timeout 5s --health-retries 10
 
     steps:
       - uses: actions/checkout@v6
 
       - name: Build dev image
-        run: docker build --target dev -t dimaag-dev .
+        run: docker build --target dev -t hath-dev .
 
       - name: Migrate
         run: |
           docker run --rm --network host \
-            -e DATABASE_URL=postgres://dimaag:dimaag@localhost:5432/dimaag \
+            -e DATABASE_URL=postgres://hath:hath@localhost:5432/hath \
             -v "$PWD:/app" -v /app/node_modules \
-            dimaag-dev npm run db:migrate
+            hath-dev npm run db:migrate
 
       - name: Test
         run: |
           docker run --rm --network host \
-            -e DATABASE_URL=postgres://dimaag:dimaag@localhost:5432/dimaag \
+            -e DATABASE_URL=postgres://hath:hath@localhost:5432/hath \
             -v "$PWD:/app" -v /app/node_modules \
-            dimaag-dev npm test
+            hath-dev npm test
 
       - name: Build production image
-        run: docker build --target production -t dimaag-prod .
+        run: docker build --target production -t hath-prod .
 
   publish:
     needs: ci
@@ -76,5 +76,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/dimaag:latest
-            ghcr.io/${{ github.repository_owner }}/dimaag:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/hath:latest
+            ghcr.io/${{ github.repository_owner }}/hath:${{ github.sha }}

@@ -71,9 +71,9 @@ after(async () => {
 
 test("allTools includes the three schedule tools", async () => {
   assert.equal(allTools().length, 57);
-  assert.equal(findTool("dimaag_schedule_message")?.name, "dimaag_schedule_message");
-  assert.equal(findTool("dimaag_list_schedules")?.name, "dimaag_list_schedules");
-  assert.equal(findTool("dimaag_cancel_schedule")?.name, "dimaag_cancel_schedule");
+  assert.equal(findTool("hath_schedule_message")?.name, "hath_schedule_message");
+  assert.equal(findTool("hath_list_schedules")?.name, "hath_list_schedules");
+  assert.equal(findTool("hath_cancel_schedule")?.name, "hath_cancel_schedule");
 });
 
 test("due one-shot delivers once and deletes the row", async () => {
@@ -508,7 +508,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
-    tools: ["dimaag_schedule_message"],
+    tools: ["hath_schedule_message"],
   });
   const peerId = await insertAgent(handle.db, {
     name: "peer-agent",
@@ -530,7 +530,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const self = await executeTool(ctx, {
     type: "tool_use",
     id: "s-self",
-    name: "dimaag_schedule_message",
+    name: "hath_schedule_message",
     input: {
       to_agent_id: fromId,
       content: "no",
@@ -543,7 +543,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const missing = await executeTool(ctx, {
     type: "tool_use",
     id: "s-missing",
-    name: "dimaag_schedule_message",
+    name: "hath_schedule_message",
     input: {
       to_agent_id: "missing-peer-agent",
       content: "no",
@@ -556,7 +556,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const past = await executeTool(ctx, {
     type: "tool_use",
     id: "s-past",
-    name: "dimaag_schedule_message",
+    name: "hath_schedule_message",
     input: {
       to_agent_id: peerId,
       content: "no",
@@ -569,7 +569,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const zero = await executeTool(ctx, {
     type: "tool_use",
     id: "s-zero",
-    name: "dimaag_schedule_message",
+    name: "hath_schedule_message",
     input: {
       to_agent_id: peerId,
       content: "no",
@@ -582,7 +582,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const ok = await executeTool(ctx, {
     type: "tool_use",
     id: "s-ok",
-    name: "dimaag_schedule_message",
+    name: "hath_schedule_message",
     input: {
       to_agent_id: peerId,
       content: "hello peer",
@@ -605,12 +605,12 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const creatorId = await insertWorker(handle.db, {
     name: "creator",
     systemPrompt: "creator",
-    tools: ["dimaag_list_schedules", "dimaag_cancel_schedule"],
+    tools: ["hath_list_schedules", "hath_cancel_schedule"],
   });
   const otherId = await insertWorker(handle.db, {
     name: "other",
     systemPrompt: "other",
-    tools: ["dimaag_cancel_schedule"],
+    tools: ["hath_cancel_schedule"],
   });
   const targetId = await insertAgent(handle.db, {
     name: "list-target",
@@ -652,7 +652,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const listed = await executeTool(runtime.toolContext(creatorId, "reasoning"), {
     type: "tool_use",
     id: "list",
-    name: "dimaag_list_schedules",
+    name: "hath_list_schedules",
     input: {},
   });
   assert.equal(listed.isError, false);
@@ -667,7 +667,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const denied = await executeTool(runtime.toolContext(otherId, "reasoning"), {
     type: "tool_use",
     id: "cancel-deny",
-    name: "dimaag_cancel_schedule",
+    name: "hath_cancel_schedule",
     input: { schedule_id: mine },
   });
   assert.equal(denied.isError, true);
@@ -676,7 +676,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const unknown = await executeTool(runtime.toolContext(creatorId, "reasoning"), {
     type: "tool_use",
     id: "cancel-unknown",
-    name: "dimaag_cancel_schedule",
+    name: "hath_cancel_schedule",
     input: { schedule_id: randomUUID() },
   });
   assert.equal(unknown.isError, true);
@@ -685,7 +685,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const cancelled = await executeTool(runtime.toolContext(creatorId, "reasoning"), {
     type: "tool_use",
     id: "cancel-ok",
-    name: "dimaag_cancel_schedule",
+    name: "hath_cancel_schedule",
     input: { schedule_id: mine },
   });
   assert.equal(cancelled.isError, false);

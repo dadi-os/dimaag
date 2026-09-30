@@ -5,6 +5,7 @@ import type { Db } from "./client.js";
 import { agentLogs } from "./schema.js";
 import type { Lane, LogEvent } from "../types/domain.js";
 
+/** Appends one event to an agent's (or the router's) durable log. */
 export async function writeAgentLog(
   db: Db,
   args: {

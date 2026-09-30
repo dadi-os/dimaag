@@ -4,7 +4,7 @@ import axios, { type AxiosInstance } from "axios";
 import { z } from "zod";
 import type { Config } from "../config.js";
 import { GHAR_BASE_URL } from "../constants.js";
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 
 const capability = z.enum([
   "switchable",
@@ -182,7 +182,7 @@ function serializeParams(params: Record<string, unknown>): string {
 function parseResponse<T>(schema: z.ZodType<T>, data: unknown): T {
   const parsed = schema.safeParse(data);
   if (!parsed.success) {
-    throw new DimaagError(502, "ghar", "Ghar response is malformed");
+    throw new HathError(502, "ghar", "Ghar response is malformed");
   }
   return parsed.data;
 }
@@ -225,13 +225,13 @@ function isRetryable(err: unknown): boolean {
   return err.response.status >= 500;
 }
 
-function mapGharError(err: unknown): DimaagError {
-  if (err instanceof DimaagError) {
+function mapGharError(err: unknown): HathError {
+  if (err instanceof HathError) {
     return err;
   }
   if (axios.isAxiosError(err)) {
     if (!err.response) {
-      return new DimaagError(502, "ghar", "Ghar is unreachable");
+      return new HathError(502, "ghar", "Ghar is unreachable");
     }
     const status = err.response.status;
     const { type, message } = gharErrorParts(err.response.data);
@@ -243,14 +243,14 @@ function mapGharError(err: unknown): DimaagError {
       type === "not_found" ||
       type === "invalid_request"
     ) {
-      return new DimaagError(status, type, message);
+      return new HathError(status, type, message);
     }
     if (status >= 400 && status < 500) {
-      return new DimaagError(status, "ghar", message);
+      return new HathError(status, "ghar", message);
     }
-    return new DimaagError(502, "ghar", `Ghar failed: ${message}`);
+    return new HathError(502, "ghar", `Ghar failed: ${message}`);
   }
-  return new DimaagError(502, "ghar", "Ghar request failed");
+  return new HathError(502, "ghar", "Ghar request failed");
 }
 
 function gharErrorParts(data: unknown): { type: string; message: string } {

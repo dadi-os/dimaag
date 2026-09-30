@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "../types.js";
-import { hathToolCall } from "./call.js";
+import { deviceToolCall } from "./call.js";
 
 const input = z
   .object({
@@ -9,11 +9,11 @@ const input = z
   })
   .strict();
 
-/** Write text onto a Hath client's clipboard. */
+/** Write text onto a device's clipboard. */
 export const writeClipboard = defineTool({
-  name: "hath_write_clipboard",
+  name: "device_write_clipboard",
   description:
-    "Replace the clipboard text on a Hath client with the given string.",
+    "Replace the clipboard text on a device with the given string.",
   input,
   inputSchema: {
     type: "object",
@@ -25,7 +25,7 @@ export const writeClipboard = defineTool({
     required: ["node_name", "text"],
   },
   async handler(ctx, parsed) {
-    return hathToolCall(ctx, parsed.node_name, "hath_write_clipboard", {
+    return deviceToolCall(ctx, parsed.node_name, "device_write_clipboard", {
       text: parsed.text,
     });
   },

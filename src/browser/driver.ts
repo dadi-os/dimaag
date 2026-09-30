@@ -13,7 +13,7 @@ import {
   type Page,
 } from "playwright-core";
 import type { Config } from "../config.js";
-import { DimaagError } from "../errors.js";
+import { HathError } from "../errors.js";
 import type { NasClient } from "../nas/client.js";
 import type { RuntimeLog } from "../runtime/engine.js";
 
@@ -122,7 +122,7 @@ export class BrowserDriver {
     const list = await this.nas.listBrowsers();
     const found = list.find((b) => b.id === browserId);
     if (!found || !found.cdp_url) {
-      throw new DimaagError(404, "not_found", `browser ${browserId} is not running`);
+      throw new HathError(404, "not_found", `browser ${browserId} is not running`);
     }
     this.cdpUrls.set(browserId, found.cdp_url);
     return found.cdp_url;
@@ -137,17 +137,17 @@ export class BrowserDriver {
     try {
       return await run();
     } catch (err) {
-      if (err instanceof DimaagError) {
+      if (err instanceof HathError) {
         throw err;
       }
       this.detach(browserId);
       try {
         return await run();
       } catch (err2) {
-        if (err2 instanceof DimaagError) {
+        if (err2 instanceof HathError) {
           throw err2;
         }
-        throw new DimaagError(404, "not_found", `browser ${browserId} is not running`);
+        throw new HathError(404, "not_found", `browser ${browserId} is not running`);
       }
     }
   }
@@ -223,7 +223,7 @@ export class BrowserDriver {
       if (tabId) {
         const page = pages.get(tabId);
         if (!page) {
-          throw new DimaagError(404, "not_found", `tab ${tabId} not found`);
+          throw new HathError(404, "not_found", `tab ${tabId} not found`);
         }
         this.applyTimeouts(page);
         return { page, tabId };
@@ -240,7 +240,7 @@ export class BrowserDriver {
       }
       const page = pages.get(preferred.targetId);
       if (!page) {
-        throw new DimaagError(404, "not_found", `tab ${preferred.targetId} not found`);
+        throw new HathError(404, "not_found", `tab ${preferred.targetId} not found`);
       }
       this.applyTimeouts(page);
       return { page, tabId: preferred.targetId };
@@ -323,7 +323,7 @@ export class BrowserDriver {
     const locator = page.locator(`[data-dadi-ref="${cssEscape(ref)}"]`);
     const count = await locator.count();
     if (count !== 1) {
-      throw new DimaagError(
+      throw new HathError(
         409,
         "stale_ref",
         `ref ${ref} resolved to ${count} element(s); take a fresh accessibility_tree`,
@@ -369,7 +369,7 @@ export class BrowserDriver {
 
   /**
    * Attach host files to a file input. Chromium runs on the Nas host and reads `paths` itself
-   * over CDP, so they are absolute host paths, never paths inside Dimaag. A ref on a file input
+   * over CDP, so they are absolute host paths, never paths inside Hath. A ref on a file input
    * receives the files directly; any other ref is clicked and the file chooser it opens receives
    * them. Resolves with the files as the input reports them after the change.
    */
@@ -392,7 +392,7 @@ export class BrowserDriver {
     if (isFileInput) {
       const handle = await locator.elementHandle();
       if (!handle) {
-        throw new DimaagError(409, "stale_ref", `ref ${ref} is gone; take a fresh accessibility_tree`);
+        throw new HathError(409, "stale_ref", `ref ${ref} is gone; take a fresh accessibility_tree`);
       }
       input = handle as ElementHandle<HTMLInputElement>;
     } else {
@@ -401,7 +401,7 @@ export class BrowserDriver {
     }
     const multiple = await input.evaluate((el) => el.multiple);
     if (paths.length > 1 && !multiple) {
-      throw new DimaagError(
+      throw new HathError(
         422,
         "invalid_request",
         `the file input behind ${ref} accepts one file; ${paths.length} were given`,
@@ -417,7 +417,7 @@ export class BrowserDriver {
       selector: `[data-dadi-upload="${marker}"]`,
     });
     if (nodeId === 0) {
-      throw new DimaagError(
+      throw new HathError(
         422,
         "invalid_request",
         `the file input behind ${ref} is inside a frame; navigate to the frame's URL and upload there`,
@@ -439,7 +439,7 @@ export class BrowserDriver {
       expected.some((name, i) => attached[i] !== name) ||
       files.some((file) => file.size === 0)
     ) {
-      throw new DimaagError(
+      throw new HathError(
         502,
         "internal_error",
         `upload did not attach as given: expected ${JSON.stringify(expected)}, input holds ${JSON.stringify(files)}`,
@@ -454,7 +454,7 @@ export class BrowserDriver {
     const pattern = posix.basename(path).replace(/[\\*?[\]{}]/g, "\\$&");
     const listed = await this.nas.glob({ pattern, cwd: dir, limit: 1 });
     if (listed.paths.length === 0) {
-      throw new DimaagError(404, "not_found", `no file at ${path} on the host`);
+      throw new HathError(404, "not_found", `no file at ${path} on the host`);
     }
   }
 
@@ -479,7 +479,7 @@ export class BrowserDriver {
       await locator.waitFor({ state: "visible", timeout });
       const count = await locator.count();
       if (count !== 1) {
-        throw new DimaagError(
+        throw new HathError(
           409,
           "stale_ref",
           `ref ${opts.ref} resolved to ${count} element(s); take a fresh accessibility_tree`,
@@ -551,11 +551,11 @@ export class BrowserDriver {
       });
       return { tab_id: resolved.tabId };
     } catch (err) {
-      if (err instanceof DimaagError) {
+      if (err instanceof HathError) {
         throw err;
       }
       const message = err instanceof Error ? err.message : "passkey inject failed";
-      throw new DimaagError(502, "internal_error", message);
+      throw new HathError(502, "internal_error", message);
     }
   }
 

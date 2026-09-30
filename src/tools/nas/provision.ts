@@ -12,7 +12,7 @@ const input = z
 export const provision = defineTool({
   name: "nas_provision",
   description:
-    "Mint a Headscale preauth credentials bundle for a new Hath device. Returns base64 bundle text for QR / paste provisioning.",
+    "Mint a Headscale preauth credentials bundle for a new device. Returns base64 bundle text for QR / paste provisioning.",
   input,
   inputSchema: {
     type: "object",

@@ -502,7 +502,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
   const missing = await executeTool(runtime.toolContext(managerId, "reasoning"), {
     type: "tool_use",
     id: "sp0",
-    name: "dimaag_spawn_agent",
+    name: "hath_spawn_agent",
     input: { id: "no-prompt-child" },
   });
   assert.equal(missing.isError, true);
@@ -510,7 +510,7 @@ test("spawn_agent requires system_prompt and grants nothing", async () => {
   const spawned = await executeTool(runtime.toolContext(managerId, "reasoning"), {
     type: "tool_use",
     id: "sp1",
-    name: "dimaag_spawn_agent",
+    name: "hath_spawn_agent",
     input: { id: "fresh-child", system_prompt: "do one job" },
   });
   assert.equal(spawned.isError, false);
@@ -566,7 +566,7 @@ test("grant_tool on a direct child succeeds and appears in assembleContext", asy
     name: "grant_tool",
     input: {
       agent_id: childId,
-      tool_name: "dimaag_schedule_message",
+      tool_name: "hath_schedule_message",
       usage: "tune your own prompt",
     },
   });
@@ -581,7 +581,7 @@ test("grant_tool on a direct child succeeds and appears in assembleContext", asy
     transcriptWindowStep: 20,
   });
   const names = ctx.tools.map((tool) => tool.name);
-  assert.ok(names.includes("dimaag_schedule_message"));
+  assert.ok(names.includes("hath_schedule_message"));
   assert.ok(names.includes(SEND_MESSAGE));
 });
 
@@ -606,7 +606,7 @@ test("grant_tool on a non-child fails", async () => {
     name: "grant_tool",
     input: {
       agent_id: strangerId,
-      tool_name: "dimaag_schedule_message",
+      tool_name: "hath_schedule_message",
       usage: "nope",
     },
   });
@@ -930,7 +930,7 @@ test("get_agent tool names match agent_tools for that agent", async () => {
     name: "tools-child",
     systemPrompt: "child",
     parentAgentId: parentId,
-    tools: ["yaad_search_history", "dimaag_schedule_message"],
+    tools: ["yaad_search_history", "hath_schedule_message"],
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -960,7 +960,7 @@ test("get_agent tool names match agent_tools for that agent", async () => {
     held.map((row) => row.name),
   );
   assert.deepEqual((JSON.parse(result.content) as { tools: string[] }).tools, [
-    "dimaag_schedule_message",
+    "hath_schedule_message",
     "yaad_search_history",
   ]);
 });
@@ -1038,7 +1038,7 @@ test("as Dadi, schedule_message fails without writing a row", async () => {
   const result = await executeTool(runtime.toolContext(null, "reasoning"), {
     type: "tool_use",
     id: "dadi-sched",
-    name: "dimaag_schedule_message",
+    name: "hath_schedule_message",
     input: {
       to_agent_id: targetId,
       content: "later",
@@ -1142,7 +1142,7 @@ test("revoke_tool removes a grant and fails when the child does not hold it", as
     name: "grant_tool",
     input: {
       agent_id: childId,
-      tool_name: "dimaag_schedule_message",
+      tool_name: "hath_schedule_message",
       usage: "temporary",
     },
   });
@@ -1150,7 +1150,7 @@ test("revoke_tool removes a grant and fails when the child does not hold it", as
     type: "tool_use",
     id: "r1",
     name: "revoke_tool",
-    input: { agent_id: childId, tool_name: "dimaag_schedule_message" },
+    input: { agent_id: childId, tool_name: "hath_schedule_message" },
   });
   assert.equal(revoked.isError, false);
   const ctx = await assembleContext({
@@ -1163,14 +1163,14 @@ test("revoke_tool removes a grant and fails when the child does not hold it", as
     transcriptWindowStep: 20,
   });
   assert.equal(
-    ctx.tools.map((tool) => tool.name).includes("dimaag_schedule_message"),
+    ctx.tools.map((tool) => tool.name).includes("hath_schedule_message"),
     false,
   );
   const again = await executeTool(runtime.toolContext(managerId, "reasoning"), {
     type: "tool_use",
     id: "r2",
     name: "revoke_tool",
-    input: { agent_id: childId, tool_name: "dimaag_schedule_message" },
+    input: { agent_id: childId, tool_name: "hath_schedule_message" },
   });
   assert.equal(again.isError, true);
   assert.match(again.content, /does not hold/);
@@ -1205,7 +1205,7 @@ test("an agent can grant a tool it does not itself hold", async () => {
     transcriptWindowStep: 20,
   });
   assert.equal(
-    parentCtx.tools.map((tool) => tool.name).includes("dimaag_schedule_message"),
+    parentCtx.tools.map((tool) => tool.name).includes("hath_schedule_message"),
     false,
   );
   const granted = await executeTool(runtime.toolContext(parentId, "reasoning"), {
@@ -1214,7 +1214,7 @@ test("an agent can grant a tool it does not itself hold", async () => {
     name: "grant_tool",
     input: {
       agent_id: childId,
-      tool_name: "dimaag_schedule_message",
+      tool_name: "hath_schedule_message",
       usage: "you may modify yourself",
     },
   });
@@ -1228,7 +1228,7 @@ test("an agent can grant a tool it does not itself hold", async () => {
     transcriptWindowMessages: 40,
     transcriptWindowStep: 20,
   });
-  assert.ok(childCtx.tools.map((tool) => tool.name).includes("dimaag_schedule_message"));
+  assert.ok(childCtx.tools.map((tool) => tool.name).includes("hath_schedule_message"));
 });
 
 test("list_agents is in both lanes for an agent with no grants", async () => {

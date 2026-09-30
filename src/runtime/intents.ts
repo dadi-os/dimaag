@@ -5,6 +5,7 @@ export type DispatchIntent = {
   intent: string;
 };
 
+/** Per-agent dispatch intents the reasoning lane queued for the conversation lane to compose and send. */
 export class IntentQueue {
   private readonly items = new Map<string, DispatchIntent[]>();
 
@@ -25,6 +26,7 @@ export class IntentQueue {
   }
 }
 
+/** The conversation-lane turn that asks the agent to call dispatch_message for each queued intent. */
 export function formatIntentTurn(intents: DispatchIntent[]): string {
   const parts = intents.map((item) => {
     const to = item.toAgentId === null ? "null (the user)" : item.toAgentId;

@@ -6,7 +6,7 @@ import type { DwarClient } from "./dwar/client.js";
 import type { GharClient } from "./ghar/client.js";
 import type { NasClient } from "./nas/client.js";
 import type { YaadClient } from "./yaad/client.js";
-import { DimaagError } from "./errors.js";
+import { HathError } from "./errors.js";
 import { registerRequestLogging } from "./logging.js";
 import { createRuntime, type Runtime } from "./runtime/engine.js";
 import { hydrateTranscript } from "./db/messages.js";
@@ -26,7 +26,7 @@ declare module "fastify" {
   }
 }
 
-/** Build the Dimaag Fastify app with nas-aligned request logging. */
+/** Build the Hath Fastify app with nas-aligned request logging. */
 export async function buildApp(
   config: Config,
   deps: {
@@ -45,7 +45,7 @@ export async function buildApp(
     logController: new LogController({ disableRequestLogging: true }),
     logger: {
       level: config.env.logLevel,
-      base: { service: "dimaag" },
+      base: { service: "hath" },
       timestamp: () => `,"time":"${new Date().toISOString()}"`,
       formatters: {
         level(label) {
@@ -85,7 +85,7 @@ export async function buildApp(
   });
 
   app.setErrorHandler((err, request, reply) => {
-    if (err instanceof DimaagError) {
+    if (err instanceof HathError) {
       request.log.warn(
         { code: err.type, request_id: request.requestId, status: err.statusCode },
         err.message,

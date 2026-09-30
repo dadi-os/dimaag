@@ -50,7 +50,7 @@ import type {
   YaadClient,
 } from "../src/yaad/client.js";
 import { syncTools } from "../src/tools/sync.js";
-import { DimaagError } from "../src/errors.js";
+import { HathError } from "../src/errors.js";
 
 export function testConfig(): Config {
   return loadConfig();
@@ -324,28 +324,28 @@ export function mockChaavi(
       if (opts.createLogin) {
         return opts.createLogin(input);
       }
-      throw new DimaagError(500, "chaavi", "createLogin is not stubbed");
+      throw new HathError(500, "chaavi", "createLogin is not stubbed");
     },
     async getLogin(itemId) {
       getLoginCalls.push(itemId);
       if (opts.getLogin) {
         return opts.getLogin(itemId);
       }
-      throw new DimaagError(404, "not_found", `item ${itemId} not found`);
+      throw new HathError(404, "not_found", `item ${itemId} not found`);
     },
     async getPasskey(itemId) {
       getPasskeyCalls.push(itemId);
       if (opts.getPasskey) {
         return opts.getPasskey(itemId);
       }
-      throw new DimaagError(404, "not_found", `item ${itemId} not found`);
+      throw new HathError(404, "not_found", `item ${itemId} not found`);
     },
     async getSecret(itemId) {
       getSecretCalls.push(itemId);
       if (opts.getSecret) {
         return opts.getSecret(itemId);
       }
-      throw new DimaagError(404, "not_found", `item ${itemId} not found`);
+      throw new HathError(404, "not_found", `item ${itemId} not found`);
     },
   };
 }
@@ -628,7 +628,7 @@ export async function insertWorker(
 }
 
 /** Grant-, revoke-, and modify-children tools are embedded; spawning is the manager's grant. */
-const MANAGER_TOOLS = ["dimaag_spawn_agent"] as const;
+const MANAGER_TOOLS = ["hath_spawn_agent"] as const;
 
 /** Agent that can spawn/grant/revoke/modify children. */
 export async function insertManager(
