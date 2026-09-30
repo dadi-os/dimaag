@@ -59,7 +59,7 @@ function loadPrompt(serviceRoot: string, name: string): string {
  */
 function lineageBlock(agentId: string | null, parentAgentId: string | null): string {
   if (agentId === null) {
-    return "You are the router. Your identity is null, the same as Ankur's: every message you send reaches its agent as a message from him, and root agents are your direct children.";
+    return "You are the router: Ankur's translator into the org, not an agent. You share his identity (null), so every message you send arrives as his, and root agents are your direct children.";
   }
   const parentLine =
     parentAgentId === null
@@ -167,10 +167,13 @@ export async function assembleRouterContext(opts: {
   serviceRoot: string;
   /** What Ankur just said. */
   utterance: string;
+  /** The Hath device he said it from, when he used Hath. */
+  nodeName: string | undefined;
 }): Promise<AssembledContext> {
+  const from = opts.nodeName === undefined ? "[From: Ankur]" : `[From: Ankur, in Hath on ${opts.nodeName}]`;
   return {
     system: await composeSystem(opts.db, opts.serviceRoot, null),
-    messages: [{ role: "user", content: `[From: Ankur]\n${opts.utterance}` }],
+    messages: [{ role: "user", content: `${from}\n${opts.utterance}` }],
     tools: routerLaneTools(),
     throughSeq: 0,
   };

@@ -36,6 +36,8 @@ export const postRouterBody = z
     /** May be empty when attachments are present; patched server-side. */
     content: z.string(),
     attachments: z.array(messageAttachment).max(8).optional(),
+    /** The Hath device Ankur is speaking from, so the router can open the hand-off there. */
+    node_name: z.string().min(1).optional(),
   })
   .strict()
   .superRefine((body, ctx) => {

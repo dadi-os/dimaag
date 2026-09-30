@@ -11,7 +11,8 @@ import { z } from "zod";
 import { agentIdSchema } from "../agent-id.js";
 import { agents } from "../db/schema.js";
 import { spawnAgent } from "../tools/dimaag/spawn-agent.js";
-import { embeddedAgentTools, findEmbeddedTool } from "../tools/registry.js";
+import { openChat } from "../tools/hath/open-chat.js";
+import { embeddedAgentTools } from "../tools/registry.js";
 import { fail, ok, requireAgent, type ToolContext, type ToolExecResult } from "../tools/shared.js";
 import { asDwarTool, type ToolDefinition } from "../tools/types.js";
 import type { DwarTool, DwarToolUseBlock, RoutedMessage } from "../types/domain.js";
@@ -46,9 +47,16 @@ const routerSendMessageTool: DwarTool = {
   },
 };
 
-/** Registry tools the router holds without grants: spawning roots plus the embedded agent-management set. */
+/**
+ * Registry-style tools the router holds without grants: spawning roots, the
+ * embedded agent-management set, and opening the hand-off's chat in Hath.
+ */
 function routerRegistryTools(): ToolDefinition[] {
-  return [spawnAgent as unknown as ToolDefinition, ...embeddedAgentTools()];
+  return [
+    spawnAgent as unknown as ToolDefinition,
+    ...embeddedAgentTools(),
+    openChat as unknown as ToolDefinition,
+  ];
 }
 
 /** Every tool name the router may run, lane or CLI (`as_agent_id: "router"`). */
@@ -78,10 +86,7 @@ export async function runRouterTool(
   if (call.name === RECALL_MEMORY) {
     return runRecallMemory(ctx, call.input);
   }
-  const definition =
-    call.name === spawnAgent.name
-      ? (spawnAgent as unknown as ToolDefinition)
-      : findEmbeddedTool(call.name);
+  const definition = routerRegistryTools().find((tool) => tool.name === call.name);
   if (!definition) {
     return fail(`unknown router tool: ${call.name}`);
   }

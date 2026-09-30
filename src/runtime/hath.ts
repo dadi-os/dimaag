@@ -14,7 +14,8 @@ export type HathToolName =
   | "hath_get_network"
   | "hath_read_clipboard"
   | "hath_write_clipboard"
-  | "hath_send_file";
+  | "hath_send_file"
+  | "hath_open_chat";
 
 export type HathPresence = {
   node_name: string;
