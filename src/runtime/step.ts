@@ -70,19 +70,19 @@ export function laneRequest(deps: StepDeps, assembled: AssembledContext): DwarCh
  * runStep records one model turn and its tool results on the wake. A turn with
  * no tool call is kept and followed by a neutral continue turn, so the lane
  * keeps going; only yield (or a stop) ends it. Returns true when the lane
- * should exit.
+ * should exit. Agent turns are tagged with their provider and lane so Dwar can
+ * translate the other lane's turns in a shared wake; the router's wake has one
+ * lane on a context-free endpoint, so its turns go untagged.
  */
 export async function runStep(
   deps: StepDeps,
   response: DwarChatResponse,
   isStopped: () => boolean,
 ): Promise<boolean> {
-  const assistant: DwarMessage = {
-    role: "assistant",
-    content: response.content,
-    provider: response.provider,
-    lane: deps.lane,
-  };
+  const assistant: DwarMessage =
+    deps.lane === "router"
+      ? { role: "assistant", content: response.content }
+      : { role: "assistant", content: response.content, provider: response.provider, lane: deps.lane };
   const uses = response.content.filter(
     (block): block is DwarToolUseBlock => block.type === "tool_use",
   );

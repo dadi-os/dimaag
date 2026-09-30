@@ -243,6 +243,12 @@ test("POST /router runs as long as the model keeps calling tools", async () => {
   const res = await app.inject({ method: "POST", url: "/router", payload: { content: "look around" } });
   assert.equal(res.statusCode, 201, res.body);
   assert.equal(dwar.completeCalls.length, 13);
+  const assistantTurns = dwar.completeCalls.at(-1)!.messages.filter((m) => m.role === "assistant");
+  assert.equal(assistantTurns.length, 12);
+  for (const turn of assistantTurns) {
+    assert.equal(turn.lane, undefined);
+    assert.equal(turn.provider, undefined);
+  }
 
   await runtime.waitUntilIdle();
   await app.close();
