@@ -14,7 +14,9 @@ export type ConversationLoopDeps = StepDeps & {
  * intents join the wake as conversation-only turns. A turn with no tool call
  * continues; the only clean exit is the embedded yield tool.
  * Skips the provider call when the visible history is empty or ends on an
- * assistant turn — providers reject those requests, and nothing is waiting.
+ * assistant turn — providers reject those requests, and nothing is waiting —
+ * or when nothing it can see has joined the wake since it last yielded, as
+ * when several wake-ups queue behind one run that already handled them.
  */
 export async function runConversationLoop(deps: ConversationLoopDeps): Promise<void> {
   for (;;) {
@@ -30,7 +32,7 @@ export async function runConversationLoop(deps: ConversationLoopDeps): Promise<v
 
     const request = laneRequest(deps, assembled);
     const last = request.messages[request.messages.length - 1];
-    if (!last || last.role !== "user") {
+    if (!last || last.role !== "user" || deps.wake.unchangedSinceYield(deps.lane)) {
       return;
     }
 

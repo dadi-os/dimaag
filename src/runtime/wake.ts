@@ -32,6 +32,8 @@ export class Wake {
   private transcript: DwarMessage[] | null = null;
   private seenThrough = 0;
   private readonly turns: WakeTurn[] = [];
+  /** How many turns each lane could see when it last yielded. */
+  private readonly yieldedAt = new Map<Lane, number>();
 
   /** False until the wake's first lane call freezes the transcript. */
   get started(): boolean {
@@ -58,15 +60,27 @@ export class Wake {
     this.turns.push(...turns);
   }
 
+  /** Record that `lane` yielded with the wake as it stands now. */
+  markYield(lane: Lane): void {
+    this.yieldedAt.set(lane, this.visibleTo(lane).length);
+  }
+
+  /** True when no turn `lane` can see has joined the wake since it last yielded. */
+  unchangedSinceYield(lane: Lane): boolean {
+    return this.yieldedAt.get(lane) === this.visibleTo(lane).length;
+  }
+
   /** What `lane` sends to its provider: the frozen transcript, then every turn it may see. */
   view(lane: Lane): DwarMessage[] {
     if (this.transcript === null) {
       throw new Error("wake has not begun");
     }
-    const visible = this.turns
-      .filter((turn) => turn.only === undefined || turn.only === lane)
-      .map((turn) => turn.message);
-    return [...this.transcript, ...visible];
+    return [...this.transcript, ...this.visibleTo(lane).map((turn) => turn.message)];
+  }
+
+  /** The wake turns `lane` may see, in order. */
+  private visibleTo(lane: Lane): WakeTurn[] {
+    return this.turns.filter((turn) => turn.only === undefined || turn.only === lane);
   }
 }
 

@@ -128,5 +128,8 @@ export async function runStep(
     }
   }
   deps.wake.push({ message: assistant }, { message: { role: "user", content: results } });
+  if (yielded) {
+    deps.wake.markYield(deps.lane);
+  }
   return yielded || stopped || isStopped();
 }

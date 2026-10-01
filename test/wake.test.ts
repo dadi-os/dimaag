@@ -226,3 +226,35 @@ test("a wake lives while any run holds it and is dropped when the last releases"
   assert.notEqual(next, wake);
   assert.equal(next.started, false);
 });
+
+test("a queued conversation run makes no model call until something it can see joins the wake", async () => {
+  const wake = new Wake();
+  const intents = new IntentQueue();
+  const requests: DwarChatRequest[] = [];
+  let arrival: DwarMessage | null = null;
+  const deps = {
+    ...stepDeps("conversation", wake, () => turn("gemini", [call("yield", `y${requests.length}`)]), requests),
+    arrivalsSince: (afterSeq: number) => {
+      const next = arrival;
+      arrival = null;
+      return next === null ? { turn: null, throughSeq: afterSeq } : { turn: next, throughSeq: afterSeq + 1 };
+    },
+    intents,
+  };
+
+  await runConversationLoop(deps);
+  assert.equal(requests.length, 1);
+
+  await runConversationLoop(deps);
+  wake.push({ message: { role: "user", content: "steer: look again" }, only: "reasoning" });
+  await runConversationLoop(deps);
+  assert.equal(requests.length, 1);
+
+  arrival = { role: "user", content: "[Arrived during this wake]\n\n[From: Ankur]\nany update?" };
+  await runConversationLoop(deps);
+  assert.equal(requests.length, 2);
+
+  intents.append("agent-1", { toAgentId: null, intent: "tell Ankur it is done" });
+  await runConversationLoop(deps);
+  assert.equal(requests.length, 3);
+});
