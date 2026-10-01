@@ -25,7 +25,10 @@ export const agents = pgTable(
     /** Immutable kebab-case id; also the human-readable address (`browser-manager`). */
     id: text("id").primaryKey(),
     systemPrompt: text("system_prompt").notNull(),
-    parentAgentId: text("parent_agent_id").references((): AnyPgColumn => agents.id),
+    /** Deleting a parent deletes its whole subtree. */
+    parentAgentId: text("parent_agent_id").references((): AnyPgColumn => agents.id, {
+      onDelete: "cascade",
+    }),
     active: boolean("active").notNull().default(true),
     createdAt: timestamptz("created_at").notNull().defaultNow(),
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
@@ -44,7 +47,7 @@ export const agentLogs = pgTable(
   {
     id: uuid("id").primaryKey(),
     /** Null for the router, which shares the user's null identity. */
-    agentId: text("agent_id").references(() => agents.id),
+    agentId: text("agent_id").references(() => agents.id, { onDelete: "cascade" }),
     lane: text("lane").notNull(),
     event: text("event").notNull(),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
@@ -78,7 +81,7 @@ export const agentTools = pgTable(
   {
     agentId: text("agent_id")
       .notNull()
-      .references(() => agents.id),
+      .references(() => agents.id, { onDelete: "cascade" }),
     toolId: uuid("tool_id")
       .notNull()
       .references(() => tools.id),
@@ -97,8 +100,8 @@ export const messages = pgTable(
   {
     id: uuid("id").primaryKey(),
     seq: bigint("seq", { mode: "number" }).generatedAlwaysAsIdentity().notNull(),
-    fromAgentId: text("from_agent_id").references(() => agents.id),
-    toAgentId: text("to_agent_id").references(() => agents.id),
+    fromAgentId: text("from_agent_id").references(() => agents.id, { onDelete: "cascade" }),
+    toAgentId: text("to_agent_id").references(() => agents.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
     createdAt: timestamptz("created_at").notNull().defaultNow(),
   },
@@ -125,10 +128,10 @@ export const scheduledMessages = pgTable(
     id: uuid("id").primaryKey(),
     fromAgentId: text("from_agent_id")
       .notNull()
-      .references(() => agents.id),
+      .references(() => agents.id, { onDelete: "cascade" }),
     toAgentId: text("to_agent_id")
       .notNull()
-      .references(() => agents.id),
+      .references(() => agents.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
     runAt: timestamptz("run_at").notNull(),
     intervalMinutes: integer("interval_minutes"),

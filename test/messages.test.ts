@@ -384,11 +384,11 @@ test("backfill migration smoke: agent_logs message events land in messages after
   `;
   await handle.sql`
     ALTER TABLE "messages" ADD CONSTRAINT "messages_from_agent_id_agents_id_fk"
-      FOREIGN KEY ("from_agent_id") REFERENCES "public"."agents"("id")
+      FOREIGN KEY ("from_agent_id") REFERENCES "public"."agents"("id") ON DELETE cascade
   `;
   await handle.sql`
     ALTER TABLE "messages" ADD CONSTRAINT "messages_to_agent_id_agents_id_fk"
-      FOREIGN KEY ("to_agent_id") REFERENCES "public"."agents"("id")
+      FOREIGN KEY ("to_agent_id") REFERENCES "public"."agents"("id") ON DELETE cascade
   `;
   await handle.sql`
     INSERT INTO "messages" ("id", "from_agent_id", "to_agent_id", "content", "created_at")
