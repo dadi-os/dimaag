@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, ci-hang-probe]
 
 concurrency:
   group: hath-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -40,13 +40,31 @@ jobs:
             hath-dev npm run db:migrate
 
       - name: Test
+        timeout-minutes: 40
         run: |
-          docker run --rm --network host \
-            -e DATABASE_URL=postgres://hath:hath@localhost:5432/hath \
-            -e TZ=America/New_York \
-            -v "$PWD:/app" -v /app/node_modules \
-            hath-dev npm test
-
+          for i in $(seq 1 30); do
+            docker run -d --name hath-t --network host \
+              -e DATABASE_URL=postgres://hath:hath@localhost:5432/hath \
+              -e TZ=America/New_York -e NODE_OPTIONS="--import /app/probe-handles.mjs" \
+              -v "$PWD:/app" -v /app/node_modules \
+              hath-dev npx tsx --test test/runtime.test.ts > /dev/null
+            for s in $(seq 1 120); do
+              [ "$(docker inspect -f '{{.State.Running}}' hath-t)" = "true" ] || break
+              sleep 1
+            done
+            if [ "$(docker inspect -f '{{.State.Running}}' hath-t)" = "true" ]; then
+              echo "=== HUNG on run $i"
+              docker logs hath-t 2>&1 | grep -E "^(# |ok |not ok )" | tail -8
+              docker exec hath-t ps -eo pid,pcpu,etime,args
+              docker exec hath-t pkill -USR2 node; sleep 2
+              docker logs hath-t 2>&1 | grep "\[probe" | tail -10
+              docker run --rm --network host postgres:18 psql postgres://hath:hath@localhost:5432/hath -c "select pid, state, wait_event_type, wait_event, now()-query_start as age, left(query,160) as query from pg_stat_activity where datname='hath' and pid <> pg_backend_pid()"
+              docker rm -f hath-t > /dev/null
+              exit 1
+            fi
+            echo "run $i exit $(docker inspect -f '{{.State.ExitCode}}' hath-t) $(docker logs hath-t 2>&1 | grep -E '^# (pass|fail)' | tr '\n' ' ')"
+            docker rm -f hath-t > /dev/null
+          done
       - name: Build production image
         run: docker build --target production -t hath-prod .
 
