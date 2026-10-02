@@ -6,7 +6,7 @@ const input = z
   .object({
     terminal_id: z
       .string()
-      .regex(/^t[1-9]\d*$/)
+      .regex(/^t[1-9]\d*$/, "terminal_id must be t<n> for a positive integer n, such as t3")
       .optional(),
     cwd: z.string().min(1).optional(),
   })
