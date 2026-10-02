@@ -9,6 +9,7 @@ import {
   chromium,
   type Browser,
   type CDPSession,
+  type Download,
   type ElementHandle,
   type Page,
 } from "playwright-core";
@@ -312,18 +313,49 @@ export class BrowserDriver {
     await page.close();
   }
 
+  /**
+   * Navigate a tab. A URL that turns into a file download aborts the navigation; that
+   * resolves with `download` (the suggested file name and the downloads dir it is saving
+   * into) instead of failing. Any other navigation failure rejects.
+   */
   async navigate(
     browserId: number,
     tabId: string | undefined,
     url: string,
     waitUntil: "load" | "domcontentloaded" | "networkidle" = "load",
-  ): Promise<{ url: string; title: string; tab_id: string }> {
+  ): Promise<{
+    url: string;
+    title: string;
+    tab_id: string;
+    download?: { suggested_filename: string; downloads_dir: string };
+  }> {
     const resolved = await this.resolvePage(browserId, tabId);
-    await resolved.page.goto(url, { waitUntil });
-    return {
+    let download: Download | undefined;
+    const onDownload = (started: Download) => {
+      download = started;
+    };
+    resolved.page.on("download", onDownload);
+    try {
+      await resolved.page.goto(url, { waitUntil });
+    } catch (err) {
+      if (!download) {
+        throw err;
+      }
+    } finally {
+      resolved.page.off("download", onDownload);
+    }
+    const base = {
       url: resolved.page.url(),
       title: await resolved.page.title(),
       tab_id: resolved.tabId,
+    };
+    if (!download) {
+      return base;
+    }
+    const endpoint = await this.resolveEndpoint(browserId);
+    return {
+      ...base,
+      download: { suggested_filename: download.suggestedFilename(), downloads_dir: endpoint.downloadsDir },
     };
   }
 

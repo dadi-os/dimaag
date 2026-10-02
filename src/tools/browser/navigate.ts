@@ -15,7 +15,7 @@ const input = z
 export const navigate = defineTool({
   name: "browser_navigate",
   description:
-    "Navigate the focused tab (or tab_id) to a URL. Returns the final url and title. Prefer browser_accessibility_tree after navigation to act by ref.",
+    "Navigate the focused tab (or tab_id) to a URL. Returns the final url and title. When the URL is a file download, also returns download: the suggested file name and the host downloads_dir it is saving into (a taken name gets a numbered suffix, and a large file may still be saving). Prefer browser_accessibility_tree after navigation to act by ref.",
   input,
   inputSchema: {
     type: "object",
@@ -41,7 +41,11 @@ export const navigate = defineTool({
           parsed.url,
           parsed.wait_until ?? "load",
         ),
-      (response) => ({ url: response.url, title: response.title }),
+      (response) => ({
+        url: response.url,
+        title: response.title,
+        ...(response.download ? { download: response.download } : {}),
+      }),
       (response) => ({ browser_id: parsed.browser_id, tab_id: response.tab_id }),
     );
   },
