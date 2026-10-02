@@ -68,6 +68,18 @@ export const postMessageBody = z
 
 export const idParam = z.object({ id: agentIdSchema }).strict();
 
+export const scheduleIdParam = z.object({ id: z.string().uuid() }).strict();
+
+/** A hand edit to a schedule: any of its time, repeat (null makes it one-shot), or message. */
+export const patchScheduleBody = z
+  .object({
+    run_at: z.string().datetime({ offset: true }).optional(),
+    interval_minutes: z.number().int().min(1).nullable().optional(),
+    content: z.string().trim().min(1).optional(),
+  })
+  .strict()
+  .refine((body) => Object.keys(body).length > 0, { message: "nothing to change" });
+
 export const logsQuery = z
   .object({
     event: z.enum(["response", "tool_result", "message"]).optional(),

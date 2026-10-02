@@ -16,9 +16,6 @@ const TOOL_RENAMES: ReadonlyArray<readonly [string, string]> = [
   ["hath_get_location", "device_get_location"],
   ["hath_get_network", "device_get_network"],
   ["dimaag_spawn_agent", "hath_spawn_agent"],
-  ["dimaag_schedule_message", "hath_schedule_message"],
-  ["dimaag_list_schedules", "hath_list_schedules"],
-  ["dimaag_cancel_schedule", "hath_cancel_schedule"],
 ];
 
 /**

@@ -29,7 +29,7 @@ import {
 import { ingestMemoryTool, recallMemoryTool } from "./memory.js";
 import { modifyAgentTool } from "./modify.js";
 import type { TranscriptEntry, TranscriptStore } from "./transcript.js";
-import { embeddedAgentTools } from "../tools/registry.js";
+import { embeddedAgentTools, embeddedSchedulingTools } from "../tools/registry.js";
 import { asDwarTool } from "../tools/types.js";
 import { routerLaneTools } from "./router.js";
 
@@ -248,6 +248,7 @@ async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTo
     recordThoughtTool,
     modifyAgentTool,
     ...embeddedAgentTools().map(asDwarTool),
+    ...embeddedSchedulingTools().map(asDwarTool),
     yieldTool,
   ];
 }
@@ -261,6 +262,7 @@ export const embeddedReasoningTools = [
   RECORD_THOUGHT,
   MODIFY_AGENT,
   ...embeddedAgentTools().map((tool) => tool.name),
+  ...embeddedSchedulingTools().map((tool) => tool.name),
   YIELD,
 ];
 export const embeddedConversationTools = [

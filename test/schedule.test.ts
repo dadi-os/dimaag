@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { TZDate } from "@date-fns/tz";
 import { and, eq } from "drizzle-orm";
+import { buildApp } from "../src/app.js";
 import { TIMEZONE } from "../src/constants.js";
 import { migrate } from "../src/db/migrate.js";
 import { agentLogs, agents, scheduledMessages } from "../src/db/schema.js";
@@ -10,7 +11,7 @@ import { createRuntime } from "../src/runtime/engine.js";
 import type { RuntimeEvent } from "../src/runtime/events.js";
 import { advanceRunAt } from "../src/runtime/scheduler.js";
 import { executeTool } from "../src/runtime/tools.js";
-import { allTools, findTool } from "../src/tools/registry.js";
+import { allTools, findEmbeddedTool, findTool } from "../src/tools/registry.js";
 import {
   insertAgent,
   insertWorker,
@@ -69,11 +70,12 @@ after(async () => {
   await handle.close();
 });
 
-test("allTools includes the three schedule tools", async () => {
-  assert.equal(allTools().length, 54);
-  assert.equal(findTool("hath_schedule_message")?.name, "hath_schedule_message");
-  assert.equal(findTool("hath_list_schedules")?.name, "hath_list_schedules");
-  assert.equal(findTool("hath_cancel_schedule")?.name, "hath_cancel_schedule");
+test("the three schedule tools are embedded, not grantable", async () => {
+  assert.equal(allTools().length, 51);
+  for (const name of ["schedule_message", "list_schedules", "cancel_schedule"]) {
+    assert.equal(findTool(name), undefined);
+    assert.equal(findEmbeddedTool(name)?.name, name);
+  }
 });
 
 test("due one-shot delivers once and deletes the row", async () => {
@@ -508,7 +510,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const fromId = await insertWorker(handle.db, {
     name: "scheduler",
     systemPrompt: "schedule work",
-    tools: ["hath_schedule_message"],
+    tools: [],
   });
   const peerId = await insertAgent(handle.db, {
     name: "peer-agent",
@@ -530,7 +532,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const self = await executeTool(ctx, {
     type: "tool_use",
     id: "s-self",
-    name: "hath_schedule_message",
+    name: "schedule_message",
     input: {
       to_agent_id: fromId,
       content: "no",
@@ -543,7 +545,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const missing = await executeTool(ctx, {
     type: "tool_use",
     id: "s-missing",
-    name: "hath_schedule_message",
+    name: "schedule_message",
     input: {
       to_agent_id: "missing-peer-agent",
       content: "no",
@@ -556,7 +558,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const past = await executeTool(ctx, {
     type: "tool_use",
     id: "s-past",
-    name: "hath_schedule_message",
+    name: "schedule_message",
     input: {
       to_agent_id: peerId,
       content: "no",
@@ -569,7 +571,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const zero = await executeTool(ctx, {
     type: "tool_use",
     id: "s-zero",
-    name: "hath_schedule_message",
+    name: "schedule_message",
     input: {
       to_agent_id: peerId,
       content: "no",
@@ -582,7 +584,7 @@ test("schedule_message validates self, missing, past, and interval; allows non-c
   const ok = await executeTool(ctx, {
     type: "tool_use",
     id: "s-ok",
-    name: "hath_schedule_message",
+    name: "schedule_message",
     input: {
       to_agent_id: peerId,
       content: "hello peer",
@@ -605,12 +607,12 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const creatorId = await insertWorker(handle.db, {
     name: "creator",
     systemPrompt: "creator",
-    tools: ["hath_list_schedules", "hath_cancel_schedule"],
+    tools: [],
   });
   const otherId = await insertWorker(handle.db, {
     name: "other",
     systemPrompt: "other",
-    tools: ["hath_cancel_schedule"],
+    tools: [],
   });
   const targetId = await insertAgent(handle.db, {
     name: "list-target",
@@ -652,7 +654,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const listed = await executeTool(runtime.toolContext(creatorId, "reasoning"), {
     type: "tool_use",
     id: "list",
-    name: "hath_list_schedules",
+    name: "list_schedules",
     input: {},
   });
   assert.equal(listed.isError, false);
@@ -667,7 +669,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const denied = await executeTool(runtime.toolContext(otherId, "reasoning"), {
     type: "tool_use",
     id: "cancel-deny",
-    name: "hath_cancel_schedule",
+    name: "cancel_schedule",
     input: { schedule_id: mine },
   });
   assert.equal(denied.isError, true);
@@ -676,7 +678,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const unknown = await executeTool(runtime.toolContext(creatorId, "reasoning"), {
     type: "tool_use",
     id: "cancel-unknown",
-    name: "hath_cancel_schedule",
+    name: "cancel_schedule",
     input: { schedule_id: randomUUID() },
   });
   assert.equal(unknown.isError, true);
@@ -685,7 +687,7 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
   const cancelled = await executeTool(runtime.toolContext(creatorId, "reasoning"), {
     type: "tool_use",
     id: "cancel-ok",
-    name: "hath_cancel_schedule",
+    name: "cancel_schedule",
     input: { schedule_id: mine },
   });
   assert.equal(cancelled.isError, false);
@@ -698,4 +700,82 @@ test("cancel_schedule enforces creator; list_schedules is caller-scoped", async 
 
 test("loadConfig exposes schedule.tick_seconds", () => {
   assert.equal(config.schedule.tick_seconds, 10);
+});
+
+test("schedule routes list an agent's schedules both ways, edit them, and cancel them", async () => {
+  await resetRuntime(handle.sql, handle.db, config);
+  const senderId = await insertAgent(handle.db, { name: "route-sender", systemPrompt: "sender" });
+  const receiverId = await insertAgent(handle.db, { name: "route-receiver", systemPrompt: "receiver" });
+  const outsiderId = await insertAgent(handle.db, { name: "route-outsider", systemPrompt: "outsider" });
+  const sent = randomUUID();
+  const unrelated = randomUUID();
+  await handle.db.insert(scheduledMessages).values([
+    {
+      id: sent,
+      fromAgentId: senderId,
+      toAgentId: receiverId,
+      content: "daily triage",
+      runAt: new Date(Date.now() + 3_600_000),
+      intervalMinutes: 1440,
+    },
+    {
+      id: unrelated,
+      fromAgentId: outsiderId,
+      toAgentId: receiverId,
+      content: "not the sender's",
+      runAt: new Date(Date.now() + 7_200_000),
+      intervalMinutes: null,
+    },
+  ]);
+  const deps = {
+    db: handle.db,
+    dwar: mockDwar({}),
+    yaad: mockYaad(),
+    ghar: mockGhar(),
+    chaavi: mockChaavi(),
+    nas: mockNas(),
+  };
+  const runtime = createRuntime({ ...deps, config, log: capturingLog().log });
+  const app = await buildApp(config, { ...deps, sql: handle.sql, runtime });
+
+  const senderList = await app.inject({ method: "GET", url: `/agents/${senderId}/schedules` });
+  assert.equal(senderList.statusCode, 200, senderList.body);
+  assert.deepEqual(
+    (senderList.json() as { schedules: Array<{ id: string }> }).schedules.map((row) => row.id),
+    [sent],
+  );
+  const receiverList = await app.inject({ method: "GET", url: `/agents/${receiverId}/schedules` });
+  assert.deepEqual(
+    (receiverList.json() as { schedules: Array<{ id: string }> }).schedules.map((row) => row.id),
+    [sent, unrelated],
+  );
+
+  const runAt = new Date(Date.now() + 86_400_000);
+  const edited = await app.inject({
+    method: "PATCH",
+    url: `/schedules/${sent}`,
+    payload: { run_at: runAt.toISOString(), interval_minutes: null, content: "  weekly triage  " },
+  });
+  assert.equal(edited.statusCode, 200, edited.body);
+  const [row] = await handle.db.select().from(scheduledMessages).where(eq(scheduledMessages.id, sent));
+  assert.equal(row?.runAt.getTime(), runAt.getTime());
+  assert.equal(row?.intervalMinutes, null);
+  assert.equal(row?.content, "weekly triage");
+
+  const past = await app.inject({
+    method: "PATCH",
+    url: `/schedules/${sent}`,
+    payload: { run_at: new Date(Date.now() - 60_000).toISOString() },
+  });
+  assert.equal(past.statusCode, 422);
+  assert.match(past.body, /run_at must be in the future/);
+  const empty = await app.inject({ method: "PATCH", url: `/schedules/${sent}`, payload: {} });
+  assert.equal(empty.statusCode, 422);
+
+  const cancelled = await app.inject({ method: "DELETE", url: `/schedules/${sent}` });
+  assert.equal(cancelled.statusCode, 200, cancelled.body);
+  assert.equal((await handle.db.select().from(scheduledMessages).where(eq(scheduledMessages.id, sent))).length, 0);
+  const again = await app.inject({ method: "DELETE", url: `/schedules/${sent}` });
+  assert.equal(again.statusCode, 404);
+  await app.close();
 });

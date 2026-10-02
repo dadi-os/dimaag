@@ -10,7 +10,7 @@ const input = z.object({
 
 /** Cancel a schedule the caller created. */
 export const cancelSchedule = defineTool({
-  name: "hath_cancel_schedule",
+  name: "cancel_schedule",
   description: "Cancel a scheduled message you created. Fails if the id is unknown or not yours.",
   input,
   inputSchema: {

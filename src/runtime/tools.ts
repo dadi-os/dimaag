@@ -177,7 +177,7 @@ export const yieldTool: DwarTool = {
 export const waitTool: DwarTool = {
   name: WAIT,
   description:
-    "Pause your reasoning lane for a number of seconds, then resume automatically where you left off. Use when you must wait for something to settle — a page to load, a job or another agent to finish, a reply you expect shortly — instead of burning turns polling. Unlike yield, this does NOT end your turn: reasoning continues after the pause with no model calls spent while waiting. Unlike hath_schedule_message, it waits here rather than sending a message to another agent later. A steer or terminate cuts the wait short. Max " +
+    "Pause your reasoning lane for a number of seconds, then resume automatically where you left off. Use when you must wait for something to settle — a page to load, a job or another agent to finish, a reply you expect shortly — instead of burning turns polling. Unlike yield, this does NOT end your turn: reasoning continues after the pause with no model calls spent while waiting. Unlike schedule_message, it waits here rather than sending a message to another agent later. A steer or terminate cuts the wait short. Max " +
     `${WAIT_MAX_SECONDS}s; for longer or cross-agent delays, use scheduling.`,
   input_schema: waitInputSchema,
 };

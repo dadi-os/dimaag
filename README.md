@@ -206,7 +206,6 @@ Grantable (a job, not a general rule):
 | tool | notes |
 | --- | --- |
 | `hath_spawn_agent` | create a child (a root when the router calls it); makes an agent a manager |
-| `hath_schedule_message` / `hath_list_schedules` / `hath_cancel_schedule` | durable schedules |
 
 Embedded in every reasoning lane (never granted, never in the tools table):
 
@@ -217,6 +216,7 @@ Embedded in every reasoning lane (never granted, never in the tools table):
 | `list_tools` | grantable registry catalog (name + description); optional prefix filter |
 | `get_agent` | id, system prompt, parent, active flag, and tool names for self or a direct child (any agent for the router) |
 | `get_logs` | audit (`response` / `tool_result` / `message`) for self or a direct child (any named agent for the router, which never reads its own) |
+| `schedule_message` / `list_schedules` / `cancel_schedule` | durable schedules sent from and owned by the caller, so every agent automates its own work; not the router's |
 
 ## CLI
 
@@ -226,7 +226,7 @@ The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the app
 
 `agents`, `agent_logs`, `messages`, and `scheduled_messages` survive restart. `messages` is the source of truth for human↔agent chat and the rolling lane transcript (at least the last `[runtime].transcript_window_messages` turns, default 40; the window's start advances in steps of `transcript_window_step_messages` so the cached prefix survives new messages). Older turns remain in `agent_logs` / `hath_get_logs`. Each `agent_logs` row is one of: `response` — one model call's full output (`provider`, `stop_reason`, `usage`, and `content` blocks in provider order: `thinking` / `redacted_thinking`, `text`, `tool_use`), written before its tools run; `tool_result` — one tool's outcome (`tool_use_id`, `name`, `content`, `is_error`, plus audit fields such as `browser_id`); `message` — a delivered message. Wakes, locks, steer/intent queues, host `sessions`, and the event stream do not survive. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
 
-Schedule tools (`hath_schedule_message`, `hath_list_schedules`, `hath_cancel_schedule`) persist one-shot and recurring deliveries; the in-process scheduler ticks from `[schedule].tick_seconds` in `config.toml` (wall clock uses `TIMEZONE` in `constants.ts`).
+Schedule tools (`schedule_message`, `list_schedules`, `cancel_schedule`) persist one-shot and recurring deliveries; the in-process scheduler ticks from `[schedule].tick_seconds` in `config.toml` (wall clock uses `TIMEZONE` in `constants.ts`).
 
 ## Routes
 
@@ -241,6 +241,9 @@ Schedule tools (`hath_schedule_message`, `hath_list_schedules`, `hath_cancel_sch
 | `GET` | `/agents` | all agents + `running` + `sessions` |
 | `GET` | `/agents/:id` | agent, children, grants |
 | `GET` | `/agents/:id/logs` | per-agent audit trail |
+| `GET` | `/agents/:id/schedules` | every schedule the agent sends or receives, next run first |
+| `PATCH` | `/schedules/:id` | hand edit as Ankur: any of `run_at` (future, with offset), `interval_minutes` (null for one-shot), `content` |
+| `DELETE` | `/schedules/:id` | cancel a schedule as Ankur |
 | `GET` | `/logs` | cross-agent audit trail |
 | `GET` | `/tools` | grantable tool catalog |
 | `GET` | `/tools/:name` | one tool schema |

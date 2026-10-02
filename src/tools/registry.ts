@@ -62,14 +62,11 @@ import { searchHistory } from "./yaad/search-history.js";
 /**
  * Every grantable tool: what an agent's job is. Embedded lane plumbing
  * (send_message, dispatch_message, steer_reasoning, yield, list_agents, memory,
- * modify_agent) and the embedded agent-management tools below are deliberately
+ * modify_agent) and the embedded agent-management and scheduling tools below are deliberately
  * NOT here — they are not grantable and never appear in the tools table.
  */
 const definitions = [
   spawnAgent,
-  scheduleMessage,
-  listSchedules,
-  cancelSchedule,
   getNodeHistory,
   searchHistory,
   listDevices,
@@ -154,8 +151,18 @@ const embeddedDefinitions = [
   hathGetLogs,
 ] as unknown as ToolDefinition[];
 
+/**
+ * Scheduling tools every agent holds without a grant, so each agent automates its
+ * own work. Not the router's: a schedule is sent from, and owned by, an agent.
+ */
+const schedulingDefinitions = [
+  scheduleMessage,
+  listSchedules,
+  cancelSchedule,
+] as unknown as ToolDefinition[];
+
 const embeddedByName = new Map<string, ToolDefinition>();
-for (const definition of embeddedDefinitions) {
+for (const definition of [...embeddedDefinitions, ...schedulingDefinitions]) {
   if (byName.has(definition.name) || embeddedByName.has(definition.name)) {
     throw new Error(`duplicate tool name in registry: ${definition.name}`);
   }
@@ -167,7 +174,12 @@ export function embeddedAgentTools(): ToolDefinition[] {
   return embeddedDefinitions;
 }
 
-/** Look up an embedded agent-management tool by name; grantable tools use findTool. */
+/** Embedded scheduling tools, in the order agents see them. */
+export function embeddedSchedulingTools(): ToolDefinition[] {
+  return schedulingDefinitions;
+}
+
+/** Look up an embedded agent-management or scheduling tool by name; grantable tools use findTool. */
 export function findEmbeddedTool(name: string): ToolDefinition | undefined {
   return embeddedByName.get(name);
 }

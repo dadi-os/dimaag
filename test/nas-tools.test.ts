@@ -64,7 +64,7 @@ test("Nas terminal tools and destructive ops are registered", async () => {
   for (const name of [...NAS_TOOLS, ...NAS_DESTRUCTIVE]) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 54);
+  assert.equal(allTools().length, 51);
   await assert.doesNotReject(() => syncTools(handle.db));
 });
 
@@ -304,6 +304,9 @@ test("worker granted execute_shell and read_file sees those plus send_message an
       "revoke_tool",
       "list_tools",
       "get_logs",
+      "schedule_message",
+      "list_schedules",
+      "cancel_schedule",
       "yield",
     ].sort(),
   );
