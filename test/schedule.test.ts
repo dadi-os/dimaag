@@ -70,7 +70,7 @@ after(async () => {
 });
 
 test("allTools includes the three schedule tools", async () => {
-  assert.equal(allTools().length, 57);
+  assert.equal(allTools().length, 54);
   assert.equal(findTool("hath_schedule_message")?.name, "hath_schedule_message");
   assert.equal(findTool("hath_list_schedules")?.name, "hath_list_schedules");
   assert.equal(findTool("hath_cancel_schedule")?.name, "hath_cancel_schedule");

@@ -45,7 +45,7 @@ test("Chaavi tools are registered", async () => {
   for (const name of CHAAVI_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 57);
+  assert.equal(allTools().length, 54);
   await assert.doesNotReject(() => syncTools(handle.db));
 });
 
