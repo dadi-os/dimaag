@@ -55,8 +55,10 @@ jobs:
             if [ "$(docker inspect -f '{{.State.Running}}' hath-t)" = "true" ]; then
               echo "=== HUNG on run $i"
               docker logs hath-t 2>&1 | grep -E "^(# |ok |not ok )" | tail -8
-              docker exec hath-t ps -eo pid,pcpu,etime,args
-              docker exec hath-t pkill -USR2 node; sleep 2
+              set +e
+              docker exec hath-t sh -c 'for p in /proc/[0-9]*; do pid=${p#/proc/}; echo "$pid $(cut -d" " -f14,15 $p/stat) $(tr "\0" " " < $p/cmdline)"; done'
+              docker exec hath-t sh -c 'for p in /proc/[0-9]*; do grep -q node $p/cmdline 2>/dev/null && kill -USR2 ${p#/proc/}; done'; sleep 3
+              docker exec hath-t sh -c 'for p in /proc/[0-9]*; do pid=${p#/proc/}; echo "$pid $(cut -d" " -f14,15 $p/stat)"; done'
               docker logs hath-t 2>&1 | grep "\[probe" | tail -10
               docker run --rm --network host postgres:18 psql postgres://hath:hath@localhost:5432/hath -c "select pid, state, wait_event_type, wait_event, now()-query_start as age, left(query,160) as query from pg_stat_activity where datname='hath' and pid <> pg_backend_pid()"
               docker rm -f hath-t > /dev/null
