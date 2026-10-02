@@ -1,9 +1,7 @@
 /** Scheduled-message ticker: advance due rows, then deliver at-most-once. */
 
-import { TZDate } from "@date-fns/tz";
 import { addDays, addMinutes } from "date-fns";
 import { asc, eq, lte } from "drizzle-orm";
-import { TIMEZONE } from "../constants.js";
 import type { Db } from "../db/client.js";
 import { agents, scheduledMessages, type ScheduledMessageRow } from "../db/schema.js";
 import { deliverAgentMessage } from "./deliver.js";
@@ -23,12 +21,11 @@ export type Scheduler = {
   tick(now?: Date): Promise<void>;
 };
 
-/** Advance `runAt` by `intervalMinutes`, preserving wall time across DST for day multiples. */
+/** Advance `runAt` by `intervalMinutes`, preserving the box's wall time (`TZ`) across DST for day multiples. */
 export function advanceRunAt(runAt: Date, intervalMinutes: number): Date {
   if (intervalMinutes % 1440 === 0) {
     const days = intervalMinutes / 1440;
-    const zoned = new TZDate(runAt.getTime(), TIMEZONE);
-    return new Date(addDays(zoned, days).getTime());
+    return addDays(runAt, days);
   }
   return addMinutes(runAt, intervalMinutes);
 }

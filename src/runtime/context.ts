@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { formatISO } from "date-fns";
 import { asc, eq, isNull } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { agentTools, agents, tools } from "../db/schema.js";
@@ -170,7 +171,7 @@ export async function assembleRouterContext(opts: {
 }): Promise<AssembledContext> {
   return {
     system: await composeSystem(opts.db, opts.serviceRoot, null),
-    messages: [{ role: "user", content: `[From: Ankur]\n${opts.utterance}` }],
+    messages: [{ role: "user", content: `[From: Ankur · ${formatISO(new Date())}]\n${opts.utterance}` }],
     tools: routerLaneTools(),
     throughSeq: 0,
   };
@@ -200,19 +201,22 @@ export function arrivalsSince(
 
 /**
  * labelEntry gives a transcript row its turn role and `[From:]`/`[To:]`/`[Thought]`
- * label from this agent's point of view.
+ * label from this agent's point of view, stamped with when the row was written (ISO 8601
+ * in the box's `TZ` with its offset, `2026-10-02T13:14:48-04:00`) so the agent knows the
+ * date and time it is acting at.
  */
 function labelEntry(
   row: TranscriptEntry,
   agentId: string,
 ): { role: "user" | "assistant"; label: string } {
+  const at = formatISO(row.createdAt);
   if (row.fromAgentId === agentId && row.toAgentId === agentId) {
-    return { role: "assistant", label: "[Thought]" };
+    return { role: "assistant", label: `[Thought · ${at}]` };
   }
   if (row.toAgentId === agentId) {
-    return { role: "user", label: `[From: ${row.fromAgentId === null ? "Ankur" : row.fromAgentId}]` };
+    return { role: "user", label: `[From: ${row.fromAgentId === null ? "Ankur" : row.fromAgentId} · ${at}]` };
   }
-  return { role: "assistant", label: `[To: ${row.toAgentId === null ? "Ankur" : row.toAgentId}]` };
+  return { role: "assistant", label: `[To: ${row.toAgentId === null ? "Ankur" : row.toAgentId} · ${at}]` };
 }
 
 async function toolsForLane(db: Db, agentId: string, lane: Lane): Promise<DwarTool[]> {

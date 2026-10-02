@@ -89,7 +89,7 @@ test("a recorded thought reappears as the agent's own [Thought] in context", asy
   );
   assert.ok(thought, "recorded thought should appear in assembled context");
   assert.equal(thought.role, "assistant");
-  assert.match(thought.content as string, /\[Thought\]/);
+  assert.match(thought.content as string, /\[Thought · [^\]]+\]/);
 });
 
 test("record_thought rejects empty text", async () => {

@@ -137,7 +137,7 @@ test("POST /router composes system doctrine, charter, identity, and roots; offer
   assert.ok(system.startsWith(`${doctrine}\n\n${charter}\n\n`));
   assert.match(system, /- finance-specialist: Owns Ankur's money\./);
   assert.doesNotMatch(system, /finance-worker/);
-  assert.match(String(request.messages.at(-1)?.content), /\[From: Ankur\]\nhi/);
+  assert.match(String(request.messages.at(-1)?.content), /^\[From: Ankur · \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}\]\nhi$/);
 
   const names = (request.tools ?? []).map((tool) => tool.name).sort();
   assert.deepEqual(names, [
@@ -268,9 +268,11 @@ test("POST /router is ephemeral: each run sees only its own utterance", async ()
   });
   await app.inject({ method: "POST", url: "/router", payload: { content: "no, a monthly one" } });
   const second = dwar.completeCalls.at(-1)!;
-  assert.deepEqual(
-    second.messages.map((m) => ({ role: m.role, content: m.content })),
-    [{ role: "user", content: "[From: Ankur]\nno, a monthly one" }],
+  assert.equal(second.messages.length, 1);
+  assert.equal(second.messages[0]?.role, "user");
+  assert.match(
+    String(second.messages[0]?.content),
+    /^\[From: Ankur · \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}\]\nno, a monthly one$/,
   );
 
   await runtime.waitUntilIdle();

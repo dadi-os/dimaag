@@ -71,6 +71,8 @@ export type Config = {
   serviceRoot: string;
   env: {
     databaseUrl: string;
+    /** The box's IANA zone from `TZ`, which also sets this process's local time. */
+    timezone: string;
     dwarBaseUrl: string;
     yaadBaseUrl: string;
     gharBaseUrl: string;
@@ -115,7 +117,7 @@ export function resetConfigCache(): void {
 
 /**
  * Load process config from config.toml and required env.
- * @throws When config.toml is invalid or DATABASE_URL is missing.
+ * @throws When config.toml is invalid, DATABASE_URL is missing, or TZ is missing or not an IANA zone.
  */
 export function loadConfig(): Config {
   if (cached) {
@@ -126,10 +128,18 @@ export function loadConfig(): Config {
   if (!databaseUrl) {
     throw new Error("DATABASE_URL is required");
   }
+  const timezone = process.env.TZ;
+  if (!timezone) {
+    throw new Error("TZ is required");
+  }
+  if (!Intl.supportedValuesOf("timeZone").includes(timezone)) {
+    throw new Error(`TZ is not an IANA time zone: ${timezone}`);
+  }
   cached = {
     serviceRoot,
     env: {
       databaseUrl,
+      timezone,
       dwarBaseUrl: DWAR_BASE_URL,
       yaadBaseUrl: YAAD_BASE_URL,
       gharBaseUrl: GHAR_BASE_URL,

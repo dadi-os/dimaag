@@ -41,7 +41,7 @@ hath/
 
 Topology is hardcoded in `src/constants.ts`.
 
-`DATABASE_URL` is required at startup (no empty default). Nas injects it in compose and on the appliance (`postgres://hath:hath@hath-postgres:5432/hath`). There is no Hath `.env` — Postgres is not Preferences-editable; `.env.example` documents the variable.
+`DATABASE_URL` is required at startup (no empty default). Nas injects it in compose and on the appliance (`postgres://hath:hath@hath-postgres:5432/hath`). There is no Hath `.env` — Postgres is not Preferences-editable; `.env.example` documents the variables. `TZ` is required too and must be an IANA zone: it is the box's time zone, which Nas writes to `/var/lib/dadi/timezone.env` from `/etc/localtime` on every boot and the container loads with `EnvironmentFile=`; compose requires it in the shell.
 
 ## Local run
 
@@ -226,7 +226,7 @@ The host `dadi` CLI lives in Nas (`service/cmd/dadi`, `/usr/bin/dadi` on the app
 
 `agents`, `agent_logs`, `messages`, and `scheduled_messages` survive restart. `messages` is the source of truth for human↔agent chat and the rolling lane transcript (at least the last `[runtime].transcript_window_messages` turns, default 40; the window's start advances in steps of `transcript_window_step_messages` so the cached prefix survives new messages). Older turns remain in `agent_logs` / `hath_get_logs`. Each `agent_logs` row is one of: `response` — one model call's full output (`provider`, `stop_reason`, `usage`, and `content` blocks in provider order: `thinking` / `redacted_thinking`, `text`, `tool_use`), written before its tools run; `tool_result` — one tool's outcome (`tool_use_id`, `name`, `content`, `is_error`, plus audit fields such as `browser_id`); `message` — a delivered message. Wakes, locks, steer/intent queues, host `sessions`, and the event stream do not survive. Single-process only — do not run replicas sharing the DB and expecting lane serialization.
 
-Schedule tools (`schedule_message`, `list_schedules`, `cancel_schedule`) persist one-shot and recurring deliveries; the in-process scheduler ticks from `[schedule].tick_seconds` in `config.toml` (wall clock uses `TIMEZONE` in `constants.ts`).
+Schedule tools (`schedule_message`, `list_schedules`, `cancel_schedule`) persist one-shot and recurring deliveries; the in-process scheduler ticks from `[schedule].tick_seconds` in `config.toml` (wall clock is the box's zone from the required `TZ`, which Nas writes from `/etc/localtime`).
 
 ## Routes
 

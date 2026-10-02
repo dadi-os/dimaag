@@ -102,8 +102,8 @@ test("assembleContext truncates to transcript_window_messages", async () => {
     transcriptWindowStep: 1,
   });
   assert.equal(ctx.messages.length, 4);
-  assert.equal(ctx.messages[0]?.content, "[From: Ankur]\nuser-3");
-  assert.equal(ctx.messages[3]?.content, "[To: Ankur]\nagent-4");
+  assert.match(String(ctx.messages[0]?.content), /^\[From: Ankur · \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}\]\nuser-3$/);
+  assert.match(String(ctx.messages[3]?.content), /^\[To: Ankur · \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}\]\nagent-4$/);
 });
 
 test("assembleContext advances the window in steps so the prefix survives new messages", async () => {
@@ -139,7 +139,7 @@ test("assembleContext advances the window in steps so the prefix survives new me
   await deliverUserMessage(deps, agentId, "m-12");
   const third = await assemble();
   assert.equal(third.messages.length, 4);
-  assert.equal(third.messages[0]?.content, "[From: Ankur]\nm-9");
+  assert.match(String(third.messages[0]?.content), /^\[From: Ankur · \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}\]\nm-9$/);
   assert.equal(third.throughSeq, transcript.transcriptFor(agentId).at(-1)?.seq);
 });
 

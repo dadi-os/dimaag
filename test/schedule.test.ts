@@ -4,7 +4,6 @@ import { after, before, test } from "node:test";
 import { TZDate } from "@date-fns/tz";
 import { and, eq } from "drizzle-orm";
 import { buildApp } from "../src/app.js";
-import { TIMEZONE } from "../src/constants.js";
 import { migrate } from "../src/db/migrate.js";
 import { agentLogs, agents, scheduledMessages } from "../src/db/schema.js";
 import { createRuntime } from "../src/runtime/engine.js";
@@ -53,7 +52,7 @@ function capturingLog() {
 }
 
 function wallTime(date: Date): string {
-  const zoned = new TZDate(date.getTime(), TIMEZONE);
+  const zoned = new TZDate(date.getTime(), config.env.timezone);
   const y = zoned.getFullYear();
   const m = String(zoned.getMonth() + 1).padStart(2, "0");
   const d = String(zoned.getDate()).padStart(2, "0");
@@ -242,7 +241,7 @@ test("recurring daily preserves wall time across DST transitions", async () => {
   });
 
   const fallId = randomUUID();
-  const fallRunAt = new TZDate(2026, 9, 31, 17, 0, 0, 0, TIMEZONE);
+  const fallRunAt = new TZDate(2026, 9, 31, 17, 0, 0, 0, config.env.timezone);
   await handle.db.insert(scheduledMessages).values({
     id: fallId,
     fromAgentId: fromId,
@@ -275,7 +274,7 @@ test("recurring daily preserves wall time across DST transitions", async () => {
 
   await handle.sql`TRUNCATE scheduled_messages CASCADE`;
   const springId = randomUUID();
-  const springRunAt = new TZDate(2027, 2, 13, 17, 0, 0, 0, TIMEZONE);
+  const springRunAt = new TZDate(2027, 2, 13, 17, 0, 0, 0, config.env.timezone);
   await handle.db.insert(scheduledMessages).values({
     id: springId,
     fromAgentId: fromId,
