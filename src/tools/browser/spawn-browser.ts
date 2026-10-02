@@ -30,7 +30,7 @@ export const spawnBrowser = defineTool({
     return browserToolCall(
       async () => {
         const created = await ctx.nas.createBrowser(body);
-        ctx.browsers.remember(created.id, created.cdp_url);
+        ctx.browsers.remember(created.id, { cdpUrl: created.cdp_url, downloadsDir: created.downloads_dir });
         return created;
       },
       (response) => ({ browser_id: response.id, cdp_url: response.cdp_url }),

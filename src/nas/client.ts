@@ -90,6 +90,7 @@ const createBrowserResponseSchema = z
     id: z.number().int(),
     display: z.string(),
     cdp_url: z.string().min(1),
+    downloads_dir: z.string().min(1),
   })
   .passthrough();
 
@@ -99,6 +100,7 @@ const browserInfoSchema = z
     display: z.string(),
     cdp_url: z.string(),
     healthy: z.boolean(),
+    downloads_dir: z.string().min(1),
   })
   .passthrough();
 

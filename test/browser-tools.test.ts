@@ -73,6 +73,7 @@ test("spawn_browser and list_browsers call Nas", async () => {
         id,
         display: `:${id}`,
         cdp_url: `ws://nas.dadi/browsers/${id}/devtools/browser/abc`,
+        downloads_dir: "/home/dadi/Downloads",
       };
     },
     listBrowsers: () => [
@@ -81,6 +82,7 @@ test("spawn_browser and list_browsers call Nas", async () => {
         display: ":10",
         cdp_url: "ws://nas.dadi/browsers/10/devtools/browser/abc",
         healthy: true,
+        downloads_dir: "/home/dadi/Downloads",
       },
     ],
   });
@@ -144,7 +146,10 @@ test("close_browser calls Nas and drops the local connection entry", async () =>
     config,
     log: silentLog,
   });
-  runtime.browsers.remember(10, "ws://example/devtools/browser/x");
+  runtime.browsers.remember(10, {
+    cdpUrl: "ws://example/devtools/browser/x",
+    downloadsDir: "/home/dadi/Downloads",
+  });
   const closed = await executeTool(runtime.toolContext(workerId, "reasoning"), {
     type: "tool_use",
     id: "cb1",

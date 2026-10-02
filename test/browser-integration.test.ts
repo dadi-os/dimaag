@@ -58,7 +58,7 @@ test("integration: snapshot refs, actions, tabs, truncate, stale_ref", async (t)
   };
 
   const driver = new BrowserDriver(nas, config, silentLog);
-  driver.remember(browserId, cdpUrl);
+  driver.remember(browserId, { cdpUrl, downloadsDir: String(created.data.downloads_dir) });
 
   try {
     const pageHtml = encodeURIComponent(`<!doctype html><html><body>
@@ -152,7 +152,7 @@ test("integration: upload_file attaches a host file directly and through a file 
     },
   };
   const driver = new BrowserDriver(nas, config, silentLog);
-  driver.remember(browserId, cdpUrl);
+  driver.remember(browserId, { cdpUrl, downloadsDir: String(created.data.downloads_dir) });
 
   try {
     const pageHtml = encodeURIComponent(`<!doctype html><html><body>
@@ -211,7 +211,7 @@ test("integration: a filled passkey answers WebAuthn after later browser actions
   const browserId = created.data.id as number;
   const cdpUrl = String(created.data.cdp_url).replace(/^ws:\/\/[^/]+/, nasUrl.replace(/^http/, "ws"));
   const driver = new BrowserDriver(createNasClient(config), config, silentLog);
-  driver.remember(browserId, cdpUrl);
+  driver.remember(browserId, { cdpUrl, downloadsDir: String(created.data.downloads_dir) });
 
   const rpId = "passkey.dadi.test";
   const passkey = (): { id: string; cred: PasskeyInject } => {

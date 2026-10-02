@@ -17,9 +17,16 @@ import { HathError } from "../errors.js";
 import type { NasClient } from "../nas/client.js";
 import type { RuntimeLog } from "../runtime/engine.js";
 
+/** Where Hath reaches a Nas browser, as Nas reports it on spawn and list. */
+export type BrowserEndpoint = {
+  cdpUrl: string;
+  /** Host directory Chromium saves downloads into, under their own file names. */
+  downloadsDir: string;
+};
+
 type Connection = {
   browser: Browser;
-  cdpUrl: string;
+  endpoint: BrowserEndpoint;
 };
 
 /** PKCS#8 passkey loaded into a Chromium virtual authenticator. Never log these fields. */
@@ -54,7 +61,7 @@ export type SnapshotResult = {
 /** Manage CDP connections and page actions for Nas browsers. */
 export class BrowserDriver {
   private readonly connections = new Map<number, Connection>();
-  private readonly cdpUrls = new Map<number, string>();
+  private readonly endpoints = new Map<number, BrowserEndpoint>();
   private readonly pageSessions = new WeakMap<Page, CDPSession>();
   private readonly authenticators = new WeakMap<Page, string>();
 
@@ -64,13 +71,13 @@ export class BrowserDriver {
     private readonly log: RuntimeLog,
   ) {}
 
-  /** Cache the CDP URL from spawn without connecting yet. */
-  remember(browserId: number, cdpUrl: string): void {
-    this.cdpUrls.set(browserId, cdpUrl);
+  /** Cache the endpoint from spawn without connecting yet. */
+  remember(browserId: number, endpoint: BrowserEndpoint): void {
+    this.endpoints.set(browserId, endpoint);
   }
 
   drop(browserId: number): void {
-    this.cdpUrls.delete(browserId);
+    this.endpoints.delete(browserId);
     this.detach(browserId);
   }
 
@@ -85,13 +92,18 @@ export class BrowserDriver {
   }
 
   dropAll(): void {
-    for (const id of new Set([...this.connections.keys(), ...this.cdpUrls.keys()])) {
+    for (const id of new Set([...this.connections.keys(), ...this.endpoints.keys()])) {
       this.drop(id);
     }
   }
 
-  async connect(browserId: number, cdpUrl: string): Promise<Browser> {
-    this.cdpUrls.set(browserId, cdpUrl);
+  /**
+   * Connect over CDP, or reuse a live connection. Playwright resets Chromium's download
+   * behavior to its own temp dir on connect, so every new connection points downloads back
+   * at the endpoint's downloads dir before it is cached.
+   */
+  async connect(browserId: number, endpoint: BrowserEndpoint): Promise<Browser> {
+    this.endpoints.set(browserId, endpoint);
     const existing = this.connections.get(browserId);
     if (existing && existing.browser.isConnected()) {
       return existing.browser;
@@ -100,8 +112,23 @@ export class BrowserDriver {
       this.connections.delete(browserId);
       void existing.browser.close().catch((err) => this.logCleanup(err, "stale browser connection close", `browser ${browserId}`));
     }
-    const browser = await chromium.connectOverCDP(cdpUrl);
-    this.connections.set(browserId, { browser, cdpUrl });
+    const browser = await chromium.connectOverCDP(endpoint.cdpUrl);
+    try {
+      const session = await browser.newBrowserCDPSession();
+      try {
+        await session.send("Browser.setDownloadBehavior", {
+          behavior: "allow",
+          downloadPath: endpoint.downloadsDir,
+          eventsEnabled: true,
+        });
+      } finally {
+        await session.detach();
+      }
+    } catch (err) {
+      void browser.close().catch((closeErr) => this.logCleanup(closeErr, "browser connection close", `browser ${browserId}`));
+      throw err;
+    }
+    this.connections.set(browserId, { browser, endpoint });
     browser.on("disconnected", () => {
       if (this.connections.get(browserId)?.browser === browser) {
         this.connections.delete(browserId);
@@ -110,28 +137,29 @@ export class BrowserDriver {
     return browser;
   }
 
-  private async resolveCdpUrl(browserId: number): Promise<string> {
-    const remembered = this.cdpUrls.get(browserId);
+  private async resolveEndpoint(browserId: number): Promise<BrowserEndpoint> {
+    const remembered = this.endpoints.get(browserId);
     if (remembered) {
       return remembered;
     }
     const cached = this.connections.get(browserId);
-    if (cached?.cdpUrl) {
-      return cached.cdpUrl;
+    if (cached) {
+      return cached.endpoint;
     }
     const list = await this.nas.listBrowsers();
     const found = list.find((b) => b.id === browserId);
     if (!found || !found.cdp_url) {
       throw new HathError(404, "not_found", `browser ${browserId} is not running`);
     }
-    this.cdpUrls.set(browserId, found.cdp_url);
-    return found.cdp_url;
+    const endpoint = { cdpUrl: found.cdp_url, downloadsDir: found.downloads_dir };
+    this.endpoints.set(browserId, endpoint);
+    return endpoint;
   }
 
   private async withBrowser<T>(browserId: number, fn: (browser: Browser) => Promise<T>): Promise<T> {
     const run = async () => {
-      const cdpUrl = await this.resolveCdpUrl(browserId);
-      const browser = await this.connect(browserId, cdpUrl);
+      const endpoint = await this.resolveEndpoint(browserId);
+      const browser = await this.connect(browserId, endpoint);
       return await fn(browser);
     };
     try {

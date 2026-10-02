@@ -155,7 +155,7 @@ File tools take absolute host paths. Nas **denies writes** to OS and dadiOS runt
 
 ### Browser
 
-Each worker drives one Nas Chromium over CDP (`playwright-core` `connectOverCDP`). Act on accessibility refs, not coordinates. `tab_id` is the CDP target id; omit it to use the focused/attached page. Refs from `browser_accessibility_tree` (`e1`, `e2`, …) are valid only until the next snapshot. Screenshots go through Dwar `/image/describe` — pixels never enter the transcript; the raw image is kept in tool `audit` only.
+Each worker drives one Nas Chromium over CDP (`playwright-core` `connectOverCDP`). Playwright resets Chromium's download behavior on connect, so every connection points downloads at the browser's Nas `downloads_dir` (the dadi home's `Downloads`) under their own file names. Act on accessibility refs, not coordinates. `tab_id` is the CDP target id; omit it to use the focused/attached page. Refs from `browser_accessibility_tree` (`e1`, `e2`, …) are valid only until the next snapshot. Screenshots go through Dwar `/image/describe` — pixels never enter the transcript; the raw image is kept in tool `audit` only.
 
 | tool | holder | notes |
 | --- | --- | --- |

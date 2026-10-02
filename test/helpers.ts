@@ -529,6 +529,7 @@ export function mockNas(opts: {
         id: 10,
         display: ":10",
         cdp_url: "ws://127.0.0.1:9310/devtools/browser/test",
+        downloads_dir: "/home/dadi/Downloads",
       };
     },
     async listBrowsers() {
