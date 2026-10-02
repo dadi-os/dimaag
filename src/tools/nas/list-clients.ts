@@ -8,7 +8,7 @@ const input = z.object({}).strict();
 export const listClients = defineTool({
   name: "nas_list_clients",
   description:
-    "List mesh clients (devices and the box node) with online status and last_seen from Headscale. Call this to discover node_name values before device_* tools. online means the node is on the mesh, not that the dadi app is foregrounded.",
+    "List mesh clients (devices and the box node) with online status and last_seen from Headscale. online means the node is on the mesh, not that the dadi app is running.",
   input,
   inputSchema: {
     type: "object",

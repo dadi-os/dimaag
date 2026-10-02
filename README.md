@@ -73,13 +73,13 @@ Every `agents` row is an agent. The router is not a row — it is `POST /router`
 
 ## Router
 
-`POST /router` is Dadi's translator: Ankur says what he wants, and the router picks the owner, writes the message he would send, sends it as him, and opens that chat on his device. It is not an agent and not a conversation. The router is the null identity — the same as the user — so every message it sends lands in an agent's thread as `from_agent_id` null, written as Ankur. The router is ephemeral: it has no transcript and carries nothing between runs. Each request:
+`POST /router` is Dadi's translator: Ankur says what he wants, and the router picks the owner, writes the message he would send, and sends it as him; his app opens that thread when the agent answers. It is not an agent and not a conversation. The router is the null identity — the same as the user — so every message it sends lands in an agent's thread as `from_agent_id` null, written as Ankur. The router is ephemeral: it has no transcript and carries nothing between runs. Each request:
 
-1. Writes an audit row (`agent_logs`, router lane, `message` / `receive`) holding the utterance and, when a device sent it, `node_name`. It is not stored as a message.
-2. Runs the router lane: the same step loop as agent lanes, calling Dwar `POST /chat/complete` (context-free on Dwar's side). System is `prompts/system.md` + `prompts/router.md` + identity + the active root agents; messages are exactly one turn, this utterance (headed `[From: Ankur, on device <node_name>]` when the body carries `node_name`) — no earlier run, nothing sent as Ankur, no reply to him, and nothing that arrives mid-run. What is underway it finds with its tools. Nothing in code caps the loop; it ends when the model calls `yield`.
+1. Writes an audit row (`agent_logs`, router lane, `message` / `receive`) holding the utterance. It is not stored as a message.
+2. Runs the router lane: the same step loop as agent lanes, calling Dwar `POST /chat/complete` (context-free on Dwar's side). System is `prompts/system.md` + `prompts/router.md` + identity + the active root agents; messages are exactly one turn, this utterance (headed `[From: Ankur]`) — no earlier run, nothing sent as Ankur, no reply to him, and nothing that arrives mid-run. What is underway it finds with its tools. Nothing in code caps the loop; it ends when the model calls `yield`.
 3. Returns `201 { messages: [{ to_agent_id, content, seq, created_at }] }` — every message it sent, in order (may be empty).
 
-Router tools (hardcoded, not grants): `send_message` (deliver as Ankur; wakes a dormant recipient), `list_agents`, `recall_memory`, `hath_spawn_agent` (creates a root), `device_open_chat` (opens a thread in Ankur's dadi app on that device; router-only, never granted), and the embedded agent-management tools — `grant_tool` / `revoke_tool` on root agents only, `get_agent` / `get_logs` on any agent, `list_tools`. It cannot modify agents: agents reshape themselves. Its model turns and tool results log to `agent_logs` with a null `agent_id` on the `router` lane. The router's `get_logs` must name an agent; only the user (CLI, no `agent_id`) reads the null identity's rows — the router's turns plus every message sent by or to Ankur. Runs are serialized.
+Router tools (hardcoded, not grants): `send_message` (deliver as Ankur; wakes a dormant recipient), `list_agents`, `recall_memory`, `hath_spawn_agent` (creates a root), and the embedded agent-management tools — `grant_tool` / `revoke_tool` on root agents only, `get_agent` / `get_logs` on any agent, `list_tools`. It cannot modify agents: agents reshape themselves. Its model turns and tool results log to `agent_logs` with a null `agent_id` on the `router` lane. The router's `get_logs` must name an agent; only the user (CLI, no `agent_id`) reads the null identity's rows — the router's turns plus every message sent by or to Ankur. Runs are serialized.
 
 SSE: `router_started` / `router_finished` / `router_failed`. After a route, each thread's `lane_*` and `message` events take over.
 
@@ -190,7 +190,7 @@ Host ops via Nas HTTP. System logs are Loki (`nas_get_logs`); agent cognition is
 
 ### Devices (desktop and phone apps)
 
-Reverse RPC over SSE `device_command` + `POST /devices/commands/:id/result`. Discover `node_name` with `nas_list_clients` first.
+Read-only surveys over every enrolled device: each call lists every mesh client from `nas_list_clients` except the box (`os`) with `online`, `last_seen` and `app_running` (a `POST /devices/presence` heartbeat within 45s), and asks only devices with the app running, in parallel, over SSE `device_command` + `POST /devices/commands/:id/result`. Returns `{ devices: [{ node_name, online, last_seen, app_running, result | error }] }`; nothing is pushed to devices.
 
 | tool | notes |
 | --- | --- |
@@ -198,8 +198,6 @@ Reverse RPC over SSE `device_command` + `POST /devices/commands/:id/result`. Dis
 | `device_get_battery` | percent + charging |
 | `device_get_location` | lat/lng/accuracy/timestamp + address when available |
 | `device_get_network` | mesh + connection type |
-| `device_read_clipboard` / `device_write_clipboard` | clipboard text |
-| `device_send_file` | write into OS Downloads; returns path |
 
 ### Hath (meta)
 

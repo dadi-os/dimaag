@@ -15,7 +15,7 @@ export async function registerRouter(app: FastifyInstance): Promise<void> {
     const content = await patchMessageContent(app.dwar, body.content, body.attachments);
     app.runtime.events.emit({ type: "router_started", at: new Date().toISOString() });
     try {
-      const messages = await app.runtime.route(content, body.node_name);
+      const messages = await app.runtime.route(content);
       app.runtime.events.emit({ type: "router_finished", at: new Date().toISOString() });
       return reply.status(201).send({ messages });
     } catch (err) {

@@ -1,28 +1,21 @@
 import { z } from "zod";
 import { defineTool } from "../types.js";
-import { deviceToolCall } from "./call.js";
+import { surveyDevices } from "./call.js";
 
-const input = z
-  .object({
-    node_name: z.string().min(1),
-  })
-  .strict();
+const input = z.object({}).strict();
 
-/** Ask a device for battery level and charging state. */
+/** Ask every device for battery level and charging state. */
 export const getBattery = defineTool({
   name: "device_get_battery",
   description:
-    "Get battery percent and charging state from a device. Fails with capability_unsupported when the OS does not expose battery data.",
+    "Get battery percent and charging state from every enrolled device. A device whose OS does not expose battery data answers with capability_unsupported. Every device is listed with online and last_seen from the mesh and app_running from its heartbeat, so offline and app-closed devices show up too; only devices with the app running answer, with result or error.",
   input,
   inputSchema: {
     type: "object",
     additionalProperties: false,
-    properties: {
-      node_name: { type: "string", description: "Mesh node name from nas_list_clients" },
-    },
-    required: ["node_name"],
+    properties: {},
   },
-  async handler(ctx, parsed) {
-    return deviceToolCall(ctx, parsed.node_name, "device_get_battery");
+  async handler(ctx) {
+    return surveyDevices(ctx, "device_get_battery");
   },
 });

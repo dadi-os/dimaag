@@ -36,9 +36,6 @@ const DEVICE_TOOLS = [
   "device_get_battery",
   "device_get_location",
   "device_get_network",
-  "device_read_clipboard",
-  "device_write_clipboard",
-  "device_send_file",
 ] as const;
 
 test("device tools are registered", async () => {
@@ -46,7 +43,7 @@ test("device tools are registered", async () => {
   for (const name of DEVICE_TOOLS) {
     assert.equal(findTool(name)?.name, name);
   }
-  assert.equal(allTools().length, 57);
+  assert.equal(allTools().length, 54);
   await assert.doesNotReject(() => syncTools(handle.db));
 });
 
@@ -89,7 +86,20 @@ test("nas_list_clients returns Nas mesh clients", async () => {
   assert.equal(body.clients[0].node_name, "ankur-phone");
 });
 
-test("device_get_battery waits for client result over the command bus", async () => {
+/** A Nas whose mesh holds the box, a phone with the app open, and a laptop that is off. */
+function surveyNas() {
+  const nas = mockNas();
+  nas.listClients = async () => ({
+    clients: [
+      { node_name: "os", online: true, last_seen: null, ip_addresses: ["100.64.0.1"] },
+      { node_name: "ankur-phone", online: true, last_seen: "2026-01-02T03:04:05Z", ip_addresses: ["100.64.0.5"] },
+      { node_name: "ankur-laptop", online: false, last_seen: "2026-01-01T00:00:00Z", ip_addresses: ["100.64.0.6"] },
+    ],
+  });
+  return nas;
+}
+
+test("device_get_battery surveys every enrolled device and only asks running apps", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
     name: "thread",
@@ -102,22 +112,23 @@ test("device_get_battery waits for client result over the command bus", async ()
     yaad: mockYaad(),
     ghar: mockGhar(),
     chaavi: mockChaavi(),
-    nas: mockNas(),
+    nas: surveyNas(),
     config,
     log: silentLog,
   });
+  runtime.devices.setPresence({ node_name: "ankur-phone", platform: "ios", app_version: "1.0.0" });
 
+  const asked: string[] = [];
   const unsubscribe = runtime.events.subscribe((event) => {
     if (event.type !== "device_command") {
       return;
     }
-    assert.equal(event.node_name, "ankur-phone");
+    asked.push(event.node_name);
     assert.equal(event.tool, "device_get_battery");
-    const accepted = runtime.devices.complete(event.command_id, {
+    runtime.devices.complete(event.command_id, {
       ok: true,
       result: { percent: 81, charging: true },
     });
-    assert.equal(accepted, true);
   });
 
   try {
@@ -125,22 +136,38 @@ test("device_get_battery waits for client result over the command bus", async ()
       type: "tool_use",
       id: "bat1",
       name: "device_get_battery",
-      input: { node_name: "ankur-phone" },
+      input: {},
     });
     assert.equal(result.isError, false);
-    assert.deepEqual(JSON.parse(result.content), { percent: 81, charging: true });
-    assert.equal(result.audit.node_name, "ankur-phone");
+    assert.deepEqual(asked, ["ankur-phone"]);
+    assert.deepEqual(JSON.parse(result.content), {
+      devices: [
+        {
+          node_name: "ankur-phone",
+          online: true,
+          last_seen: "2026-01-02T03:04:05Z",
+          app_running: true,
+          result: { percent: 81, charging: true },
+        },
+        {
+          node_name: "ankur-laptop",
+          online: false,
+          last_seen: "2026-01-01T00:00:00Z",
+          app_running: false,
+        },
+      ],
+    });
   } finally {
     unsubscribe();
   }
 });
 
-test("device_write_clipboard forwards text args and surfaces client errors", async () => {
+test("a running app's failure stays on its own device line", async () => {
   await resetRuntime(handle.sql, handle.db, config);
   const workerId = await insertWorker(handle.db, {
     name: "thread",
     systemPrompt: "do the job",
-    tools: ["device_write_clipboard"],
+    tools: ["device_get_location"],
   });
   const runtime = createRuntime({
     db: handle.db,
@@ -148,32 +175,33 @@ test("device_write_clipboard forwards text args and surfaces client errors", asy
     yaad: mockYaad(),
     ghar: mockGhar(),
     chaavi: mockChaavi(),
-    nas: mockNas(),
+    nas: surveyNas(),
     config,
     log: silentLog,
   });
+  runtime.devices.setPresence({ node_name: "ankur-phone", platform: "ios", app_version: "1.0.0" });
 
   const unsubscribe = runtime.events.subscribe((event) => {
     if (event.type !== "device_command") {
       return;
     }
-    assert.equal(event.tool, "device_write_clipboard");
-    assert.deepEqual(event.args, { text: "hello" });
     runtime.devices.complete(event.command_id, {
       ok: false,
-      error: { type: "permission_denied", message: "clipboard blocked" },
+      error: { type: "permission_denied", message: "location blocked" },
     });
   });
 
   try {
     const result = await executeTool(runtime.toolContext(workerId, "reasoning"), {
       type: "tool_use",
-      id: "clip1",
-      name: "device_write_clipboard",
-      input: { node_name: "ankur-laptop", text: "hello" },
+      id: "loc1",
+      name: "device_get_location",
+      input: {},
     });
-    assert.equal(result.isError, true);
-    assert.equal(result.content, "permission_denied: clipboard blocked");
+    assert.equal(result.isError, false);
+    const phone = JSON.parse(result.content).devices[0];
+    assert.equal(phone.node_name, "ankur-phone");
+    assert.deepEqual(phone.error, { type: "permission_denied", message: "location blocked" });
   } finally {
     unsubscribe();
   }

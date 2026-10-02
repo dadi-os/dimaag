@@ -1,28 +1,21 @@
 import { z } from "zod";
 import { defineTool } from "../types.js";
-import { deviceToolCall } from "./call.js";
+import { surveyDevices } from "./call.js";
 
-const input = z
-  .object({
-    node_name: z.string().min(1),
-  })
-  .strict();
+const input = z.object({}).strict();
 
-/** Ask a device for device identity and OS details. */
+/** Ask every device for device identity and OS details. */
 export const getInfo = defineTool({
   name: "device_get_info",
   description:
-    "Get identity and environment for a device: node_name, platform, OS version, app version, timezone. Use nas_list_clients first when you do not already know node_name.",
+    "Get identity and environment from every enrolled device: platform, OS version, app version, timezone. Every device is listed with online and last_seen from the mesh and app_running from its heartbeat, so offline and app-closed devices show up too; only devices with the app running answer, with result or error.",
   input,
   inputSchema: {
     type: "object",
     additionalProperties: false,
-    properties: {
-      node_name: { type: "string", description: "Mesh node name from nas_list_clients" },
-    },
-    required: ["node_name"],
+    properties: {},
   },
-  async handler(ctx, parsed) {
-    return deviceToolCall(ctx, parsed.node_name, "device_get_info");
+  async handler(ctx) {
+    return surveyDevices(ctx, "device_get_info");
   },
 });

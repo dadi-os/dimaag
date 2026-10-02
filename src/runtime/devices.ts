@@ -11,11 +11,7 @@ export type DeviceToolName =
   | "device_get_info"
   | "device_get_battery"
   | "device_get_location"
-  | "device_get_network"
-  | "device_read_clipboard"
-  | "device_write_clipboard"
-  | "device_send_file"
-  | "device_open_chat";
+  | "device_get_network";
 
 export type DevicePresence = {
   node_name: string;
@@ -32,6 +28,9 @@ type Pending = {
   resolve: (result: DeviceCommandResult) => void;
   timer: ReturnType<typeof setTimeout>;
 };
+
+/** How recent a heartbeat must be for the app to count as running: three missed 15s presence beats. */
+const APP_PRESENCE_MS = 45_000;
 
 /** Track live device heartbeats and outstanding command promises. */
 export class DeviceGateway {
@@ -63,6 +62,12 @@ export class DeviceGateway {
   /** All known heartbeats (may include offline-but-recent clients). */
   listPresence(): DevicePresence[] {
     return [...this.presence.values()];
+  }
+
+  /** True when the node's dadi app has sent a heartbeat within APP_PRESENCE_MS. */
+  appRunning(nodeName: string): boolean {
+    const entry = this.presence.get(nodeName);
+    return entry !== undefined && Date.now() - Date.parse(entry.at) <= APP_PRESENCE_MS;
   }
 
   /**

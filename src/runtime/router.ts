@@ -11,7 +11,6 @@ import { z } from "zod";
 import { agentIdSchema } from "../agent-id.js";
 import { agents } from "../db/schema.js";
 import { spawnAgent } from "../tools/hath/spawn-agent.js";
-import { openChat } from "../tools/device/open-chat.js";
 import { embeddedAgentTools } from "../tools/registry.js";
 import { fail, ok, requireAgent, type ToolContext, type ToolExecResult } from "../tools/shared.js";
 import { asDwarTool, type ToolDefinition } from "../tools/types.js";
@@ -48,14 +47,13 @@ const routerSendMessageTool: DwarTool = {
 };
 
 /**
- * Registry-style tools the router holds without grants: spawning roots, the
- * embedded agent-management set, and opening the hand-off's chat on his device.
+ * Registry-style tools the router holds without grants: spawning roots and the
+ * embedded agent-management set.
  */
 function routerRegistryTools(): ToolDefinition[] {
   return [
     spawnAgent as unknown as ToolDefinition,
     ...embeddedAgentTools(),
-    openChat as unknown as ToolDefinition,
   ];
 }
 

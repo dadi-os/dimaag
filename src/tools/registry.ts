@@ -45,9 +45,6 @@ import { getInfo as deviceGetInfo } from "./device/get-info.js";
 import { getBattery as deviceGetBattery } from "./device/get-battery.js";
 import { getLocation as deviceGetLocation } from "./device/get-location.js";
 import { getNetwork as deviceGetNetwork } from "./device/get-network.js";
-import { readClipboard as deviceReadClipboard } from "./device/read-clipboard.js";
-import { writeClipboard as deviceWriteClipboard } from "./device/write-clipboard.js";
-import { sendFile as deviceSendFile } from "./device/send-file.js";
 import { closeTerminal } from "./terminal/close-terminal.js";
 import { editFile } from "./terminal/edit-file.js";
 import { executeShell } from "./terminal/execute-shell.js";
@@ -123,9 +120,6 @@ const definitions = [
   deviceGetBattery,
   deviceGetLocation,
   deviceGetNetwork,
-  deviceReadClipboard,
-  deviceWriteClipboard,
-  deviceSendFile,
 ] as unknown as ToolDefinition[];
 
 const byName = new Map<string, ToolDefinition>();

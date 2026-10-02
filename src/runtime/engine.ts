@@ -66,7 +66,7 @@ export type Runtime = {
   enqueueReasoning: (agentId: string) => void;
   waitUntilIdle: () => Promise<void>;
   /** Run the router on one utterance from Ankur; resolves with every message it sent as him. */
-  route: (content: string, nodeName?: string) => Promise<RoutedMessage[]>;
+  route: (content: string) => Promise<RoutedMessage[]>;
   toolContext: (
     callerId: string | null,
     lane: Lane,
@@ -335,7 +335,7 @@ export function createRuntime(opts: {
    * audit row records it. Loops the router lane on Dwar's context-free
    * chat/complete until it yields. Runs are serialized. Nothing caps the loop.
    */
-  async function route(content: string, nodeName?: string): Promise<RoutedMessage[]> {
+  async function route(content: string): Promise<RoutedMessage[]> {
     const release = await locks.acquire(ROUTER_KEY, "router", opts.config.runtime.lane_queue_timeout_ms);
     try {
       await writeAgentLog(opts.db, {
@@ -347,7 +347,6 @@ export function createRuntime(opts: {
           from_agent_id: null,
           to_agent_id: null,
           content,
-          ...(nodeName === undefined ? {} : { node_name: nodeName }),
         },
       });
 
@@ -362,7 +361,6 @@ export function createRuntime(opts: {
             db: opts.db,
             serviceRoot: opts.config.serviceRoot,
             utterance: content,
-            nodeName,
           }),
         arrivalsSince: (afterSeq: number) => ({ turn: null, throughSeq: afterSeq }),
         call: (request: DwarChatRequest) => opts.dwar.complete(request, "hath/router"),

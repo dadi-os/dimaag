@@ -167,13 +167,10 @@ export async function assembleRouterContext(opts: {
   serviceRoot: string;
   /** What Ankur just said. */
   utterance: string;
-  /** The device he said it from, when he used the desktop or phone app. */
-  nodeName: string | undefined;
 }): Promise<AssembledContext> {
-  const from = opts.nodeName === undefined ? "[From: Ankur]" : `[From: Ankur, on device ${opts.nodeName}]`;
   return {
     system: await composeSystem(opts.db, opts.serviceRoot, null),
-    messages: [{ role: "user", content: `${from}\n${opts.utterance}` }],
+    messages: [{ role: "user", content: `[From: Ankur]\n${opts.utterance}` }],
     tools: routerLaneTools(),
     throughSeq: 0,
   };

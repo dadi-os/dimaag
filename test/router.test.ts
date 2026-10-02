@@ -141,7 +141,6 @@ test("POST /router composes system doctrine, charter, identity, and roots; offer
 
   const names = (request.tools ?? []).map((tool) => tool.name).sort();
   assert.deepEqual(names, [
-    "device_open_chat",
     "get_agent",
     "get_logs",
     "grant_tool",
@@ -273,40 +272,6 @@ test("POST /router is ephemeral: each run sees only its own utterance", async ()
     second.messages.map((m) => ({ role: m.role, content: m.content })),
     [{ role: "user", content: "[From: Ankur]\nno, a monthly one" }],
   );
-
-  await runtime.waitUntilIdle();
-  await app.close();
-});
-
-test("POST /router opens the hand-off's chat on the device Ankur spoke from", async () => {
-  await resetRuntime(handle.sql, handle.db, config);
-  await insertAgent(handle.db, { id: "finance-specialist", systemPrompt: "Owns money." });
-  const dwar = scripted([
-    toolUse("send_message", { to_agent_id: "finance-specialist", content: "Budget please." }, "s1"),
-    toolUse("device_open_chat", { node_name: "macbook", agent_id: "finance-specialist" }, "o1"),
-  ]);
-  const { app, runtime } = await appWith(dwar);
-  const commands: RuntimeEvent[] = [];
-  runtime.events.subscribe((event) => {
-    if (event.type !== "device_command") {
-      return;
-    }
-    commands.push(event);
-    runtime.devices.complete(event.command_id, { ok: true, result: { opened: event.args.agent_id } });
-  });
-
-  const res = await app.inject({
-    method: "POST",
-    url: "/router",
-    payload: { content: "budget", node_name: "macbook" },
-  });
-  assert.equal(res.statusCode, 201, res.body);
-  assert.match(String(dwar.completeCalls[0]?.messages[0]?.content), /^\[From: Ankur, on device macbook\]\nbudget$/);
-  assert.equal(commands.length, 1);
-  const command = commands[0] as Extract<RuntimeEvent, { type: "device_command" }>;
-  assert.equal(command.node_name, "macbook");
-  assert.equal(command.tool, "device_open_chat");
-  assert.deepEqual(command.args, { agent_id: "finance-specialist" });
 
   await runtime.waitUntilIdle();
   await app.close();
